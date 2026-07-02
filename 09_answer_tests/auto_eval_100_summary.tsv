@@ -1,0 +1,2 @@
+question_id	category	question	expected_keywords	retrieved_chunk_ids	retrieved_sources	retrieved_distances	answer_draft	검색_적합성	근거_기반성	안전법령_판단정확성	실무성	총점	판정	검토필요	평가_근거	평가방식
+Q001-Q100	요약	전체 자동 평가 요약										68.79		70	평가 질문 수=70; 평균점수=68.79; 매우 우수=0; 우수=0; 보통=35; 보완 필요=35; 미흡=0; 검토필요 Y=70	1차 자동 평가(rule-based)

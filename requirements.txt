@@ -1,0 +1,9 @@
+streamlit
+pandas
+numpy
+chromadb
+sentence-transformers
+google-genai
+python-dotenv
+openpyxl
+pysqlite3-binary

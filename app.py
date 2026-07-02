@@ -38,6 +38,11 @@ SCENARIO_SET_OPTIONS = {
     "65개 1차 확장 평가 세트": SCENARIO_PATH_65,
     "100개 전체 확장 평가 세트": SCENARIO_PATH_100,
 }
+SCENARIO_SET_DESCRIPTIONS = {
+    "30개 기본 평가 세트": "기존 30개 질문 시나리오를 기준으로 한 기본 평가 세트입니다.",
+    "65개 1차 확장 평가 세트": "기존 30개 질문에 추가 35개 질문을 더한 확장 세트입니다.",
+    "100개 전체 확장 평가 세트": "기존 30개 질문에 작업 전 상황 중심 질문 70개를 추가하여 총 100개 질문 시나리오로 구성했습니다.",
+}
 EVALUATION_PATH = ROOT_DIR / "09_answer_tests" / "evaluation_template.tsv"
 EVALUATION_CRITERIA_PATH = ROOT_DIR / "09_answer_tests" / "evaluation_criteria.md"
 EVALUATION_EXAMPLE_Q01_PATH = ROOT_DIR / "09_answer_tests" / "evaluation_example_Q01.md"
@@ -2237,6 +2242,10 @@ def load_auto_eval_summary() -> tuple[dict[str, Any] | None, str | None]:
 
 def render_auto_eval_summary() -> dict[str, Any] | None:
     st.subheader("1차 자동 평가 결과 요약")
+    st.caption(
+        "자동평가는 추가 질문 Q031~Q100, 총 70개 문항을 대상으로 수행되었습니다. "
+        "기존 Q001~Q030은 기존 평가표 기준으로 별도 관리됩니다."
+    )
 
     auto_eval, error = load_auto_eval_summary()
     if error:
@@ -2248,15 +2257,29 @@ def render_auto_eval_summary() -> dict[str, Any] | None:
         return None
 
     metrics = auto_eval.get("metrics", {})
-    col1, col2, col3, col4, col5, col6, col7, col8 = st.columns(8)
-    col1.metric("평가한 질문 수", f"{metrics.get('question_count', 0)}개")
-    col2.metric("평균 점수", f"{metrics.get('average_score', 0.0):.2f}")
-    col3.metric("매우 우수", f"{metrics.get('very_good_count', 0)}개")
-    col4.metric("우수", f"{metrics.get('good_count', 0)}개")
-    col5.metric("보통", f"{metrics.get('average_count', 0)}개")
-    col6.metric("보완 필요", f"{metrics.get('needs_review_count', 0)}개")
-    col7.metric("미흡", f"{metrics.get('poor_count', 0)}개")
-    col8.metric("검토필요 Y", f"{metrics.get('review_needed_count', 0)}개")
+    summary_items = [
+        ("평가 문항 수", f"{metrics.get('question_count', 0)}개"),
+        ("평균 점수", f"{metrics.get('average_score', 0.0):.2f}"),
+        ("매우 우수", f"{metrics.get('very_good_count', 0)}개"),
+        ("우수", f"{metrics.get('good_count', 0)}개"),
+        ("보통", f"{metrics.get('average_count', 0)}개"),
+        ("보완 필요", f"{metrics.get('needs_review_count', 0)}개"),
+        ("미흡", f"{metrics.get('poor_count', 0)}개"),
+        ("검토필요", f"{metrics.get('review_needed_count', 0)}개"),
+    ]
+
+    for index, (label, value) in enumerate(summary_items):
+        if index % 2 == 0:
+            cols = st.columns(2)
+            current_col = cols[0]
+        else:
+            current_col = cols[1]
+        current_col.markdown(
+            f"<div style='border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px; margin-bottom:8px;'>"
+            f"<div style='font-size:0.82rem; color:#64748b;'>{label}</div>"
+            f"<div style='font-size:1.08rem; font-weight:600; color:#0f172a;'>{value}</div></div>",
+            unsafe_allow_html=True,
+        )
 
     rows = auto_eval.get("rows", [])
     low_score_rows = sorted(
@@ -2281,7 +2304,21 @@ def render_auto_eval_summary() -> dict[str, Any] | None:
     ]
 
     st.caption("총점 낮은 문항 Top 10")
-    st.dataframe(display_rows, use_container_width=True, hide_index=True)
+    st.dataframe(
+        [
+            {
+                "question_id": row.get("question_id", ""),
+                "category": row.get("category", ""),
+                "question": (row.get("question", "")[:100] + "...") if len(str(row.get("question", ""))) > 100 else row.get("question", ""),
+                "총점": row.get("총점", ""),
+                "판정": row.get("판정", ""),
+                "검토필요": row.get("검토필요", ""),
+            }
+            for row in low_score_rows
+        ],
+        use_container_width=True,
+        hide_index=True,
+    )
 
     with st.expander("전체 자동 평가 결과 보기"):
         st.info(
@@ -2292,7 +2329,7 @@ def render_auto_eval_summary() -> dict[str, Any] | None:
             {
                 "question_id": row.get("question_id", ""),
                 "category": row.get("category", ""),
-                "question": row.get("question", ""),
+                "question": (row.get("question", "")[:100] + "...") if len(str(row.get("question", ""))) > 100 else row.get("question", ""),
                 "검색_적합성": row.get("검색_적합성", ""),
                 "근거_기반성": row.get("근거_기반성", ""),
                 "안전법령_판단정확성": row.get("안전법령_판단정확성", ""),
@@ -2396,8 +2433,9 @@ def render_evaluation_progress() -> dict[str, Any] | None:
     )
 
     st.info(
-        "평가 기준은 4개 항목, 총 100점 만점으로 표시됩니다. "
-        "기존 25점 기준 점수는 구 평가 기준 참고값으로만 남아 있습니다."
+        "평가 진행 현황표는 수동 평가 저장 상태를 기준으로 표시됩니다. "
+        "1차 자동 평가 결과는 Q031~Q100 추가 70개 문항에 대한 rule-based 자동 평가 결과이며, "
+        "최종 평가는 수동 검토 후 확정하는 것을 권장합니다."
     )
 
     return progress
@@ -2793,7 +2831,7 @@ if gemini_error:
 else:
     st.sidebar.info("Gemini API · API 키 감지됨")
     st.sidebar.caption("실제 연결 상태는 연결 테스트 또는 답변 호출 결과로 확인합니다.")
-    st.sidebar.write(f"선택 모델: `{selected_gemini_model}`")
+    st.sidebar.caption(f"선택 모델: {selected_gemini_model}")
     st.sidebar.write(f"호출 제한: 시도당 약 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초")
     st.sidebar.write(f"최대 시도: {GEMINI_MAX_ATTEMPTS}회")
 
@@ -2867,7 +2905,7 @@ with st.sidebar.expander("시연 상태 체크"):
 selected_scenario_label = st.sidebar.selectbox(
     "질문 시나리오 세트",
     list(SCENARIO_SET_OPTIONS.keys()),
-    index=0,
+    index=list(SCENARIO_SET_OPTIONS.keys()).index("100개 전체 확장 평가 세트"),
 )
 selected_scenario_path = SCENARIO_SET_OPTIONS[selected_scenario_label]
 
@@ -2879,6 +2917,7 @@ st.sidebar.markdown(
     """,
     unsafe_allow_html=True,
 )
+st.sidebar.caption("시연 시에는 100개 전체 확장 평가 세트를 선택하는 것을 권장합니다.")
 
 
 # ==============================
@@ -2916,7 +2955,7 @@ with status_col4:
     render_status_card(
         "평가 시나리오",
         f"{scenario_count}개",
-        "Q01~Q30 평가 세트",
+        f"{selected_scenario_label}",
         "#64748b",
     )
 
@@ -3284,6 +3323,10 @@ with direct_tab:
 
 with scenario_tab:
     st.subheader("질문 시나리오 테스트 모드")
+    st.caption(
+        f"현재 선택된 질문 세트: {selected_scenario_label}"
+    )
+    st.caption(SCENARIO_SET_DESCRIPTIONS.get(selected_scenario_label, ""))
     progress_info = render_evaluation_progress()
     render_auto_eval_summary()
 

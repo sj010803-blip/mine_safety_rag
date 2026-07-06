@@ -1,12 +1,23 @@
 .env
+.streamlit/secrets.toml
 .venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.ipynb_checkpoints/
+*.log
 .DS_Store
 Thumbs.db
 app_backup_*.py
+*_backup_*.py
+evaluation_template_backup_*.tsv
+*backup*.py
+*backup*.tsv
+*backup*.xlsx
+~$*.xlsx
+*.tmp
+.artifact_tool_runtime/
 *.bak
 *.bak_*
 app copy.py

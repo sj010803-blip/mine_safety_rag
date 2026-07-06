@@ -33,23 +33,27 @@ VECTOR_DB_DIR = ROOT_DIR / "10_vector_db"
 SCENARIO_PATH = ROOT_DIR / "02_질문시나리오" / "question_scenarios_30.tsv"
 SCENARIO_PATH_65 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_65.tsv"
 SCENARIO_PATH_100 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_100.tsv"
+SCENARIO_PATH_110 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_110.tsv"
 SCENARIO_SET_OPTIONS = {
     "30개 기본 평가 세트": SCENARIO_PATH,
     "65개 1차 확장 평가 세트": SCENARIO_PATH_65,
     "100개 전체 확장 평가 세트": SCENARIO_PATH_100,
+    "110개 분진·보호구 보강 평가 세트": SCENARIO_PATH_110,
 }
 SCENARIO_SET_DESCRIPTIONS = {
     "30개 기본 평가 세트": "기존 30개 질문 시나리오를 기준으로 한 기본 평가 세트입니다.",
     "65개 1차 확장 평가 세트": "기존 30개 질문에 추가 35개 질문을 더한 확장 세트입니다.",
     "100개 전체 확장 평가 세트": "기존 30개 질문에 작업 전 상황 중심 질문 70개를 추가하여 총 100개 질문 시나리오로 구성했습니다.",
+    "110개 분진·보호구 보강 평가 세트": "기존 100개 질문에 분진 관리 5개와 보호구/PPE 5개를 추가하여 총 110개 질문 시나리오로 구성했습니다.",
 }
 EVALUATION_PATH = ROOT_DIR / "09_answer_tests" / "evaluation_template.tsv"
 EVALUATION_CRITERIA_PATH = ROOT_DIR / "09_answer_tests" / "evaluation_criteria.md"
 EVALUATION_EXAMPLE_Q01_PATH = ROOT_DIR / "09_answer_tests" / "evaluation_example_Q01.md"
-AUTO_EVAL_SUMMARY_PATH = ROOT_DIR / "09_answer_tests" / "auto_eval_100_summary.tsv"
+AUTO_EVAL_SUMMARY_PATH = ROOT_DIR / "09_answer_tests" / "auto_eval_110_full_summary.tsv"
+AUTO_EVAL_DETAIL_PATH = ROOT_DIR / "09_answer_tests" / "auto_eval_Q001_Q110.tsv"
 AUTO_EVAL_BATCH_PATHS = [
-    ROOT_DIR / "09_answer_tests" / "auto_eval_Q031_Q065.tsv",
-    ROOT_DIR / "09_answer_tests" / "auto_eval_Q066_Q100.tsv",
+    ROOT_DIR / "09_answer_tests" / "auto_eval_Q001_Q030.tsv",
+    ROOT_DIR / "09_answer_tests" / "auto_eval_Q031_Q110.tsv",
 ]
 COLLECTION_NAME = "mine_safety_docs"
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -810,6 +814,817 @@ def inject_dashboard_css() -> None:
         """,
         unsafe_allow_html=True,
     )
+    st.markdown(
+        """
+        <style>
+        :root {
+            --portal-bg: #f4f7fb;
+            --portal-card: #ffffff;
+            --portal-border: #dce3ec;
+            --portal-text: #1f2937;
+            --portal-muted: #64748b;
+            --portal-blue: #1d4ed8;
+            --portal-blue-dark: #173a6b;
+            --portal-sidebar: #10213d;
+            --portal-sidebar-soft: #172c4d;
+            --portal-success: #16845b;
+            --portal-warning: #b45309;
+        }
+
+        .stApp {
+            background: var(--portal-bg);
+            color: var(--portal-text);
+        }
+
+        [data-testid="stHeader"] {
+            background: rgba(244, 247, 251, 0.96);
+            border-bottom: 1px solid var(--portal-border);
+        }
+
+        [data-testid="stSidebar"] {
+            background: var(--portal-sidebar);
+            border-right: 1px solid #253b5d;
+        }
+
+        [data-testid="stSidebar"] * {
+            color: #e8eef7;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stSidebar"] label,
+        [data-testid="stSidebar"] .stCaption {
+            color: #c8d5e7;
+        }
+
+        [data-testid="stSidebar"] [data-baseweb="select"] > div,
+        [data-testid="stSidebar"] [data-testid="stTextInput"] input {
+            background: var(--portal-sidebar-soft);
+            border-color: #365072;
+            color: #f8fafc;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stAlert"],
+        [data-testid="stSidebar"] [data-testid="stExpander"] {
+            background: var(--portal-sidebar-soft) !important;
+            border-color: #365072;
+        }
+
+        .block-container {
+            box-sizing: border-box;
+            width: 100%;
+            max-width: 1650px;
+            padding-top: 1.75rem;
+            padding-bottom: 2.5rem;
+            padding-left: 2rem;
+            padding-right: 2rem;
+            overflow: visible;
+        }
+
+        [data-testid="stMain"] h1,
+        [data-testid="stMain"] h2,
+        [data-testid="stMain"] h3,
+        [data-testid="stMain"] h4,
+        [data-testid="stMain"] p,
+        [data-testid="stMain"] li,
+        [data-testid="stMain"] label,
+        [data-testid="stMain"] [data-testid="stMarkdownContainer"] {
+            color: var(--portal-text);
+        }
+
+        [data-testid="stMain"] h2,
+        [data-testid="stMain"] h3 {
+            border-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .portal-page-header {
+            margin-bottom: 0.5rem;
+        }
+
+        .portal-breadcrumb {
+            color: #64748b;
+            font-size: 0.82rem;
+            margin-bottom: 0.45rem;
+        }
+
+        .portal-page-title {
+            color: #172033;
+            font-size: 1.8rem;
+            font-weight: 760;
+            line-height: 1.25;
+            margin: 0;
+        }
+
+        .portal-page-subtitle {
+            color: #64748b;
+            font-size: 0.9rem;
+            margin-top: 0.35rem;
+        }
+
+        .mscc-header {
+            display: none;
+        }
+
+        .mscc-status-card {
+            min-height: 112px;
+            height: auto;
+            background: var(--portal-card);
+            border: 1px solid var(--portal-border);
+            border-radius: 10px;
+            padding: 1rem 1.05rem;
+            margin-bottom: 0.8rem;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+            overflow: visible;
+        }
+
+        .mscc-status-label {
+            color: var(--portal-muted);
+            font-size: 0.78rem;
+            font-weight: 650;
+        }
+
+        .mscc-status-value {
+            color: #172033;
+            font-size: 1.22rem;
+            font-weight: 760;
+            line-height: 1.35;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+            white-space: normal;
+        }
+
+        .mscc-status-description {
+            color: var(--portal-muted);
+            line-height: 1.5;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+            white-space: normal;
+        }
+
+        .portal-card-title {
+            color: #172033;
+            font-size: 1.02rem;
+            font-weight: 750;
+            margin-bottom: 0.15rem;
+        }
+
+        .portal-card-subtitle {
+            color: #64748b;
+            font-size: 0.78rem;
+            margin-bottom: 0.75rem;
+            line-height: 1.5;
+        }
+
+        .info-card {
+            min-height: 122px;
+            height: auto;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.78rem;
+            background: #ffffff;
+            border: 1px solid #d9e2ec;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            box-shadow: 0 3px 10px rgba(30, 52, 79, 0.06);
+            overflow: visible;
+        }
+
+        .info-card-icon {
+            width: 2.25rem;
+            height: 2.25rem;
+            flex: 0 0 2.25rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 9px;
+            font-size: 1.05rem;
+            font-weight: 800;
+        }
+
+        .info-card-body {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .info-card-label {
+            color: #64748b;
+            font-size: 0.75rem;
+            font-weight: 700;
+            line-height: 1.35;
+        }
+
+        .info-card-value {
+            color: #172033;
+            font-size: 1.15rem;
+            font-weight: 800;
+            line-height: 1.35;
+            margin-top: 0.28rem;
+            white-space: normal;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+        }
+
+        .info-card-subtitle {
+            color: #718096;
+            font-size: 0.72rem;
+            line-height: 1.45;
+            margin-top: 0.3rem;
+            white-space: normal;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+        }
+
+        .info-card-success {
+            border-top: 3px solid #2d9b68;
+        }
+
+        .info-card-success .info-card-icon {
+            color: #15734a;
+            background: #e2f5eb;
+        }
+
+        .info-card-warning {
+            border-top: 3px solid #d58a18;
+        }
+
+        .info-card-warning .info-card-icon {
+            color: #9a5a07;
+            background: #fff1d6;
+        }
+
+        .info-card-navy {
+            border-top: 3px solid #315b88;
+        }
+
+        .info-card-navy .info-card-icon {
+            color: #244b74;
+            background: #e5edf6;
+        }
+
+        .info-card-teal {
+            border-top: 3px solid #2b8790;
+        }
+
+        .info-card-teal .info-card-icon {
+            color: #176a72;
+            background: #e0f1f2;
+        }
+
+        .info-card-blue {
+            border-top: 3px solid #3c71b5;
+        }
+
+        .info-card-blue .info-card-icon {
+            color: #285f9e;
+            background: #e4eefb;
+        }
+
+        .card-title-row {
+            display: flex;
+            align-items: center;
+            gap: 0.48rem;
+            margin-bottom: 0.15rem;
+        }
+
+        .card-title-icon {
+            width: 1.65rem;
+            height: 1.65rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 7px;
+            font-size: 0.86rem;
+            font-weight: 800;
+        }
+
+        .card-title-icon-success {
+            color: #17744c;
+            background: #dff4e8;
+        }
+
+        .card-title-icon-navy {
+            color: #284f7b;
+            background: #e5edf6;
+        }
+
+        .card-title-icon-warning {
+            color: #995b08;
+            background: #fff0d2;
+        }
+
+        .portal-summary-lead {
+            color: #24364d;
+            background: #f4f7fb;
+            border-left: 4px solid #2f66a7;
+            border-radius: 0 7px 7px 0;
+            padding: 0.75rem 0.85rem;
+            margin: 0.4rem 0 0.8rem 0;
+            font-size: 0.9rem;
+            line-height: 1.65;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+        }
+
+        .portal-summary-list {
+            margin: 0.2rem 0 0 0;
+            padding-left: 0;
+            list-style: none;
+        }
+
+        .portal-summary-list li {
+            color: #334155;
+            margin: 0.35rem 0;
+            line-height: 1.6;
+            position: relative;
+            padding-left: 1.55rem;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+        }
+
+        .portal-summary-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            top: 0.03rem;
+            width: 1.05rem;
+            height: 1.05rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            background: #2d9b68;
+            border-radius: 50%;
+            font-size: 0.67rem;
+            font-weight: 800;
+        }
+
+        .portal-table-scroll {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+            border: 1px solid #dbe3ec;
+            border-radius: 8px;
+            background: #ffffff;
+        }
+
+        .portal-data-table {
+            width: 100%;
+            min-width: 620px;
+            table-layout: fixed;
+            border-collapse: collapse;
+            background: #ffffff;
+        }
+
+        .portal-data-table th {
+            color: #29415f !important;
+            background: #eef3f8 !important;
+            border-bottom: 1px solid #d8e1eb !important;
+            padding: 0.62rem 0.58rem !important;
+            font-size: 0.76rem;
+            font-weight: 720;
+            line-height: 1.4;
+            white-space: normal;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+        }
+
+        .portal-data-table td {
+            color: #334155 !important;
+            background: #ffffff !important;
+            border-bottom: 1px solid #e5eaf0 !important;
+            padding: 0.62rem 0.58rem !important;
+            font-size: 0.76rem;
+            line-height: 1.55;
+            vertical-align: top;
+            white-space: normal;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+        }
+
+        .portal-data-table tr:last-child td {
+            border-bottom: 0 !important;
+        }
+
+        .portal-evidence-table {
+            min-width: 610px;
+        }
+
+        .portal-checklist-table {
+            width: 100%;
+            min-width: 1040px;
+        }
+
+        .portal-badge-complete {
+            color: #11633f;
+            background: #def5e9;
+            border: 1px solid #a8dec3;
+        }
+
+        .portal-badge-progress {
+            color: #8a4a0b;
+            background: #fff0d8;
+            border: 1px solid #efc786;
+        }
+
+        .portal-badge-wait {
+            color: #526171;
+            background: #edf1f5;
+            border: 1px solid #d2dae3;
+        }
+
+        .status-badge,
+        .law-badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 0.18rem 0.48rem;
+            font-size: 0.68rem;
+            font-weight: 750;
+            line-height: 1.3;
+            white-space: nowrap;
+        }
+
+        .badge-success {
+            color: #11633f;
+            background: #def5e9;
+            border: 1px solid #a8dec3;
+        }
+
+        .badge-warning {
+            color: #8a4a0b;
+            background: #fff0d8;
+            border: 1px solid #efc786;
+        }
+
+        .badge-muted {
+            color: #526171;
+            background: #edf1f5;
+            border: 1px solid #d2dae3;
+        }
+
+        .badge-danger {
+            color: #a02d2d;
+            background: #fde7e7;
+            border: 1px solid #efb8b8;
+        }
+
+        .law-badge {
+            color: #284f7b;
+            background: #e6eef7;
+            border: 1px solid #bfd0e3;
+        }
+
+        .law-badge-guideline {
+            color: #3f5f7e;
+            background: #edf2f7;
+            border-color: #ccd8e5;
+        }
+
+        .law-badge-notice {
+            color: #6d4b13;
+            background: #fff3dc;
+            border-color: #ecd29e;
+        }
+
+        .law-badge-reference {
+            color: #536171;
+            background: #f0f3f6;
+            border-color: #d4dce5;
+        }
+
+        .portal-kras-note {
+            color: #64748b;
+            background: #f5f7fa;
+            border: 1px solid #e0e6ed;
+            border-radius: 7px;
+            padding: 0.65rem 0.75rem;
+            margin: 0.35rem 0 0.85rem 0;
+            font-size: 0.78rem;
+            line-height: 1.55;
+            word-break: keep-all;
+        }
+
+        .portal-evidence-ribbon {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+            align-items: center;
+            background: #eaf1fb;
+            border: 1px solid #cbd9eb;
+            border-radius: 10px;
+            padding: 0.8rem 0.9rem;
+            margin: 0.65rem 0 0.8rem 0;
+        }
+
+        .portal-ribbon-label {
+            color: #274060;
+            font-size: 0.8rem;
+            font-weight: 750;
+            margin-right: 0.2rem;
+        }
+
+        .portal-source-chip {
+            display: inline-block;
+            color: #25476f;
+            background: #ffffff;
+            border: 1px solid #b9cbe2;
+            border-radius: 999px;
+            padding: 0.28rem 0.58rem;
+            font-size: 0.74rem;
+            line-height: 1.2;
+        }
+
+        .portal-badge {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 0.2rem 0.55rem;
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+
+        .portal-badge-wait {
+            color: #7c4a03;
+            background: #fff4d6;
+            border: 1px solid #f0d28a;
+        }
+
+        .mscc-priority-strip {
+            background: #fff8e8;
+            border: 1px solid #ead7a2;
+            border-left: 4px solid #c58a16;
+            border-radius: 8px;
+            color: #4b3a15;
+        }
+
+        .mscc-priority-strip strong {
+            color: #795a10;
+        }
+
+        .mscc-section-label,
+        .mscc-evidence-title {
+            color: #1f3d64;
+        }
+
+        .mscc-evidence-meta {
+            color: #64748b;
+        }
+
+        .mscc-evidence-preview {
+            color: #334155;
+        }
+
+        [data-testid="stMetric"],
+        [data-testid="stVerticalBlockBorderWrapper"],
+        [data-testid="stExpander"] {
+            background: var(--portal-card);
+            border-color: #d9e2ec;
+            border-radius: 12px;
+            box-shadow: 0 3px 10px rgba(30, 52, 79, 0.05);
+            height: auto;
+            max-height: none;
+            overflow: visible;
+        }
+
+        [data-testid="stVerticalBlockBorderWrapper"] > div,
+        [data-testid="stExpander"] details,
+        [data-testid="stExpander"] [data-testid="stExpanderDetails"] {
+            height: auto;
+            max-height: none;
+            overflow: visible;
+        }
+
+        [data-testid="stMetricLabel"],
+        [data-testid="stMetricLabel"] * {
+            color: var(--portal-muted) !important;
+        }
+
+        [data-testid="stMetricValue"],
+        [data-testid="stMetricValue"] * {
+            color: #172033 !important;
+        }
+
+        [data-testid="stDataFrame"] {
+            background: #ffffff;
+            border-color: var(--portal-border);
+            border-radius: 8px;
+        }
+
+        [data-testid="stTabs"] [role="tablist"] {
+            border-bottom-color: var(--portal-border);
+        }
+
+        [data-testid="stTabs"] button[role="tab"] {
+            color: #64748b;
+            background: transparent;
+        }
+
+        [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+            color: #1e4f8f;
+            background: #ffffff;
+            border-bottom-color: #2f66a7;
+        }
+
+        [data-baseweb="tab-highlight"] {
+            background-color: #2f66a7 !important;
+        }
+
+        .stButton > button,
+        .stDownloadButton > button {
+            border-radius: 7px;
+            border: 1px solid #2f66a7;
+            background: #2f66a7;
+            color: #ffffff;
+            font-weight: 650;
+            box-shadow: none;
+        }
+
+        .stButton > button:hover,
+        .stDownloadButton > button:hover {
+            background: #234f84;
+            border-color: #234f84;
+            color: #ffffff;
+        }
+
+        [data-testid="stMain"] [data-testid="stTextArea"] textarea,
+        [data-testid="stMain"] [data-testid="stTextInput"] input,
+        [data-testid="stMain"] [data-baseweb="select"] > div,
+        [data-testid="stMain"] [data-testid="stNumberInput"] input {
+            background: #ffffff;
+            color: var(--portal-text);
+            border-color: #cbd5e1;
+        }
+
+        [data-testid="stMain"] [data-testid="stAlert"],
+        [data-testid="stMain"] [data-testid="stAlert"] > div,
+        [data-testid="stMain"] div[role="alert"] {
+            color: #334155;
+            background: #eef4fb !important;
+            border-color: #cbd9eb;
+        }
+
+        [data-testid="stMain"] code {
+            color: #1f3d64;
+            background: #eef3f8;
+        }
+
+        [data-testid="stMain"] table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.82rem;
+            table-layout: fixed;
+        }
+
+        [data-testid="stMain"] th {
+            background: #edf3fa;
+            color: #274060;
+            border: 1px solid #d7e0eb;
+            padding: 0.5rem 0.55rem;
+            text-align: left;
+        }
+
+        [data-testid="stMain"] td {
+            background: #ffffff;
+            color: #334155;
+            border: 1px solid #e1e7ef;
+            padding: 0.5rem 0.55rem;
+            vertical-align: top;
+            line-height: 1.6;
+            white-space: normal;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+        }
+
+        [data-testid="stMain"] th {
+            line-height: 1.5;
+            white-space: normal;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+        }
+
+        [data-testid="stMain"] [data-testid="stMarkdownContainer"] > table th:first-child,
+        [data-testid="stMain"] [data-testid="stMarkdownContainer"] > table td:first-child {
+            width: 180px;
+        }
+
+        [data-testid="stMain"] [data-testid="stMarkdownContainer"] {
+            overflow: visible;
+        }
+
+        [data-testid="stMain"] [data-testid="stMarkdownContainer"] p,
+        [data-testid="stMain"] [data-testid="stMarkdownContainer"] li {
+            line-height: 1.62;
+            white-space: normal;
+            word-break: keep-all;
+            overflow-wrap: anywhere;
+        }
+
+        [data-testid="stMain"] [data-testid="stExpander"] summary {
+            color: #29415f;
+            background: #f8fafc;
+        }
+
+        [data-testid="stMain"] [data-testid="stExpander"] details {
+            background: #ffffff;
+        }
+
+        .mscc-sidebar-brand {
+            border-bottom: 1px solid #304766;
+            padding: 0.35rem 0 1rem 0;
+            margin-bottom: 0.9rem;
+        }
+
+        .mscc-sidebar-brand strong {
+            color: #ffffff;
+            font-size: 1.05rem;
+        }
+
+        .portal-sidebar-en {
+            color: #9fb2ca;
+            font-size: 0.72rem;
+            line-height: 1.35;
+            margin-top: 0.2rem;
+        }
+
+        .portal-nav-group {
+            color: #8fa4be;
+            font-size: 0.7rem;
+            font-weight: 700;
+            margin: 1rem 0 0.35rem 0;
+        }
+
+        .portal-nav-item {
+            color: #d9e3f0;
+            border-radius: 6px;
+            padding: 0.42rem 0.55rem;
+            font-size: 0.82rem;
+            margin: 0.12rem 0;
+        }
+
+        .portal-nav-item.active {
+            color: #ffffff;
+            background: #264b78;
+            font-weight: 700;
+        }
+
+        .portal-system-state {
+            background: var(--portal-sidebar-soft);
+            border: 1px solid #365072;
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-top: 1rem;
+        }
+
+        .portal-system-state-title {
+            color: #a9bdd4;
+            font-size: 0.72rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .portal-system-state-value {
+            color: #dff7eb;
+            font-size: 0.86rem;
+            font-weight: 720;
+        }
+
+        .portal-system-state-time {
+            color: #9fb2ca;
+            font-size: 0.7rem;
+            margin-top: 0.3rem;
+        }
+
+        .mscc-sidebar-note {
+            background: var(--portal-sidebar-soft);
+            border-color: #365072;
+            color: #c8d5e7;
+        }
+
+        .mscc-footer {
+            color: #718096;
+        }
+
+        @media (max-width: 900px) {
+            .block-container {
+                padding-left: 0.8rem;
+                padding-right: 0.8rem;
+            }
+
+            .portal-page-title {
+                font-size: 1.5rem;
+            }
+
+            .mscc-status-card {
+                min-height: auto;
+            }
+
+            [data-testid="stMain"] [data-testid="stMarkdownContainer"] > table th:first-child,
+            [data-testid="stMain"] [data-testid="stMarkdownContainer"] > table td:first-child {
+                width: 120px;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_status_card(
@@ -894,19 +1709,29 @@ def resolve_display_situation_type(question_type: str, answer: str) -> str:
 
 inject_dashboard_css()
 
-st.markdown(
-    """
-    <div class="mscc-header">
-        <div class="mscc-kicker">광산 안전 연구·운영 시스템</div>
-        <div class="mscc-title">⛑️ 광산 안전관리 지원 시스템</div>
-        <div class="mscc-title-ko">Mine Safety LLM-RAG Research Platform</div>
-        <div class="mscc-subtitle">
-            공식 안전 문서 기반 검색 · 현장 조치 체크리스트 · 중대재해 대응 보조 시스템
+if "new_question_token" not in st.session_state:
+    st.session_state["new_question_token"] = 0
+
+page_title_col, page_action_col = st.columns([5, 1])
+with page_title_col:
+    st.markdown(
+        """
+        <div class="portal-page-header">
+            <div class="portal-breadcrumb">안전 질의 및 답변 &gt; 답변 상세</div>
+            <div class="portal-page-title">1. 핵심 답변</div>
+            <div class="portal-page-subtitle">
+                공식 안전 문서 검색 결과와 현장 조치사항을 통합하여 제공합니다.
+            </div>
         </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
+        """,
+        unsafe_allow_html=True,
+    )
+with page_action_col:
+    st.write("")
+    if st.button("새 질문하기", use_container_width=True, key="new_question_top"):
+        st.session_state["new_question_token"] += 1
+        st.session_state.pop("scenario_test_result", None)
+        st.rerun()
 
 
 # ==============================
@@ -975,6 +1800,26 @@ def load_gemini_client():
 
 
 @st.cache_data(show_spinner=False)
+
+def normalize_question_id_for_display(value, fallback_index=None):
+    """질문ID를 Q001 형태로 표시하기 위한 보정 함수."""
+    text = str(value).strip()
+
+    if text and text.lower() not in ["nan", "none"]:
+        if text.upper().startswith("Q"):
+            digits = "".join(ch for ch in text if ch.isdigit())
+            if digits:
+                return f"Q{int(digits):03d}"
+            return text
+        if text.isdigit():
+            return f"Q{int(text):03d}"
+
+    if fallback_index is not None:
+        return f"Q{int(fallback_index) + 1:03d}"
+
+    return "Q---"
+
+
 def load_question_scenarios(path: str | Path | None = None) -> tuple[list[dict[str, str]], str | None]:
     scenario_path = Path(path) if path else SCENARIO_PATH
     if not scenario_path.exists():
@@ -1583,6 +2428,8 @@ def build_prompt(question: str, results: list[dict[str, Any]]) -> str:
 
 반드시 아래 [검색된 근거 문서]의 내용만 근거로 답변하세요.
 근거 문서에 없는 내용은 추측하지 말고 "제공된 근거 문서만으로는 확인하기 어렵습니다"라고 말하세요.
+검색된 근거 외의 법령명, 조문 번호, 수치, 처벌 수위 또는 의무를 생성하지 마세요.
+조문 번호가 검색 근거에 명확하지 않으면 "검색 근거 기준" 또는 "관련 문서 확인 필요"라고 표시하세요.
 답변은 현장 관리자가 바로 확인할 수 있도록 체크리스트와 실행 순서 중심으로 작성하세요.
 법령 해석이나 실제 현장 조치가 필요한 경우에는 최종 판단을 해당 안전관리자, 관계 기관, 전문가에게 확인해야 한다고 안내하세요.
 답변 마지막에는 사용한 근거 문서명을 정리하세요.
@@ -1597,21 +2444,35 @@ def build_prompt(question: str, results: list[dict[str, Any]]) -> str:
 ## 1. 핵심 답변
 질문에 대한 핵심 답변을 3~5문장으로 작성합니다.
 
-## 2. 현장 안전 체크리스트
+## 2. KRAS식 위험성평가 기록 초안
+반드시 markdown 표로 아래 항목을 작성합니다.
+- 세부 작업 내용
+- 잠재위험요인
+- 위험발생 상황 및 결과
+- 관련 근거 / 법적 기준
+- 현재 위험성: 가능성, 중대성, 위험등급
+- 위험성 감소대책: 제거 → 대체 → 공학적 대책 → 관리적 대책 → 보호구/PPE 순서
+- 조치 후 잔여위험성
+- 기록·보고 사항
+- KRAS 양식 기입용 요약표
+관련 근거 / 법적 기준에는 검색된 문서명과 chunk_id만 사용하고, 확인되지 않은 조문은 만들지 않습니다.
+위험성 등급은 현장 확인 전 정성 초안임을 명시합니다.
+
+## 3. 현장 안전 체크리스트
 - 작업 전 확인사항
 - 작업 중 확인사항
 - 이상 상황 발생 시 조치사항
 
-## 3. 관련 법령 및 지침
+## 4. 관련 법령 및 지침
 검색된 근거 문서에서 확인 가능한 법령, 지침, 기준을 정리합니다.
 
-## 4. 현장 관리자 조치사항
+## 5. 현장 관리자 조치사항
 현장 관리자가 해야 할 일을 실행 순서로 정리합니다.
 
-## 5. 추가 확인 필요사항
+## 6. 추가 확인 필요사항
 근거가 부족하거나 현장 조건에 따라 추가 확인이 필요한 사항을 적습니다.
 
-## 6. 근거 문서
+## 7. 근거 문서
 답변에 사용한 근거 문서명을 bullet 형태로 정리합니다.
 """.strip()
 
@@ -1930,6 +2791,258 @@ def build_check_items(situation_type: str) -> list[str]:
     ]
 
 
+def infer_risk_level_for_kras(
+    question: str,
+    situation_type: str,
+) -> tuple[str, str, str]:
+    text = question.lower()
+    if any(keyword in text for keyword in ["사망", "매몰", "폭발", "화재"]):
+        return "높음", "매우 높음", "매우 높음"
+    if situation_type in {
+        "낙반/붕락",
+        BLASTING_QUESTION_TYPE,
+        "환기/유해가스",
+        "화재/폭발",
+        ACCIDENT_RESPONSE_QUESTION_TYPE,
+        COMPLEX_RISK_QUESTION_TYPE,
+        "중대재해처벌법",
+    }:
+        return "높음", "매우 높음", "매우 높음"
+    if situation_type in {
+        ELECTRICAL_QUESTION_TYPE,
+        "장비/운반",
+        PPE_DUST_QUESTION_TYPE,
+        PASSAGE_SAFETY_QUESTION_TYPE,
+    }:
+        return "중간", "높음", "높음"
+    return "중간", "중간", "중간"
+
+
+def format_kras_table(headers: list[str], rows: list[list[Any]]) -> str:
+    def format_cell(value: Any) -> str:
+        return (
+            str(value or "")
+            .replace("|", "\\|")
+            .replace("\r\n", " / ")
+            .replace("\n", " / ")
+        )
+
+    header_line = "| " + " | ".join(format_cell(header) for header in headers) + " |"
+    separator_line = "| " + " | ".join("---" for _ in headers) + " |"
+    body_lines = [
+        "| " + " | ".join(format_cell(value) for value in row) + " |"
+        for row in rows
+    ]
+    return "\n".join([header_line, separator_line, *body_lines])
+
+
+def build_kras_risk_assessment_section(
+    question: str,
+    results: list[dict[str, Any]],
+    situation_type: str | None = None,
+) -> str:
+    situation_type = situation_type or classify_safety_situation(question)
+    text = question.lower()
+
+    if any(keyword in text for keyword in ["낙반", "붕락", "천반", "측벽", "부석", "지보"]):
+        profile = "낙반/붕락"
+    elif any(keyword in text for keyword in ["발파", "불발", "화약", "폭약", "장약"]):
+        profile = BLASTING_QUESTION_TYPE
+    elif any(keyword in text for keyword in ["메탄", "유해가스", "산소", "환기", "질식"]):
+        profile = "환기/유해가스"
+    elif any(keyword in text for keyword in ["전기", "누전", "감전", "접지", "절연"]):
+        profile = ELECTRICAL_QUESTION_TYPE
+    elif any(keyword in text for keyword in ["분진", "먼지", "방진마스크", "호흡보호구", "보호구"]):
+        profile = PPE_DUST_QUESTION_TYPE
+    elif any(keyword in text for keyword in ["장비", "정비", "운반", "덤프트럭", "끼임"]):
+        profile = "장비/운반"
+    else:
+        profile = situation_type
+
+    profiles: dict[str, dict[str, Any]] = {
+        "낙반/붕락": {
+            "work": "갱내 채굴·굴진 또는 점검 작업 중 천반·측벽과 지보 상태를 확인하는 작업",
+            "hazards": "천반·측벽 균열, 부석·낙석, 지보재 변형, 위험구역 통제 미흡",
+            "outcome": "낙반으로 작업자 매몰·중상·사망 및 구조자 2차 피해 가능",
+            "measures": {
+                "제거": "작업중지, 위험구역 출입금지, 안전 확보 후 부석·낙석 위험 제거",
+                "대체": "인력 접근 대신 원격·무인 점검 또는 장비 사용 가능 여부 검토",
+                "공학적 대책": "지보 보강, 낙석 방호, 균열·변형 감시와 갱도 안정성 확인",
+                "관리적 대책": "대피·통제, 책임자 확인, 사고조사·재발방지대책, 작업재개 승인",
+                "보호구/PPE": "안전모 등 작업별 필수 보호구 착용. 보호구만으로 낙반 위험을 대체하지 않음",
+            },
+            "residual": "지보 보강과 위험 제거 후에도 추가 낙반 가능성을 재평가하고 책임자 승인 전 작업재개 금지",
+            "records": "천반·측벽·지보 점검, 작업중지·대피·통제, 사고 경위와 원인, 보강·재발방지 및 작업재개 승인 기록",
+            "items": [
+                ["1", "천반·측벽 균열 또는 지보재 변형", "낙반 발생, 작업자 매몰·중상·사망", "매우 높음", "작업중지, 출입통제, 지보 보강, 안정성 확인 후 작업재개"],
+                ["2", "사고 후 접근통제 미흡", "추가 낙반으로 구조자 2차 피해", "높음", "위험구역 통제, 구조 인원 제한, 대피로 확보"],
+                ["3", "원인조사·점검 기록 미흡", "재발방지대책 누락 및 이행 확인 곤란", "높음", "사고 경위, 직접·간접 원인, 조치와 승인 결과 기록"],
+            ],
+        },
+        BLASTING_QUESTION_TYPE: {
+            "work": "발파 후 작업면 확인, 불발 여부 점검 및 굴진·정리 작업 재개 준비",
+            "hazards": "불발화약류, 잔류화약류, 발파모선, 후가스, 임의 접근",
+            "outcome": "지연 폭발·폭발물 접촉, 유해가스 노출, 낙반으로 중대 부상 가능",
+            "measures": {
+                "제거": "불발 의심 구역 작업중지와 출입금지, 확인 전 굴진·정리 작업 금지",
+                "대체": "인력 접근 전 원격 확인 또는 비접촉 점검 가능 여부 검토",
+                "공학적 대책": "환기 유지, 위험구역 차단, 발파설비와 모선 상태 확인",
+                "관리적 대책": "발파 책임자 확인, 대피 유지, 재출입 승인, 보고·기록",
+                "보호구/PPE": "발파 후 점검 작업에 필요한 보호구 착용. 불발 통제를 보호구로 대체하지 않음",
+            },
+            "residual": "불발·후가스·낙반 위험 확인과 책임자 승인 후 잔여위험을 재평가",
+            "records": "발파 시각, 대피·통제, 불발 확인, 환기·재출입 승인 및 후속조치 기록",
+            "items": [
+                ["1", "불발 또는 잔류화약류", "지연 폭발로 작업자 중상·사망", "매우 높음", "접근금지, 책임자 확인, 안전 확인 전 작업재개 금지"],
+                ["2", "발파 후 후가스·환기 불충분", "유해가스 노출·질식", "높음", "환기 유지, 공기질 확인, 안전 확인 후 재출입"],
+                ["3", "위험구역 통제·기록 미흡", "제3자 접근 및 동일 사고 반복", "높음", "출입통제, 승인자 지정, 확인·보고 내용 기록"],
+            ],
+        },
+        "환기/유해가스": {
+            "work": "갱내 작업 전·중 환기 상태와 유해가스·산소 상태를 확인하는 작업",
+            "hazards": "메탄·일산화탄소 등 유해가스, 산소부족, 환기설비 이상",
+            "outcome": "질식·중독·폭발 및 대피 지연으로 중대 피해 가능",
+            "measures": {
+                "제거": "작업중지와 오염 구역 출입금지, 작업자 대피",
+                "대체": "인력 투입 전 원격 측정·감시 방식 적용 가능 여부 검토",
+                "공학적 대책": "환기설비 가동·보수, 가스 측정·경보와 공기 흐름 확보",
+                "관리적 대책": "측정 결과 확인, 재출입 승인, 비상연락·대피 절차와 기록",
+                "보호구/PPE": "측정·구조 작업에 적합한 보호구를 현장 기준에 따라 선정·착용",
+            },
+            "residual": "환기와 재측정 후에도 측정 결과와 현장 조건을 재평가한 뒤 작업재개 결정",
+            "records": "측정 항목·시각·위치·결과, 환기 조치, 대피·재출입 승인 기록",
+            "items": [
+                ["1", "유해가스 또는 산소부족", "질식·중독·의식상실", "매우 높음", "작업중지, 대피, 측정과 환기 후 재평가"],
+                ["2", "환기설비 이상", "가스 체류·확산 및 폭발 위험 증가", "높음", "설비 점검·복구, 공기 흐름 확인"],
+                ["3", "재출입 승인·기록 미흡", "위험 상태에서 조기 작업재개", "높음", "측정 결과 확인, 책임자 승인과 기록"],
+            ],
+        },
+        ELECTRICAL_QUESTION_TYPE: {
+            "work": "갱내 전기설비·케이블·배선의 점검·정비 작업",
+            "hazards": "누전, 절연 손상, 접지 불량, 습기·물기, 임의 전원 투입",
+            "outcome": "감전·화재·설비 손상 및 2차 사고 가능",
+            "measures": {
+                "제거": "작업 전 전원 차단과 무전압 확인, 습기·물기 제거",
+                "대체": "무전압 점검 또는 원격 점검 방식 적용 가능 여부 검토",
+                "공학적 대책": "접지·절연·누전차단기, 케이블·배선과 방폭 적합성 확인",
+                "관리적 대책": "잠금·표지, 접근통제, 작업허가와 책임자 확인 후 재투입",
+                "보호구/PPE": "전기작업에 적합한 절연 보호구 등 현장 지정 보호구 착용",
+            },
+            "residual": "보호장치 시험과 책임자 확인 후 잔여 감전·재투입 위험을 재평가",
+            "records": "전원 차단·잠금, 무전압·접지·절연·차단기 확인과 재투입 승인 기록",
+            "items": [
+                ["1", "누전·절연 손상·습기", "감전·화재", "높음", "전원 차단, 물기 제거, 접지·절연 확인"],
+                ["2", "전원 임의 재투입", "정비 작업자 감전·끼임", "높음", "잠금·표지, 접근통제, 재투입 승인"],
+                ["3", "케이블·보호장치 이상", "누전 차단 실패와 설비 손상", "높음", "배선·차단기 점검과 이상 부품 조치"],
+            ],
+        },
+        PPE_DUST_QUESTION_TYPE: {
+            "work": "굴진·파쇄 등 분진 발생 작업과 보호구 지급·착용 점검",
+            "hazards": "분진 비산, 환기·집진 미흡, 호흡보호구 부적합·미착용",
+            "outcome": "분진 노출에 따른 건강장해 및 시야 저하로 인한 사고 가능",
+            "measures": {
+                "제거": "불필요한 분진 발생 작업·공정 제거와 퇴적 분진 청소",
+                "대체": "저분진 공법·재료 또는 습식 작업 방식 적용 가능 여부 검토",
+                "공학적 대책": "살수·집진·환기와 발생원 격리",
+                "관리적 대책": "작업환경측정 확인, 노출시간 관리, 착용 교육·점검과 미착용자 작업 제한",
+                "보호구/PPE": "작업과 분진 특성에 맞는 방진마스크·호흡보호구 및 안전모 지급·착용",
+            },
+            "residual": "저감조치 후 작업환경과 착용 상태를 다시 확인하고 노출 위험을 재평가",
+            "records": "측정 결과, 저감설비 점검, 보호구 지급·착용·교체, 교육과 미착용 조치 기록",
+            "items": [
+                ["1", "분진 발생원 저감 미흡", "고농도 분진 노출", "높음", "살수·집진·환기와 발생원 격리"],
+                ["2", "호흡보호구 부적합·미착용", "호흡기 노출 증가", "높음", "적정 보호구 지급, 밀착·착용 확인, 미착용자 투입 금지"],
+                ["3", "측정·청소·기록 미흡", "노출 상태와 개선 효과 확인 곤란", "중간", "작업환경 확인, 퇴적 분진 청소와 조치 기록"],
+            ],
+        },
+    }
+
+    profile_data = profiles.get(
+        profile,
+        {
+            "work": f"{situation_type} 관련 광산 현장 작업과 작업 전·중 안전 확인",
+            "hazards": "작업구역의 유해·위험요인 미확인, 통제 미흡, 작업절차 미준수",
+            "outcome": "작업자 부상, 설비 손상 또는 2차 사고 가능",
+            "measures": {
+                "제거": "위험 작업중지와 위험원 제거 가능 여부 확인",
+                "대체": "위험이 낮은 작업방법·장비로 대체 가능 여부 검토",
+                "공학적 대책": "방호·격리·환기·감시 등 작업 유형에 맞는 설비 대책",
+                "관리적 대책": "작업절차, 출입통제, 점검, 교육, 책임자 승인과 기록",
+                "보호구/PPE": "작업별 필수 보호구 선정·지급·착용 확인",
+            },
+            "residual": "감소대책 이행 후 현장 조건을 재확인하고 책임자가 잔여위험을 재평가",
+            "records": "위험요인, 점검 결과, 감소대책, 담당자, 이행 시점과 작업재개 승인 기록",
+            "items": [
+                ["1", "유해·위험요인 확인 미흡", "작업자 부상 또는 설비 손상", "높음", "작업중지, 위험원 확인·제거 후 재개"],
+                ["2", "출입·작업절차 통제 미흡", "제3자 노출 또는 2차 사고", "중간", "출입통제, 작업절차 공유와 책임자 확인"],
+                ["3", "점검·조치 기록 미흡", "개선조치 이행 확인 곤란", "중간", "점검·조치·승인 결과 기록 및 보고"],
+            ],
+        },
+    )
+
+    likelihood, severity, risk_grade = infer_risk_level_for_kras(
+        question,
+        situation_type,
+    )
+
+    source_items: list[str] = []
+    for result in results[:5]:
+        source = str(result.get("source", "출처 정보 없음")).strip()
+        chunk_id = str(result.get("chunk_id", "정보 없음")).strip()
+        source_item = f"{source} (chunk_id: {chunk_id})"
+        if source_item not in source_items:
+            source_items.append(source_item)
+    related_basis = " / ".join(source_items) if source_items else "검색 근거 문서 확인 필요"
+    related_basis += (
+        " / 조문 번호·법적 해석·처벌 수위는 검색 근거에서 명확히 확인되는 경우만 "
+        "기입하며, 관계기관·전문가 확인이 필요합니다."
+    )
+
+    measures = profile_data["measures"]
+    measure_text = " / ".join(
+        f"**{level}:** {measures[level]}"
+        for level in ["제거", "대체", "공학적 대책", "관리적 대책", "보호구/PPE"]
+    )
+    current_risk = (
+        f"가능성 {likelihood} / 중대성 {severity} / 위험등급 {risk_grade}"
+        " / 질문 상황을 기준으로 한 정성 초안이며 현장 기준에 따라 재평가해야 합니다."
+    )
+
+    detail_table = format_kras_table(
+        ["항목", "기입 초안"],
+        [
+            ["세부 작업 내용", profile_data["work"]],
+            ["잠재위험요인", profile_data["hazards"]],
+            ["위험발생 상황 및 결과", profile_data["outcome"]],
+            ["관련 근거 / 법적 기준", related_basis],
+            ["현재 위험성", current_risk],
+            ["위험성 감소대책", measure_text],
+            ["조치 후 잔여위험성", profile_data["residual"]],
+            ["기록·보고 사항", profile_data["records"]],
+        ],
+    )
+    hierarchy_table = format_kras_table(
+        ["우선순위", "감소대책 기입 초안"],
+        [[level, measures[level]] for level in ["제거", "대체", "공학적 대책", "관리적 대책", "보호구/PPE"]],
+    )
+    summary_table = format_kras_table(
+        ["번호", "잠재위험요인", "위험발생 상황 및 결과", "위험성", "감소대책"],
+        profile_data["items"],
+    )
+
+    return "\n\n".join(
+        [
+            "### KRAS식 위험성평가 기록 초안",
+            "> 검색 근거와 질문 상황을 바탕으로 작성한 기입 초안입니다. 실제 가능성·중대성·위험등급과 법적 판단은 현장 기준 및 관계기관·전문가 확인이 필요합니다.",
+            detail_table,
+            "### 위험성 감소대책 우선순위",
+            hierarchy_table,
+            "### KRAS 양식 기입용 요약표",
+            summary_table,
+        ]
+    )
+
+
 def short_answer_mode(answer_mode: str) -> str:
     if answer_mode == STABLE_MODE:
         return "안정 모드"
@@ -2164,7 +3277,9 @@ def parse_auto_eval_score(row: dict[str, Any], *names: str, default: int = 0) ->
 
 def normalize_auto_eval_row(row: dict[str, Any]) -> dict[str, Any]:
     return {
-        "question_id": str(safe_auto_eval_value(row, "question_id", "번호", default="")),
+        "question_id": normalize_question_id_for_display(
+            safe_auto_eval_value(row, "question_id", "번호", default="")
+        ),
         "category": str(safe_auto_eval_value(row, "category", "분류", default="")),
         "question": str(safe_auto_eval_value(row, "question", "질문", default="")),
         "검색_적합성": parse_auto_eval_score(row, "검색_적합성", default=0),
@@ -2186,11 +3301,15 @@ def load_auto_eval_summary() -> tuple[dict[str, Any] | None, str | None]:
             summary_rows = list(csv.DictReader(f, delimiter="\t"))
 
         detail_rows: list[dict[str, Any]] = []
-        for batch_path in AUTO_EVAL_BATCH_PATHS:
-            if not batch_path.exists():
-                continue
-            with open(batch_path, "r", encoding="utf-8-sig", newline="") as f:
-                detail_rows.extend(list(csv.DictReader(f, delimiter="\t")))
+        if AUTO_EVAL_DETAIL_PATH.exists():
+            with open(AUTO_EVAL_DETAIL_PATH, "r", encoding="utf-8-sig", newline="") as f:
+                detail_rows = list(csv.DictReader(f, delimiter="\t"))
+        else:
+            for batch_path in AUTO_EVAL_BATCH_PATHS:
+                if not batch_path.exists():
+                    continue
+                with open(batch_path, "r", encoding="utf-8-sig", newline="") as f:
+                    detail_rows.extend(list(csv.DictReader(f, delimiter="\t")))
 
         if not detail_rows and summary_rows:
             detail_rows = summary_rows
@@ -2198,12 +3317,16 @@ def load_auto_eval_summary() -> tuple[dict[str, Any] | None, str | None]:
         if not detail_rows:
             return None, "자동 평가 결과 파일이 비어 있습니다."
 
-        normalized_rows = [normalize_auto_eval_row(row) for row in detail_rows]
-        normalized_rows = [
-            row for row in normalized_rows
-            if str(row.get("question_id", "")).strip() not in {"", "Q001-Q100"}
-            and str(row.get("category", "")).strip() != "요약"
-        ]
+        normalized_rows_by_id: dict[str, dict[str, Any]] = {}
+        for detail_row in detail_rows:
+            normalized_row = normalize_auto_eval_row(detail_row)
+            question_id = str(normalized_row.get("question_id", "")).strip()
+            if question_id in {"", "Q---", "Q001-Q100", "Q001-Q110"}:
+                continue
+            if str(normalized_row.get("category", "")).strip() == "요약":
+                continue
+            normalized_rows_by_id[question_id] = normalized_row
+        normalized_rows = list(normalized_rows_by_id.values())
 
         judgment_counts = {
             "매우 우수": 0,
@@ -2241,10 +3364,11 @@ def load_auto_eval_summary() -> tuple[dict[str, Any] | None, str | None]:
 
 
 def render_auto_eval_summary() -> dict[str, Any] | None:
-    st.subheader("1차 자동 평가 결과 요약")
+    st.subheader("통합 평가 결과 요약")
     st.caption(
-        "자동평가는 추가 질문 Q031~Q100, 총 70개 문항을 대상으로 수행되었습니다. "
-        "기존 Q001~Q030은 기존 평가표 기준으로 별도 관리됩니다."
+        "전체 Q001\\~Q110, 총 110개 문항을 4개 기준 / 100점 만점으로 통합 관리합니다. "
+        "Q001\\~Q030은 기존 평가를 100점 기준으로 표준화했고, "
+        "Q031\\~Q110은 자동평가 결과를 통합했습니다."
     )
 
     auto_eval, error = load_auto_eval_summary()
@@ -2345,56 +3469,147 @@ def render_auto_eval_summary() -> dict[str, Any] | None:
     return auto_eval
 
 
-def load_evaluation_progress() -> tuple[dict[str, Any] | None, str | None]:
+def load_evaluation_progress(
+    scenario_rows: list[dict[str, str]] | None = None,
+    include_auto_eval: bool = False,
+) -> tuple[dict[str, Any] | None, str | None]:
     if not EVALUATION_PATH.exists():
         return None, f"평가표 파일을 찾을 수 없습니다: {EVALUATION_PATH}"
 
     try:
-        rows = read_evaluation_rows()
+        manual_rows = read_evaluation_rows()
     except Exception as e:
         return None, f"평가표 파일을 읽는 중 오류가 발생했습니다: {e}"
 
-    table_rows = []
+    manual_rows_by_id = {
+        normalize_question_id_for_display(row.get("번호", "")): row
+        for row in manual_rows
+    }
+
+    auto_rows_by_id: dict[str, dict[str, Any]] = {}
+    auto_eval_error = None
+    if include_auto_eval:
+        auto_eval, auto_eval_error = load_auto_eval_summary()
+        if auto_eval:
+            auto_rows_by_id = {
+                str(row.get("question_id", "")).strip(): row
+                for row in auto_eval.get("rows", [])
+            }
+
+    target_scenarios = scenario_rows or [
+        {
+            "번호": row.get("번호", ""),
+            "분류": row.get("분류", ""),
+            "난이도": row.get("난이도", ""),
+            "질문 시나리오": row.get("질문", ""),
+        }
+        for row in manual_rows
+    ]
+
+    table_rows: list[dict[str, Any]] = []
+    status_by_no: dict[str, str] = {}
     completed_count = 0
-    for row in rows:
-        normalized_row = normalize_evaluation_row(row)
-        completed = is_evaluation_completed(normalized_row)
-        if completed:
-            completed_count += 1
-        table_rows.append(
-            {
-                "번호": normalized_row.get("번호", ""),
-                "분류": normalized_row.get("분류", ""),
-                "난이도": normalized_row.get("난이도", ""),
-                "질문": normalized_row.get("질문", ""),
-                "검색 적합성": normalized_row.get("검색_적합성", "0"),
-                "근거 기반성": normalized_row.get("근거_기반성", "0"),
-                "안전·법령 판단 정확성": normalized_row.get("안전법령_판단정확성", "0"),
-                "실무성": normalized_row.get("실무성", "0"),
+
+    def manual_score(
+        normalized_row: dict[str, str],
+        new_field: str,
+        legacy_field: str,
+    ) -> Any:
+        new_value = normalized_row.get(new_field, "0")
+        if safe_score_value(new_value) > 0:
+            return new_value
+        return normalized_row.get(legacy_field, "0")
+
+    for scenario_row in target_scenarios:
+        question_id = normalize_question_id_for_display(
+            scenario_row.get("번호", "")
+        )
+        manual_row = manual_rows_by_id.get(question_id)
+        auto_row = auto_rows_by_id.get(question_id)
+
+        if auto_row:
+            total_score = int(auto_row.get("총점", 0))
+            judgment = str(auto_row.get("판정", "")).strip()
+            review_needed = str(auto_row.get("검토필요", "")).upper() == "Y"
+            evaluation_status = "완료 (검토필요)" if review_needed else "완료"
+            dropdown_status = f"완료 | {total_score}점 | {judgment or '판정 없음'}"
+            if review_needed:
+                dropdown_status += " | 검토필요"
+            display_row = {
+                "번호": question_id,
+                "분류": scenario_row.get("분류") or auto_row.get("category", ""),
+                "난이도": scenario_row.get("난이도", ""),
+                "질문": scenario_row.get("질문 시나리오") or auto_row.get("question", ""),
+                "검색 적합성": auto_row.get("검색_적합성", 0),
+                "근거 기반성": auto_row.get("근거_기반성", 0),
+                "안전·법령 판단 정확성": auto_row.get("안전법령_판단정확성", 0),
+                "실무성": auto_row.get("실무성", 0),
+                "총점": total_score,
+                "판정": judgment,
+                "평가 여부": evaluation_status,
+            }
+            completed = True
+        else:
+            normalized_row = normalize_evaluation_row(manual_row or {})
+            completed = bool(manual_row) and is_evaluation_completed(normalized_row)
+            dropdown_status = "완료" if completed else "미평가"
+            display_row = {
+                "번호": question_id,
+                "분류": scenario_row.get("분류") or normalized_row.get("분류", ""),
+                "난이도": scenario_row.get("난이도") or normalized_row.get("난이도", ""),
+                "질문": scenario_row.get("질문 시나리오") or normalized_row.get("질문", ""),
+                "검색 적합성": manual_score(
+                    normalized_row, "검색_적합성", "검색정확도(0~5)"
+                ),
+                "근거 기반성": manual_score(
+                    normalized_row, "근거_기반성", "근거성(0~5)"
+                ),
+                "안전·법령 판단 정확성": manual_score(
+                    normalized_row,
+                    "안전법령_판단정확성",
+                    "답변정확도(0~5)",
+                ),
+                "실무성": manual_score(
+                    normalized_row, "실무성", "실무성(0~5)"
+                ),
                 "총점": normalized_row.get("총점", ""),
                 "판정": normalized_row.get("판정", ""),
                 "평가 여부": "완료" if completed else "미평가",
             }
-        )
 
-    total_count = len(rows)
+        if completed:
+            completed_count += 1
+        table_rows.append(display_row)
+
+        plain_number = str(scenario_row.get("번호", "")).strip()
+        status_by_no[plain_number] = dropdown_status
+        status_by_no[question_id] = dropdown_status
+
+    total_count = len(table_rows)
     incomplete_count = total_count - completed_count
     completion_rate = (completed_count / total_count) if total_count else 0.0
     return {
-        "rows": rows,
+        "rows": manual_rows,
         "table_rows": table_rows,
-        "status_by_no": {str(row.get("번호", "")).strip(): ("완료" if is_evaluation_completed(row) else "미평가") for row in rows},
+        "status_by_no": status_by_no,
         "total_count": total_count,
         "completed_count": completed_count,
         "incomplete_count": incomplete_count,
         "completion_rate": completion_rate,
+        "auto_eval_error": auto_eval_error,
     }, None
 
 
-def render_evaluation_progress() -> dict[str, Any] | None:
+def render_evaluation_progress(
+    scenario_rows: list[dict[str, str]] | None = None,
+    include_auto_eval: bool = False,
+) -> dict[str, Any] | None:
     st.subheader("평가 진행 현황")
 
-    progress, error = load_evaluation_progress()
+    progress, error = load_evaluation_progress(
+        scenario_rows=scenario_rows,
+        include_auto_eval=include_auto_eval,
+    )
     if error:
         st.warning(error)
         return None
@@ -2406,7 +3621,7 @@ def render_evaluation_progress() -> dict[str, Any] | None:
     completed_count = sum(
         1
         for table_row in progress["table_rows"]
-        if str(table_row.get("평가 여부", "")).strip() == "완료"
+        if str(table_row.get("평가 여부", "")).strip().startswith("완료")
     )
 
     total_count = len(progress["table_rows"])
@@ -2432,10 +3647,13 @@ def render_evaluation_progress() -> dict[str, Any] | None:
         hide_index=True,
     )
 
+    if progress.get("auto_eval_error") and include_auto_eval:
+        st.warning(progress["auto_eval_error"])
+
     st.info(
-        "평가 진행 현황표는 수동 평가 저장 상태를 기준으로 표시됩니다. "
-        "1차 자동 평가 결과는 Q031~Q100 추가 70개 문항에 대한 rule-based 자동 평가 결과이며, "
-        "최종 평가는 수동 검토 후 확정하는 것을 권장합니다."
+        "전체 Q001\\~Q110은 auto_eval_Q001_Q110.tsv의 "
+        "4개 기준 / 100점 만점 통합 평가 결과를 우선 표시합니다. "
+        "검토필요 문항은 수동 검토 후 최종 점수로 확정하는 것을 권장합니다."
     )
 
     return progress
@@ -2575,6 +3793,11 @@ def generate_local_fallback_answer(
 
     source_lines = [f"- {source}" for source in unique_sources[:8]]
     reason_text = reason.strip() or "안정 모드: Gemini API 호출 안 함"
+    kras_section = build_kras_risk_assessment_section(
+        question,
+        results,
+        situation_type,
+    )
 
     return "\n".join(
         [
@@ -2601,6 +3824,8 @@ def generate_local_fallback_answer(
             "",
             "### 검색된 주요 근거 요약",
             *evidence_lines,
+            "",
+            kras_section,
             "",
             "## 현장 조치 체크리스트",
             "- 현장 위험이 제거되기 전에는 작업 재개를 서두르지 않습니다.",
@@ -2776,8 +4001,16 @@ def generate_gemini_answer(
     result = execute_gemini_request(prompt, model_name)
 
     if result.get("success"):
+        answer = str(result.get("answer", ""))
+        if "KRAS식 위험성평가 기록 초안" not in answer:
+            answer = "\n\n".join(
+                [
+                    answer,
+                    build_kras_risk_assessment_section(question, results),
+                ]
+            )
         status = build_legacy_gemini_status(result, fallback_used=False)
-        return str(result.get("answer", "")), status
+        return answer, status
 
     fallback_answer = generate_local_fallback_answer(
         question,
@@ -2795,8 +4028,21 @@ st.sidebar.markdown(
     """
     <div class="mscc-sidebar-brand">
         <strong>광산 안전관리 시스템</strong><br>
-        <span style="color:#cbd5e1;font-size:0.78rem;">운영 상태 및 설정</span>
+        <div class="portal-sidebar-en">Mining Safety Management System</div>
     </div>
+    <div class="portal-nav-group">운영 및 답변</div>
+    <div class="portal-nav-item active">안전 질의 및 답변</div>
+    <div class="portal-nav-item">대화 이력</div>
+    <div class="portal-nav-item">즐겨찾기</div>
+    <div class="portal-nav-item">공지 및 지침</div>
+    <div class="portal-nav-group">지식 관리</div>
+    <div class="portal-nav-item">Vector DB 관리</div>
+    <div class="portal-nav-item">문서 관리</div>
+    <div class="portal-nav-item">모델 관리</div>
+    <div class="portal-nav-group">시스템 관리</div>
+    <div class="portal-nav-item">사용자 관리</div>
+    <div class="portal-nav-item">권한 관리</div>
+    <div class="portal-nav-item">설정</div>
     """,
     unsafe_allow_html=True,
 )
@@ -2905,7 +4151,7 @@ with st.sidebar.expander("시연 상태 체크"):
 selected_scenario_label = st.sidebar.selectbox(
     "질문 시나리오 세트",
     list(SCENARIO_SET_OPTIONS.keys()),
-    index=list(SCENARIO_SET_OPTIONS.keys()).index("100개 전체 확장 평가 세트"),
+    index=list(SCENARIO_SET_OPTIONS.keys()).index("110개 분진·보호구 보강 평가 세트"),
 )
 selected_scenario_path = SCENARIO_SET_OPTIONS[selected_scenario_label]
 
@@ -2917,7 +4163,19 @@ st.sidebar.markdown(
     """,
     unsafe_allow_html=True,
 )
-st.sidebar.caption("시연 시에는 100개 전체 확장 평가 세트를 선택하는 것을 권장합니다.")
+st.sidebar.caption("시연 시에는 110개 분진·보호구 보강 평가 세트를 선택하는 것을 권장합니다.")
+st.sidebar.markdown(
+    f"""
+    <div class="portal-system-state">
+        <div class="portal-system-state-title">시스템 상태</div>
+        <div class="portal-system-state-value">정상 운영 중</div>
+        <div class="portal-system-state-time">
+            마지막 동기화: {escape(time.strftime("%Y-%m-%d %H:%M"))}
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ==============================
@@ -3092,63 +4350,239 @@ def render_evidence_card(result: dict[str, Any]) -> None:
             st.json(result.get("metadata", {}))
 
 
-def render_rag_result(answer: str, answer_status: dict[str, Any], results: list[dict[str, Any]]) -> None:
-    st.subheader("현장 안전 분석 결과")
-    mode_name = answer_status.get("answer_mode", "알 수 없음")
-    gemini_state = classify_gemini_status(answer_status)
-    question_type = (
-        results[0].get("question_type", "일반")
-        if results
-        else "일반"
-    )
-    reranking_applied = bool(
-        results and results[0].get("reranking_applied")
-    )
-    situation_type = resolve_display_situation_type(question_type, answer)
-    risk_level, risk_accent = get_risk_level(situation_type)
-    priority_action = get_priority_action(situation_type)
+def split_answer_for_dashboard(answer: str) -> tuple[str, str, str]:
+    kras_markers = [
+        "### KRAS식 위험성평가 기록 초안",
+        "## 2. KRAS식 위험성평가 기록 초안",
+        "## KRAS식 위험성평가 기록 초안",
+    ]
+    kras_start = -1
+    for marker in kras_markers:
+        marker_index = answer.find(marker)
+        if marker_index >= 0 and (kras_start < 0 or marker_index < kras_start):
+            kras_start = marker_index
 
-    situation_col, risk_col = st.columns(2)
-    with situation_col:
-        render_status_card(
-            "상황 유형",
-            situation_type,
-            "질문 키워드 및 검색 문맥 기반 분류",
-            "#64748b",
-        )
-    with risk_col:
-        render_status_card(
-            "위험도",
-            risk_level,
-            "현장 조치 우선순위 참고",
-            risk_accent,
-        )
+    supplement_markers = [
+        "\n---\n## Gemini 추가 답변",
+        "\n## Gemini 추가 답변",
+        "\n---\n## Gemini 응답 실패",
+        "\n## Gemini 응답 실패",
+    ]
+    supplement_start = -1
+    for marker in supplement_markers:
+        marker_index = answer.find(marker)
+        if marker_index >= 0 and (
+            supplement_start < 0 or marker_index < supplement_start
+        ):
+            supplement_start = marker_index
 
+    if kras_start < 0:
+        core_end = supplement_start if supplement_start >= 0 else len(answer)
+        core_answer = answer[:core_end].strip()
+        evidence_marker = core_answer.find("\n## 관련 근거 문서")
+        if evidence_marker >= 0:
+            core_answer = core_answer[:evidence_marker].strip()
+        return core_answer, "", answer[core_end:].strip()
+
+    kras_end = (
+        supplement_start
+        if supplement_start >= 0 and supplement_start > kras_start
+        else len(answer)
+    )
+    core_answer = answer[:kras_start].strip()
+    evidence_marker = core_answer.find("\n## 관련 근거 문서")
+    if evidence_marker >= 0:
+        core_answer = core_answer[:evidence_marker].strip()
+    return (
+        core_answer,
+        answer[kras_start:kras_end].strip(),
+        answer[kras_end:].strip(),
+    )
+
+
+def extract_markdown_section(markdown_text: str, heading: str) -> str:
+    marker = f"## {heading}"
+    start = markdown_text.find(marker)
+    if start < 0:
+        return ""
+    content_start = start + len(marker)
+    next_heading = markdown_text.find("\n## ", content_start)
+    content_end = next_heading if next_heading >= 0 else len(markdown_text)
+    return markdown_text[content_start:content_end].strip()
+
+
+def strip_markdown_prefix(text: str) -> str:
+    cleaned_lines = []
+    for line in text.splitlines():
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+        while cleaned.startswith(("- ", "* ", "• ")):
+            cleaned = cleaned[2:].strip()
+        cleaned_lines.append(cleaned)
+    return " ".join(cleaned_lines)
+
+
+def build_dashboard_summary(
+    core_answer: str,
+    situation_type: str,
+) -> tuple[str, list[str]]:
+    immediate_text = strip_markdown_prefix(
+        extract_markdown_section(core_answer, "즉시 판단")
+    )
+    if not immediate_text:
+        immediate_text = build_immediate_judgment(situation_type)
+
+    action_items: list[str] = []
+    for item in build_priority_actions(situation_type) + build_check_items(situation_type):
+        normalized = clean_text(str(item))
+        if normalized and normalized not in action_items:
+            action_items.append(normalized)
+        if len(action_items) >= 6:
+            break
+    return immediate_text, action_items
+
+
+def strip_kras_title(kras_answer: str) -> str:
+    lines = kras_answer.splitlines()
+    while lines and (
+        not lines[0].strip()
+        or "KRAS식 위험성평가 기록 초안" in lines[0]
+    ):
+        lines.pop(0)
+    return "\n".join(lines).strip()
+
+
+def decorate_kras_markdown(kras_answer: str) -> str:
+    decorated_lines = []
+    for line in kras_answer.splitlines():
+        if "현재 위험성" in line:
+            line = line.replace(
+                "매우 높음",
+                '<span class="status-badge badge-danger">매우 높음</span>',
+            ).replace(
+                "Level 5",
+                '<span class="status-badge badge-danger">Level 5</span>',
+            )
+        elif "조치 후 잔여위험성" in line:
+            line = line.replace(
+                "낮음",
+                '<span class="status-badge badge-success">낮음</span>',
+            ).replace(
+                "Level 2",
+                '<span class="status-badge badge-success">Level 2</span>',
+            )
+        decorated_lines.append(line)
+    return "\n".join(decorated_lines)
+
+
+def render_info_card(
+    title: str,
+    value: str,
+    subtitle: str,
+    icon: str,
+    tone: str,
+) -> None:
     st.markdown(
         (
-            '<div class="mscc-priority-strip">'
-            f'<strong>우선 조치</strong> · {escape(priority_action)}'
-            "</div>"
+            f'<div class="info-card info-card-{escape(tone)}">'
+            f'<div class="info-card-icon">{escape(icon)}</div>'
+            '<div class="info-card-body">'
+            f'<div class="info-card-label">{escape(title)}</div>'
+            f'<div class="info-card-value">{escape(value)}</div>'
+            f'<div class="info-card-subtitle">{escape(subtitle)}</div>'
+            "</div></div>"
         ),
         unsafe_allow_html=True,
     )
 
-    if reranking_applied:
-        st.success(
-            results[0].get(
-                "reranking_label",
-                "광산 특화 문서 우선 정렬 적용",
+
+def classify_evidence_document(source: str) -> tuple[str, str]:
+    normalized = source.replace(" ", "").lower()
+    if "법" in normalized and "지침" not in normalized:
+        return "법령", "law-badge"
+    if "지침" in normalized or "가이드" in normalized or "안내서" in normalized:
+        return "지침", "law-badge law-badge-guideline"
+    if "기준" in normalized or "고시" in normalized:
+        return "고시", "law-badge law-badge-notice"
+    return "참고", "law-badge law-badge-reference"
+
+
+def render_evidence_table(results: list[dict[str, Any]]) -> None:
+    row_parts = []
+    for index, item in enumerate(results[:5], start=1):
+        source = str(item.get("source", "출처 정보 없음"))
+        document_type, badge_class = classify_evidence_document(source)
+        status_text = "적용" if index <= 2 else "참고"
+        status_class = "badge-success" if index <= 2 else "badge-muted"
+        row_parts.append(
+            (
+                "<tr>"
+                f"<td>{escape(str(item.get('rank', index)))}</td>"
+                f'<td><span class="{badge_class}">{escape(document_type)}</span></td>'
+                f"<td>{escape(source)}</td>"
+                f"<td>{escape(str(item.get('chunk_id', '정보 없음')))}</td>"
+                f"<td>{escape(format_distance(item.get('distance')))}</td>"
+                f'<td><span class="status-badge {status_class}">{status_text}</span></td>'
+                "</tr>"
             )
         )
-    else:
-        st.caption("기본 벡터 유사도 정렬 적용")
+    rows_html = "".join(row_parts)
+    st.markdown(
+        (
+            '<div class="portal-table-scroll table-wrap">'
+            '<table class="portal-data-table portal-evidence-table">'
+            "<colgroup>"
+            '<col style="width:7%"><col style="width:11%">'
+            '<col style="width:39%"><col style="width:23%">'
+            '<col style="width:11%"><col style="width:9%">'
+            "</colgroup>"
+            "<thead><tr><th>근거</th><th>구분</th><th>문서명</th>"
+            "<th>chunk_id</th><th>거리값</th><th>상태</th></tr></thead>"
+            f"<tbody>{rows_html}</tbody></table></div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
-    selected_model = str(
-        answer_status.get(
-            "model",
-            answer_status.get("selected_model", GEMINI_MODEL_NAME),
+
+def render_checklist_table(situation_type: str) -> None:
+    rows_html = "".join(
+        (
+            "<tr>"
+            f"<td>{index}</td>"
+            f"<td>{escape(clean_text(str(item)))}</td>"
+            '<td><span class="portal-badge portal-badge-wait">대기</span></td>'
+            "<td>-</td>"
+            "<td>현장 책임자</td>"
+            "</tr>"
+        )
+        for index, item in enumerate(
+            build_check_items(situation_type)[:7],
+            start=1,
         )
     )
+    st.markdown(
+        (
+            '<div class="portal-table-scroll table-wrap">'
+            '<table class="portal-data-table portal-checklist-table">'
+            "<colgroup>"
+            '<col style="width:6%"><col style="width:55%">'
+            '<col style="width:12%"><col style="width:12%"><col style="width:15%">'
+            "</colgroup>"
+            "<thead><tr><th>번호</th><th>조치 항목</th><th>이행 상태</th>"
+            "<th>이행일</th><th>담당자</th></tr></thead>"
+            f"<tbody>{rows_html}</tbody></table></div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_gemini_runtime_status(
+    answer_status: dict[str, Any],
+    selected_model: str,
+    mode_name: str,
+) -> None:
+    gemini_state = classify_gemini_status(answer_status)
     gemini_called = bool(
         answer_status.get(
             "called",
@@ -3163,31 +4597,23 @@ def render_rag_result(answer: str, answer_status: dict[str, Any], results: list[
     )
     display_gemini_state = format_gemini_status(gemini_state)
 
-    with st.container(border=True):
-        st.markdown(
-            '<div class="mscc-section-label">Gemini 호출 상태</div>',
-            unsafe_allow_html=True,
-        )
+    with st.expander("답변 생성 상태 및 외부 LLM 호출 정보"):
         status_col1, status_col2, status_col3, status_col4, status_col5 = st.columns(5)
-        status_col1.caption("모드")
-        status_col1.write(mode_name)
-        status_col2.caption("모델")
-        status_col2.write(selected_model)
-        status_col3.caption("호출 여부")
-        status_col3.write("호출함" if gemini_called else "호출 안 함")
-        status_col4.caption("상태")
-        status_col4.write(display_gemini_state)
-        status_col5.caption("fallback 사용")
-        status_col5.write("사용함" if fallback_used else "사용 안 함")
+        status_col1.metric("모드", mode_name)
+        status_col2.metric("모델", selected_model)
+        status_col3.metric("호출 여부", "호출함" if gemini_called else "호출 안 함")
+        status_col4.metric("상태", display_gemini_state)
+        status_col5.metric("Fallback", "사용함" if fallback_used else "사용 안 함")
 
-    if answer_status.get("mode") == "stable":
-        st.info("현재 모드: 안정 모드 - Gemini API를 호출하지 않고 Vector DB 검색 근거 기반 답변을 제공합니다.")
-        st.info("Gemini API 호출 안 함")
-        st.info("외부 LLM API 호출 없이, 검색된 법령·지침 근거를 바탕으로 안전 답변을 제공합니다.")
-    elif answer_status.get("mode") == "hybrid":
-        st.info("Gemini API 호출 시도함")
-        if gemini_state == "성공":
-            st.success("현재 모드: 하이브리드 모드 - 검색 근거 기반 답변과 Gemini 추가 답변을 함께 표시합니다.")
+        if answer_status.get("mode") == "stable":
+            st.info(
+                "안정 모드입니다. 외부 LLM을 호출하지 않고 Vector DB 검색 근거로 답변했습니다."
+            )
+        elif gemini_state == "성공":
+            st.success(
+                f"Gemini 답변 생성 완료 · {answer_status.get('attempts', 0)}회 시도 · "
+                f"{answer_status.get('elapsed', 0.0):.1f}초"
+            )
         else:
             st.warning(
                 answer_status.get("message")
@@ -3198,56 +4624,199 @@ def render_rag_result(answer: str, answer_status: dict[str, Any], results: list[
             )
             st.info(
                 "Gemini 응답 생성은 실패했지만 검색 근거 기반 안정형 답변으로 "
-                "전환되었습니다. 외부 LLM API의 일시적 혼잡 또는 제한일 수 있으며, "
-                "근거 문서 검색과 안정형 답변 생성 기능은 정상 작동 중입니다."
+                "전환되었습니다. 근거 문서 검색과 안정형 답변 생성 기능은 정상 작동 중입니다."
             )
-            with st.expander("Gemini 오류/지연 정보"):
-                st.write(answer_status.get("reason") or "오류 메시지 없음")
-                st.write(f"시도 횟수: {answer_status.get('attempts', 0)}")
-                st.write(f"소요 시간: {answer_status.get('elapsed', 0.0):.1f}초")
-    elif answer_status.get("mode") == "gemini":
-        st.info("Gemini API 호출 시도함")
-        st.success(
-            f"Gemini 답변 생성 완료 "
-            f"({answer_status.get('attempts', 0)}회 시도, {answer_status.get('elapsed', 0.0):.1f}초)"
+            st.caption(
+                f"시도 횟수: {answer_status.get('attempts', 0)} · "
+                f"소요 시간: {answer_status.get('elapsed', 0.0):.1f}초"
+            )
+            if answer_status.get("reason"):
+                st.caption(f"오류 정보: {answer_status.get('reason')}")
+
+
+def render_rag_result(
+    answer: str,
+    answer_status: dict[str, Any],
+    results: list[dict[str, Any]],
+    result_key: str = "rag",
+) -> None:
+    st.subheader("답변 상세")
+    mode_name = answer_status.get("answer_mode", "알 수 없음")
+    question_type = (
+        results[0].get("question_type", "일반")
+        if results
+        else "일반"
+    )
+    reranking_applied = bool(
+        results and results[0].get("reranking_applied")
+    )
+    situation_type = resolve_display_situation_type(question_type, answer)
+    risk_level, risk_accent = get_risk_level(situation_type)
+    priority_action = get_priority_action(situation_type)
+    selected_model = str(
+        answer_status.get(
+            "model",
+            answer_status.get("selected_model", GEMINI_MODEL_NAME),
+        )
+    )
+    elapsed = float(answer_status.get("elapsed", 0.0) or 0.0)
+    unique_sources = list(
+        dict.fromkeys(str(item.get("source", "출처 정보 없음")) for item in results)
+    )
+    confidence = "높음" if len(results) >= 3 else "검토 필요"
+    generation_time = f"{elapsed:.1f}초" if elapsed > 0 else "즉시 생성"
+    core_answer, kras_answer, supplement_answer = split_answer_for_dashboard(answer)
+
+    info_cols = st.columns(5)
+    info_cards = [
+        ("답변 신뢰도", confidence, f"근거 {len(results)}개 확보", "✓", "success"),
+        ("위험 등급", risk_level, situation_type, "!", "warning"),
+        ("관련 법령", f"{len(unique_sources)}개 문서", "Vector DB 검색 기준", "§", "navy"),
+        ("답변 생성 시간", generation_time, mode_name, "⏱", "teal"),
+        ("모델 정보", selected_model, "선택된 답변 모델", "M", "blue"),
+    ]
+    for info_col, (title, value, description, icon, tone) in zip(info_cols, info_cards):
+        with info_col:
+            render_info_card(title, value, description, icon, tone)
+
+    st.markdown(
+        (
+            '<div class="mscc-priority-strip">'
+            f'<strong>우선 조치</strong> · {escape(priority_action)}'
+            "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+    if reranking_applied:
+        st.caption(
+            results[0].get(
+                "reranking_label",
+                "광산 특화 문서 우선 정렬 적용",
+            )
         )
     else:
-        if gemini_called:
-            st.info("Gemini API 호출 시도함")
-        st.warning(
-            answer_status.get("message")
-            or get_gemini_failure_message(
-                gemini_state,
-                str(answer_status.get("reason", "")),
-            )
-        )
-        st.info(
-            "Gemini 응답 생성은 실패했지만 검색 근거 기반 안정형 답변으로 "
-            "전환되었습니다. 외부 LLM API의 일시적 혼잡 또는 제한일 수 있으며, "
-            "근거 문서 검색과 안정형 답변 생성 기능은 정상 작동 중입니다."
-        )
-        with st.expander("Gemini 오류/지연 정보"):
-            st.write(answer_status.get("reason") or "오류 메시지 없음")
-            st.write(f"시도 횟수: {answer_status.get('attempts', 0)}")
-            st.write(f"소요 시간: {answer_status.get('elapsed', 0.0):.1f}초")
-    st.caption(
-        f"답변 생성 방식: {mode_name} | 선택 모델: {selected_model} | "
-        f"Gemini 상태: {display_gemini_state}"
+        st.caption("기본 벡터 유사도 정렬 적용")
+
+    render_gemini_runtime_status(answer_status, selected_model, mode_name)
+
+    summary_lead, summary_actions = build_dashboard_summary(
+        core_answer,
+        situation_type,
     )
+    summary_items_html = "".join(
+        f"<li>{escape(item)}</li>" for item in summary_actions
+    )
+
+    answer_col, evidence_col = st.columns([3, 2], gap="large")
+    with answer_col:
+        with st.container(border=True):
+            st.markdown(
+                '<div class="card-title-row">'
+                '<span class="card-title-icon card-title-icon-success">✓</span>'
+                '<div class="portal-card-title">답변 요약</div></div>'
+                '<div class="portal-card-subtitle">Evidence-based safety response</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(
+                (
+                    f'<div class="portal-summary-lead">{escape(summary_lead)}</div>'
+                    f'<ul class="portal-summary-list">{summary_items_html}</ul>'
+                ),
+                unsafe_allow_html=True,
+            )
+
+    with evidence_col:
+        with st.container(border=True):
+            st.markdown(
+                '<div class="card-title-row">'
+                '<span class="card-title-icon card-title-icon-navy">§</span>'
+                '<div class="portal-card-title">관련 법령 및 문서 근거</div></div>'
+                '<div class="portal-card-subtitle">검색 상위 3~5개 공식 문서</div>',
+                unsafe_allow_html=True,
+            )
+            render_evidence_table(results)
 
     with st.container(border=True):
         st.markdown(
-            '<div class="mscc-section-label">Safety Response Brief</div>',
+            '<div class="card-title-row">'
+            '<span class="card-title-icon card-title-icon-warning">✓</span>'
+            '<div class="portal-card-title">조치 체크리스트</div></div>'
+            '<div class="portal-card-subtitle">'
+            "사업주·경영책임자 및 현장 관리자 확인용"
+            "</div>",
             unsafe_allow_html=True,
         )
+        render_checklist_table(situation_type)
+        st.caption("이행 상태·이행일·담당자는 현장 확인 후 기록합니다.")
+
+    with st.container(border=True):
+        st.markdown(
+            '<div class="card-title-row">'
+            '<span class="card-title-icon card-title-icon-navy">▣</span>'
+            '<div class="portal-card-title">KRAS식 위험성평가 기록 초안</div></div>'
+            '<div class="portal-kras-note">'
+            "검색 근거와 질문 상황을 바탕으로 작성한 기입 초안이며, "
+            "최종 가능성·중대성·위험등급은 현장 기준에 따라 재평가해야 합니다."
+            "</div>",
+            unsafe_allow_html=True,
+        )
+        if kras_answer:
+            st.markdown(
+                decorate_kras_markdown(strip_kras_title(kras_answer)),
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("KRAS 초안이 포함되지 않은 답변입니다. 검색 근거를 확인해 주세요.")
+
+    if supplement_answer:
+        with st.expander("Gemini 보조 답변 보기", expanded=False):
+            st.markdown(supplement_answer)
+
+    with st.expander("전체 답변 원문 보기", expanded=False):
         st.markdown(answer)
 
-    st.subheader("근거 문서")
-    st.caption(
-        f"Vector DB 상위 근거 {len(results)}개 · 문서명, chunk_id, 거리값, 본문 미리보기"
+    ribbon_items = "".join(
+        (
+            '<span class="portal-source-chip">'
+            f'{escape(str(item.get("source", "출처 정보 없음")))} · '
+            f'{escape(str(item.get("chunk_id", "정보 없음")))}'
+            "</span>"
+        )
+        for item in results[:5]
     )
-    for r in results:
-        render_evidence_card(r)
+    st.markdown(
+        (
+            '<div class="portal-evidence-ribbon">'
+            '<span class="portal-ribbon-label">문서 근거 · Evidence Ribbon</span>'
+            f"{ribbon_items}</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+    action_col1, action_col2, action_col3, action_spacer = st.columns([1, 1, 1.2, 3])
+    if action_col1.button("인쇄", key=f"print_{result_key}", use_container_width=True):
+        st.info("브라우저 인쇄 기능에서 현재 답변 화면을 인쇄할 수 있습니다.")
+    if action_col2.button(
+        "PDF 내보내기",
+        key=f"pdf_{result_key}",
+        use_container_width=True,
+    ):
+        st.info("브라우저 인쇄 메뉴에서 'PDF로 저장'을 선택해 주세요.")
+    if action_col3.button(
+        "즐겨찾기 추가",
+        key=f"favorite_{result_key}",
+        use_container_width=True,
+    ):
+        st.session_state["favorite_answer"] = {
+            "answer": answer,
+            "sources": unique_sources,
+            "saved_at": time.strftime("%Y-%m-%d %H:%M"),
+        }
+        st.success("현재 답변을 세션 즐겨찾기에 추가했습니다.")
+
+    with st.expander(f"근거 문서 상세 보기 ({len(results)}개)"):
+        for result in results:
+            render_evidence_card(result)
 
 
 direct_tab, scenario_tab = st.tabs(["직접 질문", "질문 시나리오 테스트 모드"])
@@ -3291,6 +4860,7 @@ with direct_tab:
         "현장 관리자 질문",
         value=default_question,
         height=100,
+        key=f"direct_question_{st.session_state['new_question_token']}",
     )
 
     col1, col2 = st.columns([1, 3])
@@ -3319,7 +4889,12 @@ with direct_tab:
                 st.error(error)
             else:
                 st.success(f"Vector DB 검색 완료: 관련 근거 {len(results)}개")
-                render_rag_result(answer, answer_status, results)
+                render_rag_result(
+                    answer,
+                    answer_status,
+                    results,
+                    result_key="direct",
+                )
 
 with scenario_tab:
     st.subheader("질문 시나리오 테스트 모드")
@@ -3327,10 +4902,13 @@ with scenario_tab:
         f"현재 선택된 질문 세트: {selected_scenario_label}"
     )
     st.caption(SCENARIO_SET_DESCRIPTIONS.get(selected_scenario_label, ""))
-    progress_info = render_evaluation_progress()
+    scenarios, scenario_error = load_question_scenarios(selected_scenario_path)
+    progress_info = render_evaluation_progress(
+        scenario_rows=scenarios if not scenario_error else None,
+        include_auto_eval=bool(not scenario_error and len(scenarios) > 30),
+    )
     render_auto_eval_summary()
 
-    scenarios, scenario_error = load_question_scenarios(selected_scenario_path)
     if scenario_error:
         st.error("질문 시나리오를 불러오지 못했습니다.")
         st.write(scenario_error)
@@ -3405,6 +4983,7 @@ with scenario_tab:
                 stored_result["answer"],
                 stored_result["answer_status"],
                 stored_result["results"],
+                result_key=f"scenario_{stored_no}",
             )
 
             st.subheader("평가 입력")

@@ -1,0 +1,145 @@
+GitHub 공유 준비 최종 점검 보고서
+========================================================================
+점검 시간: 2026-07-06 20:19:57 대한민국 표준시
+프로젝트 경로: C:\Users\USER\Desktop\mine_safety_rag
+전체 파일 수: 188개
+최종 판단: 공유 준비 가능
+
+[핵심 공유 파일]
+- .gitignore
+- 02_질문시나리오/question_scenarios_110.tsv
+- 08_chunks/chunks.jsonl
+- 09_answer_tests/auto_eval_110_full_summary.tsv
+- 09_answer_tests/auto_eval_110_teacher_view.xlsx
+- 09_answer_tests/auto_eval_Q001_Q110.tsv
+- 12_compare_experiment/llm_rag_comparison_result_final.xlsx
+- 12_compare_experiment/llm_rag_comparison_result_polished.xlsx
+- README.md
+- app.py
+- requirements.txt
+
+[누락된 핵심 파일]
+- 없음
+
+[README.md]
+- 존재 여부: 예
+
+[final 비교 Excel]
+- 존재 여부: 예
+
+[.env 점검]
+- 파일 존재 여부: 예
+- GEMINI_API_KEY: 값 있음
+- GitHub 보호 여부: 예
+
+[.streamlit/secrets.toml 점검]
+- 파일 존재 여부: 아니오
+- 파일 없음
+- GitHub 보호 여부: 예
+
+[.gitignore 제외 패턴]
+- .env
+- .streamlit/secrets.toml
+- .venv/
+- __pycache__/
+- *.pyc
+- *.pyo
+- *.pyd
+- .ipynb_checkpoints/
+- *.log
+- .DS_Store
+- Thumbs.db
+- app_backup_*.py
+- *_backup_*.py
+- evaluation_template_backup_*.tsv
+- *backup*.py
+- *backup*.tsv
+- *backup*.xlsx
+- ~$*.xlsx
+- *.tmp
+- .artifact_tool_runtime/
+- *.bak
+- *.bak_*
+- app copy.py
+
+[필수 .gitignore 누락 패턴]
+- 없음
+
+[50MB 이상 파일]
+- 없음
+
+[100MB 이상 파일]
+- 없음
+
+[백업 파일]
+- 02_질문시나리오/question_scenarios_30_backup_before_100_20260701.tsv
+- 09_answer_tests/evaluation_template_backup.tsv
+- 09_answer_tests/evaluation_template_backup_q001_q030_20260703_164357.tsv
+- app.py.bak_20260626_174931
+- app.py.bak_before_eval_table_fix
+- app.py.bak_blasting_rerank_20260629_150737
+- app.py.bak_clean_research_ui
+- app.py.bak_criteria_20260626_194427
+- app.py.bak_dashboard_design
+- app.py.bak_demo_stabilization_20260701
+- app.py.bak_electrical_rerank_20260629_162124
+- app.py.bak_eval_table_manual
+- app.py.bak_fallback_quality_20260626_205117
+- app.py.bak_gemini_call_safe_20260701
+- app.py.bak_gemini_mode_fix
+- app.py.bak_presentation_stable_20260626_202604
+- app.py.bak_progress_20260626_210048
+- app.py.bak_q01_example_20260626_200948
+- app.py.bak_q01_stable_check_20260626_203914
+- app.py.bak_render_eval_progress_fix
+- app.py.bak_retest_compare_20260629_152324
+- app.py.bak_scenario_templates_20260629_174451
+- app.py.bak_stage4_20260626_190234
+- app.py.bak_timeout_fix_20260626_201448
+- app_backup_add_110_scenario_20260703.py
+- app_backup_auto_eval_view_20260701.py
+- app_backup_cloud_ui_fix_20260702.py
+- app_backup_deploy_20260702.py
+- app_backup_eval_110_20260703_153114.py
+- app_backup_eval_q001_q030_20260703_164357.py
+- app_backup_eval_status_110_20260703_153548.py
+- app_backup_fix_question_label_20260703.py
+- app_backup_gemini_20260630.py
+- app_backup_kras_answer_20260703_155959.py
+- app_backup_question_batches_20260701.py
+- app_backup_ui_layout_fix_20260706_155718.py
+- app_backup_ui_redesign_20260706_154202.py
+- app_backup_ui_visual_polish_20260706_162323.py
+- run_llm_rag_comparison_analysis_backup_polish_20260706_194651.py
+- GitHub 미보호 백업 파일: 0개
+
+[임시 파일]
+- 12_compare_experiment/~$llm_rag_comparison_result_polished.xlsx
+- GitHub 미보호 임시 파일: 0개
+
+[Python 캐시 파일]
+- __pycache__/05_auto_evaluate_question_batches.cpython-314.pyc
+- __pycache__/app.cpython-312.pyc
+- __pycache__/app.cpython-314.pyc
+- __pycache__/auto_eval_Q101_Q110.cpython-314.pyc
+- __pycache__/check_110_eval_ready.cpython-314.pyc
+- __pycache__/check_deploy_ready.cpython-314.pyc
+- __pycache__/check_github_share_ready.cpython-312.pyc
+- __pycache__/extend_dust_ppe_questions_110.cpython-314.pyc
+- __pycache__/fix_110_dust_ppe_categories.cpython-314.pyc
+- __pycache__/fix_110_scenario_schema.cpython-314.pyc
+- __pycache__/make_llm_comparison_template.cpython-314.pyc
+- __pycache__/make_readable_auto_eval_excel.cpython-314.pyc
+- __pycache__/make_teacher_view_110_excel.cpython-314.pyc
+- __pycache__/merge_auto_eval_Q031_Q110.cpython-314.pyc
+- __pycache__/patch_app_eval_110.cpython-314.pyc
+- __pycache__/rebuild_110_from_100_schema.cpython-314.pyc
+- __pycache__/rebuild_eval_Q001_Q030_100.cpython-314.pyc
+- __pycache__/repair_q101_q110_final.cpython-314.pyc
+- __pycache__/run_llm_rag_comparison_analysis.cpython-312.pyc
+
+[보안 안내]
+- 이 보고서에는 API Key 원문 또는 마스킹된 키 값도 저장하지 않습니다.
+- 민감 파일은 존재 여부, 키 항목 존재 여부, 값 유무만 기록합니다.
+
+최종 판단: 공유 준비 가능

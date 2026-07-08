@@ -1,0 +1,246 @@
+MineSafe AI v2 평가 결과 Git 커밋/푸시 보고서
+
+1. 커밋 정보
+- 커밋 메시지: Add v2 blind multi-judge evaluation results
+- 커밋 해시: 2819a82751cb6fe3bffa0121d4042c298bf421c0
+- 최신 커밋: 2819a82 Add v2 blind multi-judge evaluation results
+- origin/main 해시: 2819a82751cb6fe3bffa0121d4042c298bf421c0
+- 로컬 HEAD와 origin/main 일치 여부: 예
+- push 성공 여부: 예
+
+2. stage/commit한 파일 목록
+- 총 87개 파일
+- 15_fair_eval_v2_50/answer_quality_checklist_50_v2.xlsx
+- 15_fair_eval_v2_50/answer_similarity_input_template_50_v2.xlsx
+- 15_fair_eval_v2_50/blind_eval_answer_key_50_v2.xlsx
+- 15_fair_eval_v2_50/blind_eval_questions_50_v2.xlsx
+- 15_fair_eval_v2_50/calculate_answer_similarity_index_v2.py
+- 15_fair_eval_v2_50/collect_minesafe_answers_50_v2.py
+- 15_fair_eval_v2_50/collect_minesafe_answers_50_v2_report.txt
+- 15_fair_eval_v2_50/create_blind_eval_50_v2.py
+- 15_fair_eval_v2_50/create_blind_eval_50_v2_report.txt
+- 15_fair_eval_v2_50/create_judge_copy_paste_batches.py
+- 15_fair_eval_v2_50/create_judge_copy_paste_batches_20q.py
+- 15_fair_eval_v2_50/fair_eval_v2_50_method_report.txt
+- 15_fair_eval_v2_50/fair_questions_50_v2.xlsx
+- 15_fair_eval_v2_50/final_presentation_summary_v2.txt
+- 15_fair_eval_v2_50/final_presentation_summary_v2.xlsx
+- 15_fair_eval_v2_50/final_presentation_table_v2.tsv
+- 15_fair_eval_v2_50/fix_missing_minesafe_answers.py
+- 15_fair_eval_v2_50/fix_missing_minesafe_answers_report.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Claude/Claude_batch_01_FQ001_FQ005.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Claude/Claude_batch_02_FQ006_FQ010.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Claude/Claude_batch_03_FQ011_FQ015.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Claude/Claude_batch_04_FQ016_FQ020.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Claude/Claude_batch_05_FQ021_FQ025.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Claude/Claude_batch_06_FQ026_FQ030.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Claude/Claude_batch_07_FQ031_FQ035.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Claude/Claude_batch_08_FQ036_FQ040.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Claude/Claude_batch_09_FQ041_FQ045.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Claude/Claude_batch_10_FQ046_FQ050.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/GPT/GPT_batch_01_FQ001_FQ005.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/GPT/GPT_batch_02_FQ006_FQ010.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/GPT/GPT_batch_03_FQ011_FQ015.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/GPT/GPT_batch_04_FQ016_FQ020.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/GPT/GPT_batch_05_FQ021_FQ025.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/GPT/GPT_batch_06_FQ026_FQ030.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/GPT/GPT_batch_07_FQ031_FQ035.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/GPT/GPT_batch_08_FQ036_FQ040.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/GPT/GPT_batch_09_FQ041_FQ045.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/GPT/GPT_batch_10_FQ046_FQ050.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Gemini/Gemini_batch_01_FQ001_FQ005.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Gemini/Gemini_batch_02_FQ006_FQ010.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Gemini/Gemini_batch_03_FQ011_FQ015.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Gemini/Gemini_batch_04_FQ016_FQ020.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Gemini/Gemini_batch_05_FQ021_FQ025.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Gemini/Gemini_batch_06_FQ026_FQ030.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Gemini/Gemini_batch_07_FQ031_FQ035.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Gemini/Gemini_batch_08_FQ036_FQ040.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Gemini/Gemini_batch_09_FQ041_FQ045.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/Gemini/Gemini_batch_10_FQ046_FQ050.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches/create_judge_batches_report.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches_20q/Claude/Claude_batch_01_FQ001_FQ020.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches_20q/Claude/Claude_batch_02_FQ021_FQ040.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches_20q/Claude/Claude_batch_03_FQ041_FQ050.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches_20q/GPT/GPT_batch_01_FQ001_FQ020.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches_20q/GPT/GPT_batch_02_FQ021_FQ040.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches_20q/GPT/GPT_batch_03_FQ041_FQ050.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches_20q/Gemini/Gemini_batch_01_FQ001_FQ020.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches_20q/Gemini/Gemini_batch_02_FQ021_FQ040.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches_20q/Gemini/Gemini_batch_03_FQ041_FQ050.txt
+- 15_fair_eval_v2_50/judge_copy_paste_batches_20q/create_judge_batches_20q_report.txt
+- 15_fair_eval_v2_50/judge_prompt_Claude_50_v2.txt
+- 15_fair_eval_v2_50/judge_prompt_GPT_50_v2.txt
+- 15_fair_eval_v2_50/judge_prompt_Gemini_50_v2.txt
+- 15_fair_eval_v2_50/judge_raw_outputs/Claude/Claude_result_20q_01_FQ001_FQ020.tsv
+- 15_fair_eval_v2_50/judge_raw_outputs/Claude/Claude_result_20q_02_FQ021_FQ040.tsv
+- 15_fair_eval_v2_50/judge_raw_outputs/Claude/Claude_result_20q_03_FQ041_FQ050.tsv
+- 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_20q_01_FQ001_FQ020.tsv
+- 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_20q_02_FQ021_FQ040.tsv
+- 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_20q_03_FQ041_FQ050.tsv
+- 15_fair_eval_v2_50/judge_raw_outputs/Gemini/Gemini_missing_3_scores_prompt.txt
+- 15_fair_eval_v2_50/judge_raw_outputs/Gemini/Gemini_result_20q_01_FQ001_FQ020.tsv
+- 15_fair_eval_v2_50/judge_raw_outputs/Gemini/Gemini_result_20q_02_FQ021_FQ040.tsv
+- 15_fair_eval_v2_50/judge_raw_outputs/Gemini/Gemini_result_20q_03_FQ041_FQ050.tsv
+- 15_fair_eval_v2_50/judge_raw_outputs/Gemini/Gemini_result_missing_3_scores.tsv
+- 15_fair_eval_v2_50/model_answer_collection_template_50.xlsx
+- 15_fair_eval_v2_50/model_answer_collection_template_50_with_minesafe.xlsx
+- 15_fair_eval_v2_50/model_answer_collection_template_50_with_minesafe_fixed.xlsx
+- 15_fair_eval_v2_50/multi_judge_score_input_50_v2.xlsx
+- 15_fair_eval_v2_50/multi_judge_score_input_50_v2_filled.xlsx
+- 15_fair_eval_v2_50/multi_judge_score_summary_50_v2.xlsx
+- 15_fair_eval_v2_50/multi_judge_score_summary_50_v2_final.tsv
+- 15_fair_eval_v2_50/multi_judge_score_summary_50_v2_final.xlsx
+- 15_fair_eval_v2_50/multi_judge_score_summary_50_v2_final_complete.tsv
+- 15_fair_eval_v2_50/multi_judge_score_summary_50_v2_final_complete.xlsx
+- 15_fair_eval_v2_50/multi_judge_v2_final_complete_report.txt
+- 15_fair_eval_v2_50/multi_judge_v2_final_report.txt
+- 15_fair_eval_v2_50/q001_q010_prompt.txt
+- 15_fair_eval_v2_50/summarize_multi_judge_scores_50_v2.py
+
+3. 제외한 파일 목록
+- whitelist 외 파일 전체는 stage하지 않았음
+- GPT 5문항 raw 결과 TSV는 최종 v2 계산 대상이 아니므로 제외
+- 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_01_FQ001_FQ005.tsv | excluded non-final 5-question raw result/report
+- 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_02_FQ006_FQ010.tsv | excluded non-final 5-question raw result/report
+- 15_fair_eval_v2_50/model_answer_collection_template_50_with_minesafe_backup_before_fix.xlsx | not committed after whitelist/push
+
+4. 금지 파일 포함 여부
+- 금지 파일 포함 수: 0
+- 없음
+- .env 포함 여부: 아니오
+- API Key/secret 의심 패턴 탐지 수: 0
+- 10_vector_db / 10_vector_db_with_major_accident_docs 포함 여부: 아니오
+- __pycache__ / *.pyc 포함 여부: 아니오
+- 임시 엑셀 파일 ~$* 포함 여부: 아니오
+- 대용량 DB 파일 포함 여부: 아니오
+
+5. 최종 git status
+M "02_\354\247\210\353\254\270\354\213\234\353\202\230\353\246\254\354\230\244/question_scenarios_100.tsv"
+ M "02_\354\247\210\353\254\270\354\213\234\353\202\230\353\246\254\354\230\244/question_scenarios_30.tsv"
+ M "02_\354\247\210\353\254\270\354\213\234\353\202\230\353\246\254\354\230\244/question_scenarios_65.tsv"
+ M 09_answer_tests/auto_eval_100_summary.tsv
+ M 09_answer_tests/auto_eval_70_detail_report_readable.xlsx
+ M 09_answer_tests/auto_eval_Q031_Q065.tsv
+ M 09_answer_tests/auto_eval_Q066_Q100.tsv
+ D 09_answer_tests/~$auto_eval_100_report.xlsx
+ D 09_answer_tests/~$auto_eval_70_detail_report.xlsx
+ M README.md
+ M app.py
+?? 01_raw_docs/
+?? 08_chunks/chunks_backup_before_major_accident_docs_20260707_172146.jsonl
+?? 08_chunks/chunks_backup_before_major_accident_docs_20260707_172341.jsonl
+?? 08_chunks/chunks_with_major_accident_docs.jsonl
+?? 09_answer_tests/auto_eval_110_summary.tsv
+?? 09_answer_tests/auto_eval_70_teacher_view.xlsx
+?? 09_answer_tests/auto_eval_80_teacher_view_110.xlsx
+?? 09_answer_tests/auto_eval_Q001_Q030.tsv
+?? 09_answer_tests/auto_eval_Q031_Q110.tsv
+?? 09_answer_tests/auto_eval_Q031_Q110_summary.tsv
+?? 09_answer_tests/auto_eval_Q066_Q110.tsv
+?? 09_answer_tests/auto_eval_Q101_Q110.tsv
+?? 09_answer_tests/auto_eval_Q101_Q110_summary.tsv
+?? 09_answer_tests/dust_ppe_added_questions_Q101_Q110.xlsx
+?? 10_vector_db_backup_before_major_accident_docs_20260707_172628/
+?? 10_vector_db_replace_tmp_20260707_172628/
+?? 10_vector_db_with_major_accident_docs/
+?? 12_compare_experiment/.artifact_runtime/
+?? 12_compare_experiment/git_commit_push_report.txt
+?? 12_compare_experiment/llm_rag_comparison_result.xlsx
+?? 12_compare_experiment/llm_rag_comparison_result.xlsx.inspect.ndjson
+?? 12_compare_experiment/llm_rag_comparison_result_polished.xlsx.inspect.ndjson
+?? 12_compare_experiment/llm_rag_comparison_template.xlsx
+?? 13_added_docs_tests/
+?? 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_01_FQ001_FQ005.tsv
+?? 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_02_FQ006_FQ010.tsv
+?? add_major_accident_docs_to_rag.py
+?? auto_eval_Q101_Q110.py
+?? check_110_eval_ready.py
+?? check_answer_draft.py
+?? clear_minesafe_placeholder.py
+?? extend_dust_ppe_questions_110.py
+?? fix_110_dust_ppe_categories.py
+?? fix_110_scenario_schema.py
+?? inspect_syntax.py
+?? make_readable_auto_eval_excel.py
+?? make_teacher_view_110_excel.py
+?? make_teacher_view_excel.py
+?? merge_auto_eval_Q031_Q110.py
+?? patch_app_add_110_scenario.py
+?? patch_app_eval_110.py
+?? patch_question_label_display.py
+?? patch_tbm_label.py
+?? rebuild_110_from_100_schema.py
+?? rebuild_eval_Q001_Q030_100.py
+?? repair_q101_q110.py
+?? repair_q101_q110_final.py
+?? safe_github_commit_push.py
+?? split_dust_ppe_category.py
+
+6. 작업 메모
+- 전체 변경 파일을 커밋하지 않고 15_fair_eval_v2_50 내부 whitelist 파일만 커밋함
+- app.py, 기존 평가 파일, Vector DB, chunks, 12_compare_experiment 등은 stage/commit하지 않음
+- 이 보고서는 push 이후 생성된 기록 파일이므로 해당 커밋에는 포함하지 않음
+
+7. 보고서 파일 생성 후 git status
+ M "02_\354\247\210\353\254\270\354\213\234\353\202\230\353\246\254\354\230\244/question_scenarios_100.tsv"
+ M "02_\354\247\210\353\254\270\354\213\234\353\202\230\353\246\254\354\230\244/question_scenarios_30.tsv"
+ M "02_\354\247\210\353\254\270\354\213\234\353\202\230\353\246\254\354\230\244/question_scenarios_65.tsv"
+ M 09_answer_tests/auto_eval_100_summary.tsv
+ M 09_answer_tests/auto_eval_70_detail_report_readable.xlsx
+ M 09_answer_tests/auto_eval_Q031_Q065.tsv
+ M 09_answer_tests/auto_eval_Q066_Q100.tsv
+ D 09_answer_tests/~$auto_eval_100_report.xlsx
+ D 09_answer_tests/~$auto_eval_70_detail_report.xlsx
+ M README.md
+ M app.py
+?? 01_raw_docs/
+?? 08_chunks/chunks_backup_before_major_accident_docs_20260707_172146.jsonl
+?? 08_chunks/chunks_backup_before_major_accident_docs_20260707_172341.jsonl
+?? 08_chunks/chunks_with_major_accident_docs.jsonl
+?? 09_answer_tests/auto_eval_110_summary.tsv
+?? 09_answer_tests/auto_eval_70_teacher_view.xlsx
+?? 09_answer_tests/auto_eval_80_teacher_view_110.xlsx
+?? 09_answer_tests/auto_eval_Q001_Q030.tsv
+?? 09_answer_tests/auto_eval_Q031_Q110.tsv
+?? 09_answer_tests/auto_eval_Q031_Q110_summary.tsv
+?? 09_answer_tests/auto_eval_Q066_Q110.tsv
+?? 09_answer_tests/auto_eval_Q101_Q110.tsv
+?? 09_answer_tests/auto_eval_Q101_Q110_summary.tsv
+?? 09_answer_tests/dust_ppe_added_questions_Q101_Q110.xlsx
+?? 10_vector_db_backup_before_major_accident_docs_20260707_172628/
+?? 10_vector_db_replace_tmp_20260707_172628/
+?? 10_vector_db_with_major_accident_docs/
+?? 12_compare_experiment/.artifact_runtime/
+?? 12_compare_experiment/git_commit_push_report.txt
+?? 12_compare_experiment/llm_rag_comparison_result.xlsx
+?? 12_compare_experiment/llm_rag_comparison_result.xlsx.inspect.ndjson
+?? 12_compare_experiment/llm_rag_comparison_result_polished.xlsx.inspect.ndjson
+?? 12_compare_experiment/llm_rag_comparison_template.xlsx
+?? 13_added_docs_tests/
+?? 15_fair_eval_v2_50/git_commit_push_v2_eval_report.txt
+?? 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_01_FQ001_FQ005.tsv
+?? 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_02_FQ006_FQ010.tsv
+?? add_major_accident_docs_to_rag.py
+?? auto_eval_Q101_Q110.py
+?? check_110_eval_ready.py
+?? check_answer_draft.py
+?? clear_minesafe_placeholder.py
+?? extend_dust_ppe_questions_110.py
+?? fix_110_dust_ppe_categories.py
+?? fix_110_scenario_schema.py
+?? inspect_syntax.py
+?? make_readable_auto_eval_excel.py
+?? make_teacher_view_110_excel.py
+?? make_teacher_view_excel.py
+?? merge_auto_eval_Q031_Q110.py
+?? patch_app_add_110_scenario.py
+?? patch_app_eval_110.py
+?? patch_question_label_display.py
+?? patch_tbm_label.py
+?? rebuild_110_from_100_schema.py
+?? rebuild_eval_Q001_Q030_100.py
+?? repair_q101_q110.py
+?? repair_q101_q110_final.py
+?? safe_github_commit_push.py
+?? split_dust_ppe_category.py

@@ -1,0 +1,54 @@
+MineSafe AI v2 20문항 평가자 복붙용 batch txt 생성 보고서
+작성 시각: 2026-07-08 17:59:21
+
+1. 생성한 파일 목록
+- C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\judge_copy_paste_batches_20q\Claude\Claude_batch_01_FQ001_FQ020.txt
+- C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\judge_copy_paste_batches_20q\Claude\Claude_batch_02_FQ021_FQ040.txt
+- C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\judge_copy_paste_batches_20q\Claude\Claude_batch_03_FQ041_FQ050.txt
+- C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\judge_copy_paste_batches_20q\Gemini\Gemini_batch_01_FQ001_FQ020.txt
+- C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\judge_copy_paste_batches_20q\Gemini\Gemini_batch_02_FQ021_FQ040.txt
+- C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\judge_copy_paste_batches_20q\Gemini\Gemini_batch_03_FQ041_FQ050.txt
+- C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\judge_copy_paste_batches_20q\GPT\GPT_batch_01_FQ001_FQ020.txt
+- C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\judge_copy_paste_batches_20q\GPT\GPT_batch_02_FQ021_FQ040.txt
+- C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\judge_copy_paste_batches_20q\GPT\GPT_batch_03_FQ041_FQ050.txt
+
+2. 총 batch 파일 수
+- 9개
+
+3. GPT/Gemini/Claude별 파일 수
+- GPT: 3개
+- Gemini: 3개
+- Claude: 3개
+
+4. batch별 질문 범위
+- batch 01: FQ001~FQ020
+- batch 02: FQ021~FQ040
+- batch 03: FQ041~FQ050
+
+5. 각 batch 질문 수
+- batch 01: 20개
+- batch 02: 20개
+- batch 03: 10개
+
+6. 실제 모델명 노출 검사 결과
+- 평가용 txt 내 ChatGPT/MineSafe AI 노출: 없음
+- Gemini 문자열은 Gemini 평가자 파일의 judge_model 및 평가자명으로만 필요한 경우 허용
+- TSV header 누락 파일: 0개
+- Answer A/B/C 누락 이슈: 0개
+
+7. 기존 파일 보존 여부
+- 기존 5문항 batch 폴더 삭제/수정 없음
+- 기존 10문항 batch가 있더라도 삭제/수정 없음
+- app.py 수정 없음
+- Vector DB 수정 없음
+- chunks 파일 수정 없음
+- 기존 평가 파일 수정 없음
+- 기존 비교 실험 파일 수정 없음
+- .env 파일 열기/출력/수정 없음
+- API Key 출력 없음
+
+8. 사용자가 이후 해야 할 일
+- GPT/Gemini/Claude 폴더에서 각 평가자용 20문항 batch txt를 연다.
+- 파일 전체를 Ctrl+A, Ctrl+C로 복사해 해당 평가 모델에 붙여넣는다.
+- 평가자가 출력한 TSV를 multi_judge_score_input_50_v2.xlsx에 붙여넣는다.
+- blind_eval_answer_key_50_v2.xlsx는 평가자에게 절대 보여주지 않는다.

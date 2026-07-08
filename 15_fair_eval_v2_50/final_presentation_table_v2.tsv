@@ -1,0 +1,16 @@
+chart_id	chart_title	metric	model	judge_model	value
+model_average_bar	모델별 v2 평균점수	average_score_100	MineSafe AI	All judges	85.61
+model_std_bar	모델별 표준편차	std_score	MineSafe AI	All judges	7.58
+model_average_bar	모델별 v2 평균점수	average_score_100	Gemini	All judges	69.91
+model_std_bar	모델별 표준편차	std_score	Gemini	All judges	15.79
+model_average_bar	모델별 v2 평균점수	average_score_100	ChatGPT	All judges	60.33
+model_std_bar	모델별 표준편차	std_score	ChatGPT	All judges	12.82
+judge_model_grouped_bar	평가자별 모델 평균점수	judge_average_score	MineSafe AI	GPT	85.22
+judge_model_grouped_bar	평가자별 모델 평균점수	judge_average_score	MineSafe AI	Gemini	94.32
+judge_model_grouped_bar	평가자별 모델 평균점수	judge_average_score	MineSafe AI	Claude	77.28
+judge_model_grouped_bar	평가자별 모델 평균점수	judge_average_score	Gemini	GPT	83.12
+judge_model_grouped_bar	평가자별 모델 평균점수	judge_average_score	Gemini	Gemini	78.46
+judge_model_grouped_bar	평가자별 모델 평균점수	judge_average_score	Gemini	Claude	48.14
+judge_model_grouped_bar	평가자별 모델 평균점수	judge_average_score	ChatGPT	GPT	75.6
+judge_model_grouped_bar	평가자별 모델 평균점수	judge_average_score	ChatGPT	Gemini	60.06
+judge_model_grouped_bar	평가자별 모델 평균점수	judge_average_score	ChatGPT	Claude	45.34

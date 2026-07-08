@@ -1,0 +1,69 @@
+MineSafe AI v2 다중 평가 최종 집계 보고서
+
+1. 사용한 TSV 파일 목록
+- judge_raw_outputs\GPT\GPT_result_20q_01_FQ001_FQ020.tsv
+- judge_raw_outputs\GPT\GPT_result_20q_02_FQ021_FQ040.tsv
+- judge_raw_outputs\GPT\GPT_result_20q_03_FQ041_FQ050.tsv
+- judge_raw_outputs\Gemini\Gemini_result_20q_01_FQ001_FQ020.tsv
+- judge_raw_outputs\Gemini\Gemini_result_20q_02_FQ021_FQ040.tsv
+- judge_raw_outputs\Gemini\Gemini_result_20q_03_FQ041_FQ050.tsv
+- judge_raw_outputs\Claude\Claude_result_20q_01_FQ001_FQ020.tsv
+- judge_raw_outputs\Claude\Claude_result_20q_02_FQ021_FQ040.tsv
+- judge_raw_outputs\Claude\Claude_result_20q_03_FQ041_FQ050.tsv
+
+2. 제외한 5문항/비20q TSV 파일 목록
+- judge_raw_outputs\GPT\GPT_result_01_FQ001_FQ005.tsv
+- judge_raw_outputs\GPT\GPT_result_02_FQ006_FQ010.tsv
+
+3. 전체 평가 행 수
+- 기대 조합 수: 450행 = 50문항 x Answer A/B/C 3개 x 평가자 3명
+- 실제 점수 파싱 행 수: 447행
+- 누락 표시 포함 병합 행 수: 450행
+- 누락 점수 조합 수: 3행
+
+4. 누락 점수 조합
+- FQ034 / Answer C / Gemini judge / original_model=Gemini
+- FQ038 / Answer B / Gemini judge / original_model=Gemini
+- FQ038 / Answer C / Gemini judge / original_model=ChatGPT
+
+5. 모델별 평균점수 및 표준편차
+- MineSafe AI: 평균 85.61점, 표준편차 7.58, 점수 수 150/150, 최종 순위 1
+- Gemini: 평균 69.57점, 표준편차 15.62, 점수 수 148/150, 최종 순위 2
+- ChatGPT: 평균 60.12점, 표준편차 12.59, 점수 수 149/150, 최종 순위 3
+
+6. 모델별 평가자별 평균점수
+- ChatGPT / GPT judge: 평균 75.60점, 표준편차 2.56, 점수 수 50/50
+- ChatGPT / Gemini judge: 평균 59.41점, 표준편차 1.24, 점수 수 49/50
+- ChatGPT / Claude judge: 평균 45.34점, 표준편차 1.69, 점수 수 50/50
+- Gemini / GPT judge: 평균 83.12점, 표준편차 2.30, 점수 수 50/50
+- Gemini / Gemini judge: 평균 77.77점, 표준편차 2.04, 점수 수 48/50
+- Gemini / Claude judge: 평균 48.14점, 표준편차 0.83, 점수 수 50/50
+- MineSafe AI / GPT judge: 평균 85.22점, 표준편차 4.97, 점수 수 50/50
+- MineSafe AI / Gemini judge: 평균 94.32점, 표준편차 0.82, 점수 수 50/50
+- MineSafe AI / Claude judge: 평균 77.28점, 표준편차 0.97, 점수 수 50/50
+
+7. 가장 높은 평균점수를 받은 모델
+- MineSafe AI (평균 85.61점)
+
+8. 기존 GPT 단일 평가와 v2 다중 평가의 차이
+- 기존 비교 실험은 제한된 20문항과 단일 평가 기준에 가까워 평가자 편향 또는 질문 표본 편향의 영향을 받을 수 있다.
+- v2 평가는 50문항으로 질문 범위를 넓히고 GPT/Gemini/Claude 세 평가자의 점수를 병합하여 평균과 표준편차를 함께 본다.
+- 또한 Answer A/B/C 블라인드 구조로 실제 답변 생성 모델명을 가린 상태에서 평가하므로 모델명 인식에 따른 선입견을 줄인다.
+
+9. 검증 결과
+- GPT 20q 결과 파일 3개 사용: 예
+- Gemini 20q 결과 파일 3개 사용: 예
+- Claude 20q 결과 파일 3개 사용: 예
+- 5문항 batch 결과 파일 제외: 예
+- 전체 question_id FQ001~FQ050 포함: 예
+- Answer A/B/C 실제 모델명 매칭: 예
+- app.py 수정 여부: 아니오
+- Vector DB 수정 여부: 아니오
+- chunks 파일 수정 여부: 아니오
+- 기존 09_answer_tests 평가 파일 수정 여부: 아니오
+- 기존 12_compare_experiment 비교 실험 파일 수정 여부: 아니오
+- 기존 94.90점 결과 재계산/덮어쓰기 여부: 아니오
+- .env/API Key 열람 또는 출력 여부: 아니오
+
+10. 교수님께 설명할 수 있는 한 문단 요약
+이번 v2 평가는 기존 20문항 비교 실험의 표본 한계를 보완하기 위해 50문항으로 확장하고, ChatGPT/Gemini/MineSafe AI 답변을 Answer A/B/C로 익명화한 뒤 GPT, Gemini, Claude 세 평가자가 동일한 100점 기준으로 평가한 결과를 병합한 방식입니다. 20문항 batch TSV만 사용하고 기존 5문항 batch 파일은 제외했으며, 정답키로 Answer A/B/C를 실제 모델명에 매칭해 모델별 평균과 표준편차, 평가자별 평균, 질문별 순위를 계산했습니다. 다만 Gemini 평가 결과에서 3개 점수 조합이 누락되어 해당 항목은 MISSING_SCORE로 표시했고, 평균은 실제 존재하는 447개 점수만으로 계산했습니다.

@@ -1,0 +1,31 @@
+question_id	answer_label	judge_model	search_relevance_25	evidence_grounding_25	safety_legal_accuracy_25	practicality_25	total_score_100	comment
+FQ041	Answer A	Claude	3	5	20	19	47	합동 위험성평가와 현장점검 방향은 맞으나 구체 기준 제시가 부족함
+FQ041	Answer B	Claude	5	6	20	20	51	TBM 정례화 등 구체적 보완방안을 제시했으나 근거 문서 인용이 없음
+FQ041	Answer C	Claude	20	22	20	15	77	근거는 충실하나 협력업체 위험성평가 형식화라는 구체 상황 대응은 약함
+FQ042	Answer A	Claude	20	22	20	15	77	근거는 충실하나 중간관리자 조치지연이라는 구체 상황 대응은 약함
+FQ042	Answer B	Claude	5	6	19	17	47	위험 통제와 보고 원칙은 맞으나 구체적 책임범위 제시가 부족함
+FQ042	Answer C	Claude	3	5	21	20	49	작업중지권 보장과 위원회 승인 절차를 구체적으로 제시했으나 근거 인용이 없음
+FQ043	Answer A	Claude	20	22	20	15	77	근거는 충실하나 신규 채굴방법 도입이라는 구체 상황 대응은 약함
+FQ043	Answer B	Claude	5	6	19	17	47	종합 검토 방향은 맞으나 구체적 항목 제시가 다소 일반적임
+FQ043	Answer C	Claude	3	5	20	20	48	SOP 제정 등 구체 검토항목을 제시했으나 근거 문서 인용이 없음
+FQ044	Answer A	Claude	3	5	20	19	47	이해도 검증 절차를 구체적으로 제시했으나 근거 문서 인용이 없음
+FQ044	Answer B	Claude	5	6	19	16	46	이해도 확인 방향은 맞으나 구체성이 다소 부족함
+FQ044	Answer C	Claude	20	22	20	15	77	근거는 충실하나 교육 이해도 확인이라는 구체 상황 대응은 약함
+FQ045	Answer A	Claude	5	6	19	17	47	통합 관리체계 방향은 맞으나 우선순위와 절차가 다소 일반적임
+FQ045	Answer B	Claude	20	22	20	15	77	근거는 충실하나 통합관리체계 우선순위 제안이라는 질문 취지 대응은 약함
+FQ045	Answer C	Claude	3	5	18	19	45	우선순위를 제시했으나 인력을 최우선으로 하는 순서가 다소 부적절함
+FQ046	Answer A	Claude	5	6	19	16	46	필요 자료 나열은 맞으나 구체성이 다소 부족함
+FQ046	Answer B	Claude	20	22	21	18	81	근거와 재개조건, 기록체계를 구체적으로 결합해 실무성이 양호함
+FQ046	Answer C	Claude	3	5	20	20	48	사진, 정비확인서 등 구체 자료를 제시했으나 근거 문서 인용이 없음
+FQ047	Answer A	Claude	3	5	20	19	47	기록 항목을 구체적으로 제시했으나 근거 문서 인용이 없음
+FQ047	Answer B	Claude	5	6	19	20	50	모바일 앱, 안전점검 기록부 등 구체 방안을 제시했으나 근거가 없음
+FQ047	Answer C	Claude	20	22	20	15	77	근거는 충실하나 구두보고 기록화라는 간단한 상황에 비해 답변이 과도하게 정형적임
+FQ048	Answer A	Claude	20	22	21	18	81	근거와 함께 보고·현장보존·재개조건을 구체적으로 결합해 실무성이 양호함
+FQ048	Answer B	Claude	5	6	19	16	46	응급조치 우선과 현장보존 방향은 맞으나 구체성이 다소 부족함
+FQ048	Answer C	Claude	3	5	21	20	49	통제선 설치, 관할기관 보고 등 구체 순서를 제시했으나 근거 인용이 없음
+FQ049	Answer A	Claude	3	5	21	20	49	합동 시운전과 서면결재 등 구체 절차를 제시했으나 근거 문서 인용이 없음
+FQ049	Answer B	Claude	20	22	20	15	77	근거는 충실하나 임시수리 후 재가동 판단이라는 구체 상황 대응은 약함
+FQ049	Answer C	Claude	5	6	19	16	46	수리내용과 안전장치 확인 원칙은 맞으나 구체성이 다소 부족함
+FQ050	Answer A	Claude	5	6	19	17	47	확인항목과 기록사항 방향은 맞으나 구체성이 다소 부족함
+FQ050	Answer B	Claude	20	22	21	18	81	근거와 재개조건, 기록체계를 구체적으로 결합해 실무성이 양호함
+FQ050	Answer C	Claude	3	5	20	20	48	개선 전후 비교표와 회의록 등 구체 기록항목을 제시했으나 근거 인용이 없음

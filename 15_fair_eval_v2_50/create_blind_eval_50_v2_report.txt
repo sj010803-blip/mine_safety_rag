@@ -1,0 +1,41 @@
+MineSafe AI v2 50문항 블라인드 평가 파일 생성 보고서
+작성 시각: 2026-07-08 17:20:17
+
+입력 파일: C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\model_answer_collection_template_50_with_minesafe_fixed.xlsx
+랜덤 seed: 20260707
+평가자 제공 파일: C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\blind_eval_questions_50_v2.xlsx
+정답키 파일: C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\blind_eval_answer_key_50_v2.xlsx
+주의: blind_eval_answer_key_50_v2.xlsx는 Answer A/B/C와 실제 모델명 매칭표이므로 평가자에게 보여주면 안 됩니다.
+
+입력 답변 개수:
+- ChatGPT: 50
+- Gemini: 50
+- MineSafe AI: 50
+
+블라인드 파일 검증:
+- 질문 수: 50
+- answer_A 채움 수: 50
+- answer_B 채움 수: 50
+- answer_C 채움 수: 50
+- 실제 모델명 redaction 건수: 50
+- 실제 모델명 노출 여부: 노출 없음
+- 질문별 A/B/C 순서 랜덤화 여부: 랜덤 섞임 확인
+
+A/B/C 실제 모델 순서 분포:
+- ChatGPT | Gemini | MineSafe AI: 7문항
+- ChatGPT | MineSafe AI | Gemini: 12문항
+- Gemini | ChatGPT | MineSafe AI: 7문항
+- Gemini | MineSafe AI | ChatGPT: 8문항
+- MineSafe AI | ChatGPT | Gemini: 12문항
+- MineSafe AI | Gemini | ChatGPT: 4문항
+
+보존 확인:
+- 최종 답변 수집 파일은 읽기만 했고 수정하지 않음
+- app.py 수정 없음
+- Vector DB 수정 없음
+- chunks 파일 수정 없음
+- 기존 09_answer_tests 평가 파일 수정 없음
+- 기존 12_compare_experiment 비교 실험 파일 수정 없음
+- 기존 94.90점 재계산 없음
+- .env 파일 열기/출력/수정 없음
+- API Key 출력 없음

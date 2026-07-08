@@ -1,0 +1,4 @@
+original_model	expected_score_count	score_count	missing_score_count	overall_average_score	overall_std_score	gpt_judge_average	gemini_judge_average	claude_judge_average	final_rank
+ChatGPT	150	150	0	60.333333333333336	12.81602743770925	75.6	60.06	45.34	3
+Gemini	150	150	0	69.90666666666667	15.787322527037539	83.12	78.46	48.14	2
+MineSafe AI	150	150	0	85.60666666666667	7.57946418983042	85.22	94.32	77.28	1

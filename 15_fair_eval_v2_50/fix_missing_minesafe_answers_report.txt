@@ -1,0 +1,24 @@
+MineSafe AI 누락 답변 3개 보정 보고서
+작성 시각: 2026-07-08 17:15:25
+
+1. 오류가 난 question_id 목록: FQ007, FQ020, FQ046
+2. 수정한 question_id 목록: FQ007, FQ020, FQ046
+3. 수정 전 MineSafe AI 답변 개수: 47/50
+4. 수정 후 MineSafe AI 답변 개수: 50/50
+5. ChatGPT 답변 개수 유지 여부: 유지됨 (50 -> 50)
+6. Gemini 답변 개수 유지 여부: 유지됨 (50 -> 50)
+7. 기존 47개 MineSafe AI 답변 덮어쓰기 여부: 덮어쓰기 없음
+8. app.py 수정 여부: 수정하지 않음
+9. Vector DB 수정 여부: 수정하지 않음
+10. 기존 평가 파일 수정 여부: 수정하지 않음
+11. 기존 비교 실험 파일 수정 여부: 수정하지 않음
+12. 최종 파일 경로: C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\model_answer_collection_template_50_with_minesafe_fixed.xlsx
+
+추가 검증:
+- 비어 있거나 placeholder인 minesafe_ai_answer 행 수: 0
+- 'MineSafe AI 답변' placeholder만 있는 행: 없음
+- 백업: 백업 생성: C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\model_answer_collection_template_50_with_minesafe_backup_before_fix.xlsx
+- chunks 검색 입력: C:\Users\USER\Desktop\mine_safety_rag\08_chunks\chunks_with_major_accident_docs.jsonl
+- chunks 로드 수: 820
+- .env 파일 열기/출력/수정 없음
+- API Key 출력 없음

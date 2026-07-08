@@ -1,0 +1,49 @@
+MineSafe AI v2 평가자 복붙용 batch txt 생성 보고서
+작성 시각: 2026-07-08 17:35:48
+
+입력 파일: C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\blind_eval_questions_50_v2.xlsx
+출력 폴더: C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\judge_copy_paste_batches
+
+1. 생성한 batch 파일 개수
+- GPT: 10개
+- Gemini: 10개
+- Claude: 10개
+
+2. GPT/Gemini/Claude 각각 10개씩 생성되었는지
+- 예
+
+3. 총 txt 파일 수
+- 30개
+
+4. 각 batch의 질문 범위
+- batch 01: FQ001~FQ005
+- batch 02: FQ006~FQ010
+- batch 03: FQ011~FQ015
+- batch 04: FQ016~FQ020
+- batch 05: FQ021~FQ025
+- batch 06: FQ026~FQ030
+- batch 07: FQ031~FQ035
+- batch 08: FQ036~FQ040
+- batch 09: FQ041~FQ045
+- batch 10: FQ046~FQ050
+
+5. 실제 모델명 노출 여부 검사 결과
+- 평가용 batch txt 내 ChatGPT/MineSafe AI 노출: 없음
+- Gemini 문자열은 Gemini 평가자 파일의 judge_model 및 평가자명으로만 필요하게 포함될 수 있음
+- Gemini 문자열 포함 파일 수: 10개
+
+6. 사용자가 이후 해야 할 일
+- GPT 폴더의 batch txt 10개를 차례로 열어 GPT 평가자에게 붙여넣고 TSV 결과를 저장한다.
+- Gemini 폴더의 batch txt 10개를 차례로 열어 Gemini 평가자에게 붙여넣고 TSV 결과를 저장한다.
+- Claude 폴더의 batch txt 10개를 차례로 열어 Claude 평가자에게 붙여넣고 TSV 결과를 저장한다.
+- 각 평가자가 출력한 TSV를 multi_judge_score_input_50_v2.xlsx에 붙여넣는다.
+- blind_eval_answer_key_50_v2.xlsx는 평가자에게 절대 보여주지 않는다.
+
+보존 확인
+- app.py 수정 없음
+- Vector DB 수정 없음
+- chunks 파일 수정 없음
+- 기존 평가 파일 수정 없음
+- 기존 비교 실험 파일 수정 없음
+- .env 파일 열기/출력/수정 없음
+- API Key 출력 없음

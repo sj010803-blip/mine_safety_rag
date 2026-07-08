@@ -1,0 +1,4 @@
+question_id	answer_label	judge_model	search_relevance_25	evidence_grounding_25	safety_legal_accuracy_25	practicality_25	total_score_100	comment
+FQ034	Answer C	Gemini	22	23	25	25	95	정비 및 청소 시 필수적인 LOTO 조치와 금지 행동을 핵심 위주로 명확하고 실무적으로 제시했습니다.
+FQ038	Answer B	Gemini	23	24	24	24	95	중대재해 시나리오와 본사 지원 요청 등 경영진 보고에 필요한 핵심 요소를 체계적이고 구체적으로 서술했습니다.
+FQ038	Answer C	Gemini	23	22	24	23	92	작업 중지 여부와 기록 유지 등 현장 안전 관리에 꼭 필요한 실무적 조치들을 누락 없이 간결하게 담았습니다.

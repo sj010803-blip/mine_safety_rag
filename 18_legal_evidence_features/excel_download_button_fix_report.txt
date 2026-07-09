@@ -1,0 +1,42 @@
+MineSafe AI Excel 다운로드 버튼 수정 보고서
+
+1. 원인
+- 기존 Excel 내보내기 UI는 st.button 클릭 시 서버 로컬 경로에 xlsx 파일을 생성하고 성공 메시지만 표시하는 구조였다.
+- 이 방식은 브라우저 사용자에게 파일 bytes를 전달하지 않으므로 파란 버튼처럼 보이더라도 실제 다운로드가 발생하지 않았다.
+- Streamlit에서 실제 파일 다운로드를 제공하려면 st.download_button에 bytes 데이터, 파일명, MIME 타입을 전달해야 한다.
+
+2. 수정한 함수/영역
+- app.py import 영역: BytesIO 추가
+- app.py Excel 생성 유틸:
+  - normalize_excel_value()
+  - build_simple_xlsx_workbook()
+  - build_simple_xlsx_bytes()
+  - normalize_conversation_history_rows()
+  - build_conversation_history_xlsx_bytes()
+- 중대재해처벌법 대응 화면:
+  - 체크리스트 Excel 내보내기 st.button을 st.download_button으로 교체
+- 위험성평가 초안 화면:
+  - 위험성평가 초안 Excel 내보내기 st.button을 st.download_button으로 교체
+- 대화 이력 화면:
+  - 빈 대화 이력 Excel 내보내기와 대화 이력 Excel 내보내기를 st.download_button으로 교체
+
+3. 생성된 백업 파일
+- C:\Users\USER\Desktop\mine_safety_rag\app_backup_before_excel_download_fix.py
+
+4. 다운로드 버튼 검증 결과
+- 체크리스트 Excel 다운로드: Streamlit 테스트에서 실제 다운로드 위젯 라벨 렌더링 확인
+- 위험성평가 초안 Excel 다운로드: Streamlit 테스트에서 실제 다운로드 위젯 라벨 렌더링 확인
+- 대화 이력 Excel 다운로드: Streamlit 테스트에서 실제 다운로드 위젯 라벨 렌더링 확인
+- app.py py_compile 문법 검사: 통과
+- python -m streamlit run app.py 임시 실행: HTTP 200 응답 확인
+- 기존 생성 xlsx 파일: openpyxl로 열기 가능 확인된 구조를 유지하고, 다운로드 버튼은 동일한 Workbook 생성 로직을 BytesIO로 전달하도록 수정
+
+5. 기존 기능 유지 여부
+- 기존 질문 답변 화면 초기 렌더링: Streamlit AppTest 기준 통과
+- chunks, 09_answer_tests, 12_compare_experiment 파일: 수정하지 않음
+- Vector DB: 재생성/컬렉션 변경/문서 추가 작업은 수행하지 않음. 단, Streamlit 실행 검증 과정에서 기존 app.py가 ChromaDB를 초기화하면서 DB 파일의 LastWriteTime이 갱신될 수 있음을 확인함
+- .env/API Key: 열람/출력/수정하지 않음
+- Git commit/push: 수행하지 않음
+
+6. 비고
+- Streamlit에서 use_container_width 향후 변경 안내 경고가 표시되었으나, 현재 다운로드 기능과 앱 실행을 막는 오류는 아니다.

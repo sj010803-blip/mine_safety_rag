@@ -4483,86 +4483,18 @@ def split_display_items(text: str) -> list[str]:
     return parts or [cleaned]
 
 
-def kras_risk_badge_html(level: str) -> str:
-    styles = {
-        "낮음": ("#dcfce7", "#166534", "#86efac"),
-        "보통": ("#fef9c3", "#854d0e", "#fde047"),
-        "높음": ("#ffedd5", "#9a3412", "#fdba74"),
-        "매우 높음": ("#fee2e2", "#991b1b", "#fca5a5"),
-    }
-    bg, fg, border = styles.get(level, ("#e2e8f0", "#334155", "#cbd5e1"))
-    return (
-        f'<span style="display:inline-block;background:{bg};color:{fg};border:1px solid {border};'
-        'border-radius:999px;padding:2px 9px;margin:0 3px;font-weight:700;white-space:nowrap;">'
-        f'{escape(level)}</span>'
-    )
-
-
-def emphasize_risk_terms_html(text: str) -> str:
-    cleaned = strip_inline_markdown(text)
-    levels = ["매우 높음", "높음", "보통", "낮음"]
-    parts: list[str] = []
-    index = 0
-    while index < len(cleaned):
-        matched_level = next(
-            (level for level in levels if cleaned.startswith(level, index)),
-            None,
-        )
-        if matched_level:
-            parts.append(kras_risk_badge_html(matched_level))
-            index += len(matched_level)
-        else:
-            parts.append(escape(cleaned[index]))
-            index += 1
-    return "".join(parts)
-
-
-def measure_label_html(label: str) -> str:
-    styles = {
-        "제거": ("#dbeafe", "#1d4ed8"),
-        "대체": ("#e0e7ff", "#4338ca"),
-        "공학적 대책": ("#ccfbf1", "#0f766e"),
-        "관리적 대책": ("#fef3c7", "#92400e"),
-        "보호구/PPE": ("#fce7f3", "#be185d"),
-    }
-    bg, fg = styles.get(label, ("#e2e8f0", "#334155"))
-    return (
-        f'<span style="display:inline-block;background:{bg};color:{fg};border-radius:8px;'
-        'padding:2px 8px;margin-right:6px;font-weight:800;white-space:nowrap;">'
-        f'{escape(label)}</span>'
-    )
-
-
-def emphasize_measure_item_html(item: str) -> str:
-    cleaned = strip_inline_markdown(item)
-    for label in ["공학적 대책", "관리적 대책", "보호구/PPE", "제거", "대체"]:
-        for marker in [f"{label}:", f"{label}："]:
-            if cleaned.startswith(marker):
-                detail = cleaned[len(marker):].strip()
-                return f"{measure_label_html(label)} {emphasize_risk_terms_html(detail)}"
-    return emphasize_risk_terms_html(cleaned)
-
-
 def render_kras_value_card(label: str, value: str) -> None:
-    clean_label = strip_inline_markdown(label)
     items = split_display_items(value)
     if len(items) > 1:
-        if clean_label == "위험성 감소대책":
-            body = "".join(f"<li>{emphasize_measure_item_html(item)}</li>" for item in items)
-        else:
-            body = "".join(f"<li>{emphasize_risk_terms_html(item)}</li>" for item in items)
-        value_html = f"<ul style='margin:0;padding-left:18px;line-height:1.8;'>{body}</ul>"
+        body = "".join(f"<li>{escape(item)}</li>" for item in items)
+        value_html = f"<ul style='margin:0;padding-left:18px;line-height:1.65;'>{body}</ul>"
     else:
-        item = items[0] if items else "기록 필요"
-        if clean_label == "위험성 감소대책":
-            value_html = f"<div style='line-height:1.8;white-space:pre-wrap;'>{emphasize_measure_item_html(item)}</div>"
-        else:
-            value_html = f"<div style='line-height:1.8;white-space:pre-wrap;'>{emphasize_risk_terms_html(item)}</div>"
+        value_html = f"<div style='line-height:1.65;white-space:pre-wrap;'>{escape(items[0] if items else '기록 필요')}</div>"
     st.markdown(
         f"""
         <div style="background:#ffffff;border:1px solid #dbe4ef;border-radius:12px;
                     padding:13px 15px;margin-bottom:10px;">
-            <div style="font-weight:800;color:#17324d;margin-bottom:8px;">• {escape(clean_label)}</div>
+            <div style="font-weight:700;color:#17324d;margin-bottom:6px;">• {escape(strip_inline_markdown(label))}</div>
             <div style="color:#334155;">{value_html}</div>
         </div>
         """,
@@ -5611,14 +5543,6 @@ def render_major_accident_law_evidence_panel() -> None:
         )
         for label, doc_name in MAJOR_ACCIDENT_LAW_DOCS
     )
-    warning_items = [
-        "유해가스 농도 초과 상태인데 작업을 계속한 경우",
-        "위험성평가를 하지 않거나 형식적으로만 작성한 경우",
-        "작업중지 필요 상황인데 즉시 중지하지 않은 경우",
-        "보호구 지급·착용 확인 없이 작업자를 투입한 경우",
-        "안전교육, 점검, 개선조치 기록이 남아 있지 않은 경우",
-    ]
-    warning_html = "".join(f"<li>{escape(item)}</li>" for item in warning_items)
     st.markdown(
         (
             '<div class="major-law-evidence-box">'
@@ -5630,24 +5554,6 @@ def render_major_accident_law_evidence_panel() -> None:
             f'<div class="major-law-badge-row">{badge_html}'
             '<span class="law-badge law-badge-major">중대재해처벌법</span></div>'
             f'<div class="major-law-doc-list">{docs_html}</div>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        (
-            '<div class="major-law-evidence-box" style="margin-top:12px;">'
-            '<div class="major-law-evidence-title">중대재해처벌법 유의사항</div>'
-            '<div class="major-law-evidence-text">'
-            "아래 사례는 법률 위반 여부를 단정하는 내용이 아니라, 현장에서 "
-            "중대재해처벌법 대응 측면에서 주의가 필요한 대표 상황을 안내하기 위한 것입니다."
-            "</div>"
-            f'<ul style="margin:10px 0 10px 18px;line-height:1.7;">{warning_html}</ul>'
-            '<div class="major-law-evidence-text" style="margin-top:8px;">'
-            "AI 답변이나 체크리스트만으로 법적 책임이 면제되는 것은 아니며, "
-            "점검표, 교육기록, 작업중지 기록, 개선조치 사진, 확인 서명 등 "
-            "실제 이행자료를 함께 관리하는 것이 중요합니다."
-            "</div>"
             "</div>"
         ),
         unsafe_allow_html=True,

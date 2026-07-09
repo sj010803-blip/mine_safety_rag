@@ -4467,229 +4467,6 @@ def render_history_report_card(selected: dict[str, Any], evidence_documents: lis
     render_history_report_field("조치 상태", str(selected.get("user_action_status", "미조치") or "미조치"))
 
 
-def strip_inline_markdown(text: str) -> str:
-    return str(text or "").replace("**", "").replace("\\|", "|").strip()
-
-
-def split_display_items(text: str) -> list[str]:
-    cleaned = strip_inline_markdown(text)
-    if not cleaned:
-        return []
-    parts = []
-    for raw in cleaned.replace("\r\n", " / ").replace("\n", " / ").split(" / "):
-        item = raw.strip(" -•")
-        if item:
-            parts.append(item)
-    return parts or [cleaned]
-
-
-def kras_risk_badge_html(level: str) -> str:
-    styles = {
-        "낮음": ("#dcfce7", "#166534", "#86efac"),
-        "보통": ("#fef9c3", "#854d0e", "#fde047"),
-        "높음": ("#ffedd5", "#9a3412", "#fdba74"),
-        "매우 높음": ("#fee2e2", "#991b1b", "#fca5a5"),
-    }
-    bg, fg, border = styles.get(level, ("#e2e8f0", "#334155", "#cbd5e1"))
-    return (
-        f'<span style="display:inline-block;background:{bg};color:{fg};border:1px solid {border};'
-        'border-radius:999px;padding:2px 9px;margin:0 3px;font-weight:700;white-space:nowrap;">'
-        f'{escape(level)}</span>'
-    )
-
-
-def emphasize_risk_terms_html(text: str) -> str:
-    cleaned = strip_inline_markdown(text)
-    levels = ["매우 높음", "높음", "보통", "낮음"]
-    parts: list[str] = []
-    index = 0
-    while index < len(cleaned):
-        matched_level = next(
-            (level for level in levels if cleaned.startswith(level, index)),
-            None,
-        )
-        if matched_level:
-            parts.append(kras_risk_badge_html(matched_level))
-            index += len(matched_level)
-        else:
-            parts.append(escape(cleaned[index]))
-            index += 1
-    return "".join(parts)
-
-
-def measure_label_html(label: str) -> str:
-    styles = {
-        "제거": ("#dbeafe", "#1d4ed8"),
-        "대체": ("#e0e7ff", "#4338ca"),
-        "공학적 대책": ("#ccfbf1", "#0f766e"),
-        "관리적 대책": ("#fef3c7", "#92400e"),
-        "보호구/PPE": ("#fce7f3", "#be185d"),
-    }
-    bg, fg = styles.get(label, ("#e2e8f0", "#334155"))
-    return (
-        f'<span style="display:inline-block;background:{bg};color:{fg};border-radius:8px;'
-        'padding:2px 8px;margin-right:6px;font-weight:800;white-space:nowrap;">'
-        f'{escape(label)}</span>'
-    )
-
-
-def emphasize_measure_item_html(item: str) -> str:
-    cleaned = strip_inline_markdown(item)
-    for label in ["공학적 대책", "관리적 대책", "보호구/PPE", "제거", "대체"]:
-        for marker in [f"{label}:", f"{label}："]:
-            if cleaned.startswith(marker):
-                detail = cleaned[len(marker):].strip()
-                return f"{measure_label_html(label)} {emphasize_risk_terms_html(detail)}"
-    return emphasize_risk_terms_html(cleaned)
-
-
-def render_kras_value_card(label: str, value: str) -> None:
-    clean_label = strip_inline_markdown(label)
-    items = split_display_items(value)
-    if len(items) > 1:
-        if clean_label == "위험성 감소대책":
-            body = "".join(f"<li>{emphasize_measure_item_html(item)}</li>" for item in items)
-        else:
-            body = "".join(f"<li>{emphasize_risk_terms_html(item)}</li>" for item in items)
-        value_html = f"<ul style='margin:0;padding-left:18px;line-height:1.8;'>{body}</ul>"
-    else:
-        item = items[0] if items else "기록 필요"
-        if clean_label == "위험성 감소대책":
-            value_html = f"<div style='line-height:1.8;white-space:pre-wrap;'>{emphasize_measure_item_html(item)}</div>"
-        else:
-            value_html = f"<div style='line-height:1.8;white-space:pre-wrap;'>{emphasize_risk_terms_html(item)}</div>"
-    st.markdown(
-        f"""
-        <div style="background:#ffffff;border:1px solid #dbe4ef;border-radius:12px;
-                    padding:13px 15px;margin-bottom:10px;">
-            <div style="font-weight:800;color:#17324d;margin-bottom:8px;">• {escape(clean_label)}</div>
-            <div style="color:#334155;">{value_html}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def parse_markdown_table_lines(lines: list[str]) -> tuple[list[str], list[list[str]]]:
-    rows = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped.startswith("|"):
-            continue
-        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
-        if cells and all(set(cell) <= {"-"} for cell in cells if cell):
-            continue
-        rows.append(cells)
-    if not rows:
-        return [], []
-    return rows[0], rows[1:]
-
-
-def render_generic_kras_table(headers: list[str], rows: list[list[str]]) -> None:
-    if not headers or not rows:
-        return
-    header_html = "".join(f"<th>{escape(strip_inline_markdown(header))}</th>" for header in headers)
-    row_html = []
-    for row in rows:
-        cells = []
-        for idx, cell in enumerate(row):
-            value = strip_inline_markdown(cell)
-            if " / " in value:
-                items = split_display_items(value)
-                cell_html = "<ul style='margin:0;padding-left:16px;'>" + "".join(f"<li>{escape(item)}</li>" for item in items) + "</ul>"
-            else:
-                cell_html = escape(value)
-            cells.append(f"<td>{cell_html}</td>")
-        row_html.append("<tr>" + "".join(cells) + "</tr>")
-    st.markdown(
-        (
-            "<div class='portal-table-scroll table-wrap'>"
-            "<table class='portal-data-table'>"
-            f"<thead><tr>{header_html}</tr></thead>"
-            f"<tbody>{''.join(row_html)}</tbody></table></div>"
-        ),
-        unsafe_allow_html=True,
-    )
-
-
-def render_kras_readable_markdown(kras_answer: str) -> None:
-    content = strip_kras_title(kras_answer)
-    lines = content.splitlines()
-    idx = 0
-    while idx < len(lines):
-        line = lines[idx].strip()
-        if not line:
-            idx += 1
-            continue
-        if line.startswith(">"):
-            st.info(line.lstrip("> ").strip())
-            idx += 1
-            continue
-        if line.startswith("###"):
-            st.markdown(f"#### {escape(line.lstrip('#').strip())}")
-            idx += 1
-            continue
-        if line.startswith("|"):
-            table_lines = []
-            while idx < len(lines) and lines[idx].strip().startswith("|"):
-                table_lines.append(lines[idx])
-                idx += 1
-            headers, rows = parse_markdown_table_lines(table_lines)
-            if headers[:2] == ["항목", "기입 초안"]:
-                for row in rows:
-                    if len(row) >= 2:
-                        render_kras_value_card(row[0], row[1])
-            else:
-                render_generic_kras_table(headers, rows)
-            continue
-        st.markdown(line)
-        idx += 1
-
-
-def render_export_report_page() -> None:
-    st.header("Excel 내보내기 및 보고서")
-    st.info("현장 점검 보조자료를 Excel로 내려받아 교수님 보고나 내부 기록 정리에 활용할 수 있습니다.")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("#### 중대재해처벌법 체크리스트")
-        checklist_excel_bytes = build_simple_xlsx_bytes("legal_checklist", load_legal_checklist_status())
-        st.download_button(
-            label="체크리스트 Excel 다운로드",
-            data=checklist_excel_bytes,
-            file_name="legal_checklist_export.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="field_download_legal_checklist_excel",
-            use_container_width=True,
-        )
-    with c2:
-        st.markdown("#### 위험성평가 초안")
-        rows = st.session_state.get(
-            "risk_assessment_draft_rows",
-            build_risk_assessment_draft("갱내 작업", "막장 또는 갱내 작업장", "현장 위험요인", "작업 전 위험성평가 필요"),
-        )
-        risk_excel_bytes = build_simple_xlsx_bytes("risk_assessment_draft", rows)
-        st.download_button(
-            label="위험성평가 초안 Excel 다운로드",
-            data=risk_excel_bytes,
-            file_name="risk_assessment_draft_export.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="field_download_risk_assessment_excel",
-            use_container_width=True,
-        )
-    with c3:
-        st.markdown("#### 대화 이력")
-        history_excel_bytes = build_conversation_history_xlsx_bytes(load_conversation_history())
-        st.download_button(
-            label="대화 이력 Excel 다운로드",
-            data=history_excel_bytes,
-            file_name="conversation_history_export.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="field_download_conversation_history_excel",
-            use_container_width=True,
-        )
-    st.caption("AI 답변과 내보낸 파일은 법적 책임 면제 자료가 아니며, 현장 점검표·사진·교육기록·작업중지 기록과 함께 관리해야 합니다.")
-
-
 def export_conversation_history_xlsx(rows: list[dict[str, Any]]) -> Path:
     write_simple_xlsx(CONVERSATION_HISTORY_EXPORT_PATH, "conversation_history", normalize_conversation_history_rows(rows))
     return CONVERSATION_HISTORY_EXPORT_PATH
@@ -4968,234 +4745,183 @@ def render_notice_guidance_page() -> None:
 # ==============================
 # 사이드바
 # ==============================
-audience_mode = st.sidebar.radio(
-    "사용자 모드",
-    ["현장관리자 모드", "관리자/개발자 모드"],
-    index=0,
+st.sidebar.markdown(
+    """
+    <div class="mscc-sidebar-brand">
+        <strong>MineSafe AI</strong><br>
+        <div class="portal-sidebar-en">공식 문서 기반 광산 안전관리 AI 시스템</div>
+    </div>
+    <div class="portal-nav-group">운영 및 답변</div>
+    <div class="portal-nav-item active">안전 질의 및 답변</div>
+    <div class="portal-nav-item">대화 이력</div>
+    <div class="portal-nav-item">즐겨찾기</div>
+    <div class="portal-nav-item">공지 및 지침</div>
+    <div class="portal-nav-group">지식 관리</div>
+    <div class="portal-nav-item">Vector DB 관리</div>
+    <div class="portal-nav-item">문서 관리</div>
+    <div class="portal-nav-item">모델 관리</div>
+    <div class="portal-nav-group">시스템 관리</div>
+    <div class="portal-nav-item">사용자 관리</div>
+    <div class="portal-nav-item">권한 관리</div>
+    <div class="portal-nav-item">설정</div>
+    """,
+    unsafe_allow_html=True,
 )
-is_admin_mode = audience_mode == "관리자/개발자 모드"
-
-if is_admin_mode:
-    st.sidebar.markdown(
-        """
-        <div class="mscc-sidebar-brand">
-            <strong>MineSafe AI</strong><br>
-            <div class="portal-sidebar-en">공식 문서 기반 광산 안전관리 AI 시스템</div>
-        </div>
-        <div class="portal-nav-group">운영 및 답변</div>
-        <div class="portal-nav-item active">안전 질의 및 답변</div>
-        <div class="portal-nav-item">대화 이력</div>
-        <div class="portal-nav-item">공지 및 지침</div>
-        <div class="portal-nav-group">지식 관리</div>
-        <div class="portal-nav-item">Vector DB 관리</div>
-        <div class="portal-nav-item">문서 관리</div>
-        <div class="portal-nav-item">모델 관리</div>
-        <div class="portal-nav-group">시스템 관리</div>
-        <div class="portal-nav-item">사용자 관리</div>
-        <div class="portal-nav-item">권한 관리</div>
-        <div class="portal-nav-item">설정</div>
-        """,
-        unsafe_allow_html=True,
-    )
-else:
-    st.sidebar.markdown(
-        """
-        <div class="mscc-sidebar-brand">
-            <strong>MineSafe AI</strong><br>
-            <div class="portal-sidebar-en">현장 안전관리자용 화면</div>
-        </div>
-        <div class="portal-nav-group">실무 메뉴</div>
-        <div class="portal-nav-item active">안전 질문 답변</div>
-        <div class="portal-nav-item">중대재해처벌법 대응 체크리스트</div>
-        <div class="portal-nav-item">위험성평가 초안</div>
-        <div class="portal-nav-item">대화 이력</div>
-        <div class="portal-nav-item">Excel 내보내기 또는 보고서</div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 chunk_count: int | str = 0
 collection, db_error = load_chroma_collection()
 if db_error:
-    if is_admin_mode:
-        st.sidebar.error("Vector DB · 연결 실패")
-        st.sidebar.write(db_error)
+    st.sidebar.error("Vector DB · 연결 실패")
+    st.sidebar.write(db_error)
 else:
     try:
         chunk_count = collection.count()
     except Exception as e:
         chunk_count = "확인 실패"
-        if is_admin_mode:
-            st.sidebar.warning(f"chunk 수 확인 실패: {e}")
+        st.sidebar.warning(f"chunk 수 확인 실패: {e}")
 
-    if is_admin_mode:
-        st.sidebar.success("Vector DB · 정상")
-        st.sidebar.write(f"저장된 chunk 수: **{chunk_count}개**")
-        st.sidebar.write(f"DB 폴더: `{VECTOR_DB_DIR.name}`")
+    st.sidebar.success("Vector DB · 정상")
+    st.sidebar.write(f"저장된 chunk 수: **{chunk_count}개**")
+    st.sidebar.write(f"DB 폴더: `{VECTOR_DB_DIR.name}`")
 
 law_badges_sidebar = "".join(
     f'<span class="major-law-mini-badge">{escape(label)}</span>'
     for label, _ in MAJOR_ACCIDENT_LAW_DOCS
 )
-if is_admin_mode:
-    st.sidebar.markdown(
-        (
-            '<div class="major-law-sidebar-card">'
-            '<div class="major-law-sidebar-title">법령 자료 반영 현황</div>'
-            '<div class="major-law-sidebar-line">중대재해처벌법 자료 반영 완료</div>'
-            '<div class="major-law-sidebar-line">반영 자료: FAQ / 질의회시집 / 해설서 / 따라하기 안내서</div>'
-            f'<div class="major-law-badge-row">{law_badges_sidebar}</div>'
-            f'<div class="major-law-sidebar-line">통합 chunk 수: {MAJOR_ACCIDENT_DOC_TOTAL_CHUNKS}개</div>'
-            f'<div class="major-law-sidebar-line">추가 자료 chunk 수: {MAJOR_ACCIDENT_DOC_ADDED_CHUNKS}개</div>'
-            f'<div class="major-law-sidebar-line">현재 Vector DB: {escape(VECTOR_DB_DIR.name)}</div>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
+st.sidebar.markdown(
+    (
+        '<div class="major-law-sidebar-card">'
+        '<div class="major-law-sidebar-title">법령 자료 반영 현황</div>'
+        '<div class="major-law-sidebar-line">중대재해처벌법 자료 반영 완료</div>'
+        '<div class="major-law-sidebar-line">반영 자료: FAQ / 질의회시집 / 해설서 / 따라하기 안내서</div>'
+        f'<div class="major-law-badge-row">{law_badges_sidebar}</div>'
+        f'<div class="major-law-sidebar-line">통합 chunk 수: {MAJOR_ACCIDENT_DOC_TOTAL_CHUNKS}개</div>'
+        f'<div class="major-law-sidebar-line">추가 자료 chunk 수: {MAJOR_ACCIDENT_DOC_ADDED_CHUNKS}개</div>'
+        f'<div class="major-law-sidebar-line">현재 Vector DB: {escape(VECTOR_DB_DIR.name)}</div>'
+        "</div>"
+    ),
+    unsafe_allow_html=True,
+)
+
+selected_gemini_model = st.sidebar.selectbox(
+    "Gemini 모델",
+    GEMINI_MODEL_OPTIONS,
+    index=0,
+)
+
+_, gemini_error = load_gemini_client()
+if gemini_error:
+    st.sidebar.warning("Gemini API · 키 미감지")
+    st.sidebar.caption("로컬 .env 또는 Streamlit Cloud Secrets의 GEMINI_API_KEY를 확인하세요.")
+    st.sidebar.caption(gemini_error)
 else:
-    st.sidebar.markdown(
-        (
-            '<div class="major-law-sidebar-card">'
-            '<div class="major-law-sidebar-title">법령 자료 반영</div>'
-            '<div class="major-law-sidebar-line">중대재해처벌법 공식 자료를 함께 활용합니다.</div>'
-            f'<div class="major-law-badge-row">{law_badges_sidebar}</div>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
+    st.sidebar.info("Gemini API · API 키 감지됨")
+    st.sidebar.caption("실제 연결 상태는 연결 테스트 또는 답변 호출 결과로 확인합니다.")
+    st.sidebar.caption(f"선택 모델: {selected_gemini_model}")
+    st.sidebar.write(f"호출 제한: 시도당 약 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초")
+    st.sidebar.write(f"최대 시도: {GEMINI_MAX_ATTEMPTS}회")
 
-if is_admin_mode:
-    selected_gemini_model = st.sidebar.selectbox(
-        "Gemini 모델",
-        GEMINI_MODEL_OPTIONS,
-        index=0,
-    )
-
-    _, gemini_error = load_gemini_client()
-    if gemini_error:
-        st.sidebar.warning("Gemini API · 키 미감지")
-        st.sidebar.caption("로컬 .env 또는 Streamlit Cloud Secrets의 GEMINI_API_KEY를 확인하세요.")
-        st.sidebar.caption(gemini_error)
-    else:
-        st.sidebar.info("Gemini API · API 키 감지됨")
-        st.sidebar.caption("실제 연결 상태는 연결 테스트 또는 답변 호출 결과로 확인합니다.")
-        st.sidebar.caption(f"선택 모델: {selected_gemini_model}")
-        st.sidebar.write(f"호출 제한: 시도당 약 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초")
-        st.sidebar.write(f"최대 시도: {GEMINI_MAX_ATTEMPTS}회")
-
-    if st.sidebar.button("Gemini 연결 테스트", use_container_width=True):
-        with st.sidebar:
-            with st.spinner("선택한 모델로 연결을 확인하는 중입니다..."):
-                test_result = test_gemini_connection(
-                    selected_gemini_model
-                )
-        test_state = classify_gemini_status(test_result)
-        if test_result.get("success"):
-            st.sidebar.success(
-                f"연결 테스트 성공 · {test_result.get('model')} · "
-                f"{test_result.get('elapsed', 0.0):.1f}초"
+if st.sidebar.button("Gemini 연결 테스트", use_container_width=True):
+    with st.sidebar:
+        with st.spinner("선택한 모델로 연결을 확인하는 중입니다..."):
+            test_result = test_gemini_connection(
+                selected_gemini_model
             )
-            st.sidebar.caption(f"Gemini 응답: {test_result.get('answer', '')}")
-        else:
-            st.sidebar.warning(
-                f"연결 테스트 실패 · {test_result.get('model')} · "
-                f"{format_gemini_status(test_state)}"
-            )
-            st.sidebar.caption(test_result.get("message", "Gemini 연결 테스트 실패"))
-            with st.sidebar.expander("오류 상세"):
-                st.write(test_result.get("error") or "오류 메시지 없음")
-                st.write(f"시도 횟수: {test_result.get('attempts', 0)}")
-
-    st.sidebar.divider()
-
-    answer_mode = st.sidebar.selectbox(
-        "답변 생성 방식",
-        [STABLE_MODE, GEMINI_MODE, HYBRID_MODE],
-        index=0,
-    )
-
-    if answer_mode == STABLE_MODE:
-        st.sidebar.info("안정 모드 · 외부 LLM 미호출")
-    elif answer_mode == GEMINI_MODE:
-        st.sidebar.warning("Gemini 모드 · 실패 시 근거 답변 전환")
+    test_state = classify_gemini_status(test_result)
+    if test_result.get("success"):
+        st.sidebar.success(
+            f"연결 테스트 성공 · {test_result.get('model')} · "
+            f"{test_result.get('elapsed', 0.0):.1f}초"
+        )
+        st.sidebar.caption(f"Gemini 응답: {test_result.get('answer', '')}")
     else:
-        st.sidebar.info(
-            "하이브리드 모드\n\n"
-            "- 1차: 검색 근거 기반 안정형 답변\n"
-            "- 2차: Gemini 기반 보조 답변\n"
-            "- Gemini 실패 시에도 1차 답변 유지"
+        st.sidebar.warning(
+            f"연결 테스트 실패 · {test_result.get('model')} · "
+            f"{format_gemini_status(test_state)}"
         )
+        st.sidebar.caption(test_result.get("message", "Gemini 연결 테스트 실패"))
+        with st.sidebar.expander("오류 상세"):
+            st.write(test_result.get("error") or "오류 메시지 없음")
+            st.write(f"시도 횟수: {test_result.get('attempts', 0)}")
 
-    with st.sidebar.expander("시연 권장 설정"):
-        st.markdown(
-            "- **답변 모드:** 하이브리드 모드 권장\n"
-            "- **Gemini 모델:** `gemini-2.5-flash-lite` 권장\n"
-            "- **이유:** 안정형 답변을 먼저 제공하고 Gemini 응답을 보조적으로 확인\n"
-            "- Gemini가 실패해도 검색 근거 기반 답변은 계속 제공됩니다."
-        )
+st.sidebar.divider()
 
-    top_k = st.sidebar.slider(
-        "검색할 근거 문서 수",
-        min_value=3,
-        max_value=5,
-        value=3,
-        step=1,
-    )
+answer_mode = st.sidebar.selectbox(
+    "답변 생성 방식",
+    [STABLE_MODE, GEMINI_MODE, HYBRID_MODE],
+    index=0,
+)
 
-    with st.sidebar.expander("시연 상태 체크"):
-        st.markdown(
-            "- Vector DB 로드 확인\n"
-            "- Gemini 모델 선택 확인\n"
-            "- 답변 모드는 하이브리드 모드 권장\n"
-            "- 답변과 함께 근거 문서가 표시되는지 확인"
-        )
-
-    selected_scenario_label = st.sidebar.selectbox(
-        "질문 시나리오 세트",
-        list(SCENARIO_SET_OPTIONS.keys()),
-        index=list(SCENARIO_SET_OPTIONS.keys()).index("110개 분진·보호구 보강 평가 세트"),
-    )
-    selected_scenario_path = SCENARIO_SET_OPTIONS[selected_scenario_label]
-
-    st.sidebar.markdown(
-        """
-        <div class="mscc-sidebar-note">
-            테스트 모드에서는 선택한 시나리오 세트의 질문 검색, 답변 검토, 평가 저장과 진행률 확인을 지원합니다.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.sidebar.caption("시연 시에는 110개 분진·보호구 보강 평가 세트를 선택하는 것을 권장합니다.")
-    feature_page = st.sidebar.radio(
-        "기능 메뉴",
-        ["안전 질의 및 답변", "중대재해처벌법 대응", "위험성평가 초안", "대화 이력", "공지 및 지침"],
-        index=0,
-    )
-
-    st.sidebar.markdown(
-        f"""
-        <div class="portal-system-state">
-            <div class="portal-system-state-title">시스템 상태</div>
-            <div class="portal-system-state-value">정상 운영 중</div>
-            <div class="portal-system-state-time">
-                마지막 동기화: {escape(time.strftime("%Y-%m-%d %H:%M"))}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+if answer_mode == STABLE_MODE:
+    st.sidebar.info("안정 모드 · 외부 LLM 미호출")
+elif answer_mode == GEMINI_MODE:
+    st.sidebar.warning("Gemini 모드 · 실패 시 근거 답변 전환")
 else:
-    selected_gemini_model = GEMINI_MODEL_OPTIONS[0]
-    gemini_error = "현장관리자 모드에서는 Gemini 상태를 숨깁니다."
-    answer_mode = STABLE_MODE
-    top_k = 3
-    selected_scenario_label = "110개 분진·보호구 보강 평가 세트"
-    selected_scenario_path = SCENARIO_SET_OPTIONS[selected_scenario_label]
-    feature_page = st.sidebar.radio(
-        "기능 메뉴",
-        ["안전 질문 답변", "중대재해처벌법 대응 체크리스트", "위험성평가 초안", "대화 이력", "Excel 내보내기 또는 보고서"],
-        index=0,
+    st.sidebar.info(
+        "하이브리드 모드\n\n"
+        "- 1차: 검색 근거 기반 안정형 답변\n"
+        "- 2차: Gemini 기반 보조 답변\n"
+        "- Gemini 실패 시에도 1차 답변 유지"
     )
+
+with st.sidebar.expander("시연 권장 설정"):
+    st.markdown(
+        "- **답변 모드:** 하이브리드 모드 권장\n"
+        "- **Gemini 모델:** `gemini-2.5-flash-lite` 권장\n"
+        "- **이유:** 안정형 답변을 먼저 제공하고 Gemini 응답을 보조적으로 확인\n"
+        "- Gemini가 실패해도 검색 근거 기반 답변은 계속 제공됩니다."
+    )
+
+top_k = st.sidebar.slider(
+    "검색할 근거 문서 수",
+    min_value=3,
+    max_value=5,
+    value=3,
+    step=1,
+)
+
+with st.sidebar.expander("시연 상태 체크"):
+    st.markdown(
+        "- Vector DB 로드 확인\n"
+        "- Gemini 모델 선택 확인\n"
+        "- 답변 모드는 하이브리드 모드 권장\n"
+        "- 답변과 함께 근거 문서가 표시되는지 확인"
+    )
+
+selected_scenario_label = st.sidebar.selectbox(
+    "질문 시나리오 세트",
+    list(SCENARIO_SET_OPTIONS.keys()),
+    index=list(SCENARIO_SET_OPTIONS.keys()).index("110개 분진·보호구 보강 평가 세트"),
+)
+selected_scenario_path = SCENARIO_SET_OPTIONS[selected_scenario_label]
+
+st.sidebar.markdown(
+    """
+    <div class="mscc-sidebar-note">
+        테스트 모드에서는 선택한 시나리오 세트의 질문 검색, 답변 검토, 평가 저장과 진행률 확인을 지원합니다.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+st.sidebar.caption("시연 시에는 110개 분진·보호구 보강 평가 세트를 선택하는 것을 권장합니다.")
+feature_page = st.sidebar.radio(
+    "기능 메뉴",
+    ["안전 질의 및 답변", "중대재해처벌법 대응", "위험성평가 초안", "대화 이력", "공지 및 지침"],
+    index=0,
+)
+
+st.sidebar.markdown(
+    f"""
+    <div class="portal-system-state">
+        <div class="portal-system-state-title">시스템 상태</div>
+        <div class="portal-system-state-value">정상 운영 중</div>
+        <div class="portal-system-state-time">
+            마지막 동기화: {escape(time.strftime("%Y-%m-%d %H:%M"))}
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ==============================
@@ -5205,11 +4931,7 @@ scenario_rows, scenario_status_error = load_question_scenarios(selected_scenario
 scenario_count = len(scenario_rows) if not scenario_status_error else 0
 db_status_text = "정상" if not db_error else "점검 필요"
 db_status_accent = "#10b981" if not db_error else "#b45309"
-gemini_status_text = (
-    "관리자 모드에서 확인"
-    if not is_admin_mode
-    else ("API 키 감지됨" if not gemini_error else "키 미감지")
-)
+gemini_status_text = "API 키 감지됨" if not gemini_error else "키 미감지"
 
 status_col1, status_col2, status_col3, status_col4 = st.columns(4)
 with status_col1:
@@ -5245,7 +4967,7 @@ with status_col4:
 # ==============================
 # 메뉴별 화면 전환
 # ==============================
-if feature_page in {"중대재해처벌법 대응", "중대재해처벌법 대응 체크리스트"}:
+if feature_page == "중대재해처벌법 대응":
     render_legal_checklist_page()
     st.stop()
 if feature_page == "위험성평가 초안":
@@ -5256,9 +4978,6 @@ if feature_page == "대화 이력":
     st.stop()
 if feature_page == "공지 및 지침":
     render_notice_guidance_page()
-    st.stop()
-if feature_page == "Excel 내보내기 또는 보고서":
-    render_export_report_page()
     st.stop()
 
 # ==============================
@@ -5611,14 +5330,6 @@ def render_major_accident_law_evidence_panel() -> None:
         )
         for label, doc_name in MAJOR_ACCIDENT_LAW_DOCS
     )
-    warning_items = [
-        "유해가스 농도 초과 상태인데 작업을 계속한 경우",
-        "위험성평가를 하지 않거나 형식적으로만 작성한 경우",
-        "작업중지 필요 상황인데 즉시 중지하지 않은 경우",
-        "보호구 지급·착용 확인 없이 작업자를 투입한 경우",
-        "안전교육, 점검, 개선조치 기록이 남아 있지 않은 경우",
-    ]
-    warning_html = "".join(f"<li>{escape(item)}</li>" for item in warning_items)
     st.markdown(
         (
             '<div class="major-law-evidence-box">'
@@ -5630,24 +5341,6 @@ def render_major_accident_law_evidence_panel() -> None:
             f'<div class="major-law-badge-row">{badge_html}'
             '<span class="law-badge law-badge-major">중대재해처벌법</span></div>'
             f'<div class="major-law-doc-list">{docs_html}</div>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        (
-            '<div class="major-law-evidence-box" style="margin-top:12px;">'
-            '<div class="major-law-evidence-title">중대재해처벌법 유의사항</div>'
-            '<div class="major-law-evidence-text">'
-            "아래 사례는 법률 위반 여부를 단정하는 내용이 아니라, 현장에서 "
-            "중대재해처벌법 대응 측면에서 주의가 필요한 대표 상황을 안내하기 위한 것입니다."
-            "</div>"
-            f'<ul style="margin:10px 0 10px 18px;line-height:1.7;">{warning_html}</ul>'
-            '<div class="major-law-evidence-text" style="margin-top:8px;">'
-            "AI 답변이나 체크리스트만으로 법적 책임이 면제되는 것은 아니며, "
-            "점검표, 교육기록, 작업중지 기록, 개선조치 사진, 확인 서명 등 "
-            "실제 이행자료를 함께 관리하는 것이 중요합니다."
-            "</div>"
             "</div>"
         ),
         unsafe_allow_html=True,
@@ -5874,7 +5567,10 @@ def render_rag_result(
             unsafe_allow_html=True,
         )
         if kras_answer:
-            render_kras_readable_markdown(kras_answer)
+            st.markdown(
+                decorate_kras_markdown(strip_kras_title(kras_answer)),
+                unsafe_allow_html=True,
+            )
         else:
             st.info("KRAS 초안이 포함되지 않은 답변입니다. 검색 근거를 확인해 주세요.")
 

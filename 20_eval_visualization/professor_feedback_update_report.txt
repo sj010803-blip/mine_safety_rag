@@ -1,0 +1,83 @@
+MineSafe AI 교수님 피드백 반영 종합 보고서
+
+1. 반영 항목 요약
+- 유사성 지수 비교 확장: 19_similarity_comparison 폴더 생성, ChatGPT/Gemini/MineSafe AI 3개 모델 비교 구조 작성
+- 웹사이트 좌측 메뉴 정리: 현장관리자 모드와 관리자/개발자 모드 추가
+- KRAS식 위험성평가 기록 초안 표시 개선: '/'로 이어진 내용을 줄바꿈·불렛·카드형 표시로 개선
+- v2 50문항 블라인드 다중평가 결과 시각화: 모델별 박스플롯, 평균±표준편차 그래프, 요약표 생성
+
+2. 수정한 파일
+- C:\Users\USER\Desktop\mine_safety_rag\app.py
+
+3. 백업 파일
+- C:\Users\USER\Desktop\mine_safety_rag\app_backup_before_professor_feedback_ui.py
+
+4. 19_similarity_comparison 생성 파일
+- 19_similarity_comparison/similarity_comparison_bar_chart.png
+- 19_similarity_comparison/similarity_comparison_report.txt
+- 19_similarity_comparison/similarity_comparison_summary.xlsx
+- 19_similarity_comparison/similarity_comparison_template.xlsx
+
+5. 20_eval_visualization 생성 파일
+- 20_eval_visualization/eval_visualization_report.txt
+- 20_eval_visualization/model_score_boxplot.png
+- 20_eval_visualization/model_score_mean_std_bar.png
+- 20_eval_visualization/model_score_summary_table.xlsx
+
+6. 유사성 지수 비교 확장 결과
+- 대표 질문 10개 사용
+- 각 모델별 질문당 5회 반복 답변 구조 생성
+- MineSafe AI는 기존 17_similarity_index의 반복 답변 50개를 활용하여 100개 pairwise 비교 완료
+- MineSafe AI 전체 평균 유사성 지수: 100.00점, consistency_level: 매우 높음
+- ChatGPT와 Gemini는 외부 API 호출 없이 사람이 5회 반복 답변을 붙여넣을 수 있는 Excel 템플릿을 생성함
+- 외부 LLM API 호출: 수행하지 않음
+- 해석: 유사성 지수는 정확도 점수가 아니라 동일 질문 반복 입력 시 답변 구조와 핵심 조치가 얼마나 일관되게 유지되는지를 확인하는 보조 지표이다.
+
+7. 좌측 메뉴 정리 내용
+- 기본값을 현장관리자 모드로 설정
+- 현장관리자 모드 표시 메뉴:
+  - 안전 질문 답변
+  - 중대재해처벌법 대응 체크리스트
+  - 위험성평가 초안
+  - 대화 이력
+  - Excel 내보내기 또는 보고서
+- 관리자/개발자 모드에서만 DB 폴더, Vector DB 상태, Gemini 연결 테스트, 답변 모드, 시나리오 세트 등 개발자용 설정을 표시하도록 조건부 처리
+- 기존 기능은 삭제하지 않고 숨김/조건부 표시 방식으로 유지함
+
+8. KRAS 표시 개선 내용
+- 기존 답변 데이터 구조는 유지
+- 화면 표시에서 관련 근거, 법적 기준, 현재 위험성, 위험성 감소대책 등을 카드형/불렛형으로 렌더링
+- Excel 다운로드 기능은 기존 방식 유지
+
+9. v2 평가 시각화 결과
+- 입력 파일: 15_fair_eval_v2_50/multi_judge_score_summary_50_v2_final_complete.xlsx
+- 사용 시트: merged_scores
+- 총 평가 점수 행 수: 450개
+- MineSafe AI: 평균 85.61점, 표준편차 7.58
+- Gemini: 평균 69.91점, 표준편차 15.79
+- ChatGPT: 평균 60.33점, 표준편차 12.82
+- 박스플롯은 평균 점수뿐 아니라 모델별 점수 분포, 중앙값, 변동성, 이상치를 함께 보여주기 위한 시각화이다.
+
+10. 검증 결과
+- app.py py_compile 문법 검사: 통과
+- Streamlit AppTest:
+  - 현장관리자 모드 5개 메뉴 렌더링 통과
+  - 관리자/개발자 모드 5개 메뉴 렌더링 통과
+- python -m streamlit run app.py 임시 실행: HTTP 200 응답 확인
+- similarity_comparison_template.xlsx: 151행(헤더 포함), 150개 답변 입력 구조 확인
+- similarity_comparison_summary.xlsx: 모델 요약, 질문별 요약, pairwise 점수 시트 확인
+- model_score_summary_table.xlsx: model_summary 및 450개 raw score 확인
+- PNG 그래프 3개: 정상 이미지 파일로 생성 확인
+
+11. 금지사항 준수
+- .env 열람/출력/수정하지 않음
+- API Key 출력하지 않음
+- 08_chunks 파일 수정하지 않음
+- 기존 110문항 평가 결과 덮어쓰기 없음
+- Vector DB/chunks 재생성 또는 문서 추가 작업 없음
+- GitHub commit/push 수행하지 않음
+
+12. 남은 한계점
+- ChatGPT와 Gemini 유사성 지수는 실제 5회 반복 답변을 템플릿에 입력한 뒤 최종 계산해야 함
+- 그래프는 matplotlib 미설치 환경이라 Pillow 기반으로 생성했으며, 발표용 정적 PNG로 활용 가능함
+- 현장관리자 모드는 개발자용 표시를 숨기는 UI 개선이며, 실제 운영 권한 분리는 별도 인증/권한 시스템이 필요함

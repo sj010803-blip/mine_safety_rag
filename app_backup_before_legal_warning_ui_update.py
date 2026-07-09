@@ -4499,22 +4499,10 @@ def kras_risk_badge_html(level: str) -> str:
 
 
 def emphasize_risk_terms_html(text: str) -> str:
-    cleaned = strip_inline_markdown(text)
-    levels = ["매우 높음", "높음", "보통", "낮음"]
-    parts: list[str] = []
-    index = 0
-    while index < len(cleaned):
-        matched_level = next(
-            (level for level in levels if cleaned.startswith(level, index)),
-            None,
-        )
-        if matched_level:
-            parts.append(kras_risk_badge_html(matched_level))
-            index += len(matched_level)
-        else:
-            parts.append(escape(cleaned[index]))
-            index += 1
-    return "".join(parts)
+    escaped = escape(strip_inline_markdown(text))
+    for level in ["매우 높음", "높음", "보통", "낮음"]:
+        escaped = escaped.replace(escape(level), kras_risk_badge_html(level))
+    return escaped
 
 
 def measure_label_html(label: str) -> str:
@@ -5611,14 +5599,6 @@ def render_major_accident_law_evidence_panel() -> None:
         )
         for label, doc_name in MAJOR_ACCIDENT_LAW_DOCS
     )
-    warning_items = [
-        "유해가스 농도 초과 상태인데 작업을 계속한 경우",
-        "위험성평가를 하지 않거나 형식적으로만 작성한 경우",
-        "작업중지 필요 상황인데 즉시 중지하지 않은 경우",
-        "보호구 지급·착용 확인 없이 작업자를 투입한 경우",
-        "안전교육, 점검, 개선조치 기록이 남아 있지 않은 경우",
-    ]
-    warning_html = "".join(f"<li>{escape(item)}</li>" for item in warning_items)
     st.markdown(
         (
             '<div class="major-law-evidence-box">'
@@ -5630,24 +5610,6 @@ def render_major_accident_law_evidence_panel() -> None:
             f'<div class="major-law-badge-row">{badge_html}'
             '<span class="law-badge law-badge-major">중대재해처벌법</span></div>'
             f'<div class="major-law-doc-list">{docs_html}</div>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        (
-            '<div class="major-law-evidence-box" style="margin-top:12px;">'
-            '<div class="major-law-evidence-title">중대재해처벌법 유의사항</div>'
-            '<div class="major-law-evidence-text">'
-            "아래 사례는 법률 위반 여부를 단정하는 내용이 아니라, 현장에서 "
-            "중대재해처벌법 대응 측면에서 주의가 필요한 대표 상황을 안내하기 위한 것입니다."
-            "</div>"
-            f'<ul style="margin:10px 0 10px 18px;line-height:1.7;">{warning_html}</ul>'
-            '<div class="major-law-evidence-text" style="margin-top:8px;">'
-            "AI 답변이나 체크리스트만으로 법적 책임이 면제되는 것은 아니며, "
-            "점검표, 교육기록, 작업중지 기록, 개선조치 사진, 확인 서명 등 "
-            "실제 이행자료를 함께 관리하는 것이 중요합니다."
-            "</div>"
             "</div>"
         ),
         unsafe_allow_html=True,

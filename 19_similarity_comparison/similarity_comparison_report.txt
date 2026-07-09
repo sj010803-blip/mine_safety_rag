@@ -1,0 +1,45 @@
+MineSafe AI 유사성 지수 비교 확장 보고서
+
+1. 목적
+- 교수님 피드백에 따라 MineSafe AI뿐 아니라 ChatGPT, Gemini의 동일 질문 반복 답변 유사성 지수도 비교할 수 있는 구조를 만들었다.
+
+2. 비교 구조
+- 대표 질문 수: 10개
+- 비교 대상: ChatGPT, Gemini, MineSafe AI
+- 반복 기준: 질문당 5회 답변
+- 모델별 기대 답변 수: 50개
+- 질문별 pairwise 비교 수: 10쌍
+- 모델별 전체 pairwise 비교 수: 100쌍
+- 계산 방식: difflib.SequenceMatcher 기반 fallback
+
+3. 현재 계산 상태
+- MineSafe AI: 기존 17_similarity_index 반복 답변을 활용하여 계산 가능
+- ChatGPT: 외부 API 호출 없이 사람이 답변을 붙여넣을 수 있는 템플릿 생성
+- Gemini: 외부 API 호출 없이 사람이 답변을 붙여넣을 수 있는 템플릿 생성
+- 외부 LLM API 호출: 수행하지 않음
+
+4. 모델별 요약
+- ChatGPT: 수집 답변 0/50, pairwise 0개, 유사성 답변 수집 필요, 수준 답변 수집 필요
+- Gemini: 수집 답변 0/50, pairwise 0개, 유사성 답변 수집 필요, 수준 답변 수집 필요
+- MineSafe AI: 수집 답변 50/50, pairwise 100개, 유사성 100.0, 수준 매우 높음
+
+5. 해석
+- 유사성 지수는 정확도 점수가 아니라 동일 질문 반복 입력 시 답변 구조와 핵심 조치가 얼마나 일관되게 유지되는지를 확인하는 보조 지표이다.
+- MineSafe AI는 안정형 RAG 답변 구조를 사용하므로 동일 질문에 대해 답변 구조와 핵심 안전조치가 매우 일관되게 나타날 수 있다.
+- ChatGPT와 Gemini는 실제 5회 반복 답변을 템플릿에 입력한 뒤 같은 방식으로 계산해야 공정하게 비교할 수 있다.
+
+6. 생성 파일
+- 19_similarity_comparison/similarity_comparison_template.xlsx
+- 19_similarity_comparison/similarity_comparison_summary.xlsx
+- 19_similarity_comparison/similarity_comparison_bar_chart.png
+- 19_similarity_comparison/similarity_comparison_report.txt
+
+7. 교수님 피드백 반영 설명 보강
+- 비교 대상은 ChatGPT, Gemini, MineSafe AI 3개 모델이다.
+- 대표 질문 10개를 각 모델에 동일하게 제시하고, 각 질문을 모델별로 5회씩 반복 입력하는 구조이다.
+- 각 질문에서 5개 답변 간 pairwise 비교 10개를 수행한다.
+- 따라서 모델 1개당 10개 질문 × 10개 pairwise 비교 = 총 100개 유사도 점수를 산출한다.
+- 유사성 지수는 정확도 점수가 아니라 반복 답변의 일관성을 보는 보조 지표이다.
+- 현재는 템플릿과 계산 구조가 준비된 상태이며, ChatGPT와 Gemini의 실제 비교 점수는 답변 수집 후 산출 가능하다.
+- MineSafe AI는 기존 반복 답변 50개가 있어 현재 100개 pairwise 유사도 계산이 완료되어 있다.
+

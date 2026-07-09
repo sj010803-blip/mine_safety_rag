@@ -1,22 +1,13 @@
 from __future__ import annotations
 
-from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import csv
-from io import BytesIO
-import json
-import uuid
-from datetime import date, datetime
 from html import escape
 from pathlib import Path
 import os
 import sys
 import time
 from typing import Any
-
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
 
 try:
     __import__("pysqlite3")
@@ -94,15 +85,6 @@ CONTEXT_CHUNK_CHAR_LIMIT = 800
 STABLE_MODE = "안정 모드: 검색 근거 기반 답변만 생성"
 GEMINI_MODE = "Gemini 모드: Gemini 답변 생성 시도"
 HYBRID_MODE = "하이브리드 모드: 검색 근거 답변을 먼저 표시하고 Gemini 답변도 추가 시도"
-
-DATA_DIR = ROOT_DIR / "data"
-FEATURE_OUTPUT_DIR = ROOT_DIR / "18_legal_evidence_features"
-LEGAL_CHECKLIST_STATUS_PATH = DATA_DIR / "legal_checklist_status.json"
-CONVERSATION_HISTORY_PATH = DATA_DIR / "conversation_history.jsonl"
-LEGAL_CHECKLIST_EXPORT_PATH = FEATURE_OUTPUT_DIR / "legal_checklist_export.xlsx"
-RISK_ASSESSMENT_EXPORT_PATH = FEATURE_OUTPUT_DIR / "risk_assessment_draft_export.xlsx"
-CONVERSATION_HISTORY_EXPORT_PATH = FEATURE_OUTPUT_DIR / "conversation_history_export.xlsx"
-FEATURE_REPORT_PATH = FEATURE_OUTPUT_DIR / "legal_evidence_history_feature_report.txt"
 
 BLASTING_QUESTION_TYPE = "발파/불발"
 BLASTING_KEYWORDS = [
@@ -4153,1049 +4135,179 @@ def generate_gemini_answer(
 
 
 # ==============================
-# 법령 체크리스트·증빙자료·위험성평가·대화이력 기능
-# ==============================
-LEGAL_CHECKLIST_ITEMS = [
-    ("안전보건 경영방침 수립 여부", "경영방침을 문서화하고 현장 구성원에게 공유했는지 확인"),
-    ("안전보건 전담조직 지정 여부", "안전보건 업무 담당 조직과 역할이 지정되어 있는지 확인"),
-    ("안전보건 예산 편성 및 집행 여부", "안전보건 예산 편성, 집행 내역, 개선 투자 기록 확인"),
-    ("위험성평가 실시 여부", "정기·수시 위험성평가 실시 및 개선대책 수립 여부 확인"),
-    ("개선조치 이행 여부", "위험성평가, 점검, 사고조사 후 개선조치 완료 여부 확인"),
-    ("작업 전 TBM 기록 여부", "작업 전 위험요인 공유, 보호구, 작업중지 기준 안내 기록 확인"),
-    ("보호구 지급대장 보유 여부", "보호구 지급, 교체, 착용 점검 기록 보유 여부 확인"),
-    ("교육 기록 보유 여부", "정기교육, 특별교육, TBM 참석자 명부 및 교육자료 확인"),
-    ("가스/분진/환기 측정 기록 보유 여부", "측정값, 측정자, 측정장비, 조치 내역 기록 확인"),
-    ("사고 및 아차사고 보고서 작성 여부", "사고·아차사고 발생 보고, 원인, 조치 기록 확인"),
-    ("재발방지대책 수립 여부", "원인조사 후 재발방지대책과 이행 결과 확인"),
-    ("협력업체 안전관리 기록 여부", "협력업체 작업 전 교육, 위험성평가, 작업허가 기록 확인"),
-]
-
-
-def ensure_feature_dirs() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    FEATURE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def default_legal_checklist_rows() -> list[dict[str, Any]]:
-    return [
-        {
-            "항목명": item,
-            "설명": description,
-            "상태": "미작성",
-            "담당자": "",
-            "최근 작성일": "",
-            "비고": "",
-        }
-        for item, description in LEGAL_CHECKLIST_ITEMS
-    ]
-
-
-def load_legal_checklist_status() -> list[dict[str, Any]]:
-    ensure_feature_dirs()
-    if not LEGAL_CHECKLIST_STATUS_PATH.exists():
-        rows = default_legal_checklist_rows()
-        save_legal_checklist_status(rows)
-        return rows
-    try:
-        data = json.loads(LEGAL_CHECKLIST_STATUS_PATH.read_text(encoding="utf-8"))
-        if isinstance(data, list) and data:
-            return data
-    except Exception:
-        pass
-    return default_legal_checklist_rows()
-
-
-def save_legal_checklist_status(rows: list[dict[str, Any]]) -> None:
-    ensure_feature_dirs()
-    LEGAL_CHECKLIST_STATUS_PATH.write_text(
-        json.dumps(rows, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-
-def normalize_excel_value(value: Any) -> Any:
-    if isinstance(value, (list, tuple, set)):
-        return " | ".join(str(item) for item in value)
-    if isinstance(value, dict):
-        return json.dumps(value, ensure_ascii=False)
-    if value is None:
-        return ""
-    return value
-
-
-def build_simple_xlsx_workbook(sheet_name: str, rows: list[dict[str, Any]]) -> Workbook:
-    wb = Workbook()
-    ws = wb.active
-    ws.title = sheet_name[:31]
-    headers = list(rows[0].keys()) if rows else ["내용"]
-    ws.append(headers)
-    for row in rows:
-        ws.append([normalize_excel_value(row.get(header, "")) for header in headers])
-    style_excel_sheet(ws)
-    return wb
-
-
-def build_simple_xlsx_bytes(sheet_name: str, rows: list[dict[str, Any]]) -> bytes:
-    wb = build_simple_xlsx_workbook(sheet_name, rows)
-    buffer = BytesIO()
-    wb.save(buffer)
-    wb.close()
-    buffer.seek(0)
-    return buffer.getvalue()
-
-
-def write_simple_xlsx(path: Path, sheet_name: str, rows: list[dict[str, Any]]) -> None:
-    ensure_feature_dirs()
-    wb = build_simple_xlsx_workbook(sheet_name, rows)
-    wb.save(path)
-    wb.close()
-
-
-def style_excel_sheet(ws) -> None:
-    thin = Side(style="thin", color="D9E2EC")
-    for row_idx, row in enumerate(ws.iter_rows(), start=1):
-        if row_idx > 1:
-            ws.row_dimensions[row_idx].height = 42
-        for cell in row:
-            cell.font = Font(name="맑은 고딕", size=10)
-            cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
-            cell.alignment = Alignment(vertical="top", wrap_text=True)
-            if row_idx == 1:
-                cell.font = Font(name="맑은 고딕", size=10, bold=True, color="FFFFFF")
-                cell.fill = PatternFill("solid", fgColor="17324D")
-                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    for idx in range(1, ws.max_column + 1):
-        header = str(ws.cell(1, idx).value or "")
-        width = 16
-        if "답변" in header or "answer" in header or "비고" in header or "메모" in header:
-            width = 48
-        elif "설명" in header or "증빙" in header or "근거" in header or "질문" in header:
-            width = 36
-        ws.column_dimensions[get_column_letter(idx)].width = width
-    ws.freeze_panes = "A2"
-
-
-def export_legal_checklist_xlsx(rows: list[dict[str, Any]]) -> Path:
-    write_simple_xlsx(LEGAL_CHECKLIST_EXPORT_PATH, "legal_checklist", rows)
-    return LEGAL_CHECKLIST_EXPORT_PATH
-
-
-def recommend_evidence_records(question: str, answer: str = "") -> list[str]:
-    text = f"{question} {answer}".lower()
-    rules = [
-        (["메탄", "가스", "환기", "산소"], ["가스 측정 기록지", "환기설비 점검표", "작업중지 지시 기록", "작업재개 승인 기록", "TBM 회의록", "개선조치 완료 사진"]),
-        (["발파", "불발", "장약", "화약"], ["발파작업 허가서", "발파 전 점검표", "화약류 사용 기록", "불발 장약 처리 기록", "대피 확인 기록", "작업재개 승인 기록"]),
-        (["낙반", "붕락", "막장", "지보", "천반"], ["막장 점검표", "지보 상태 점검 기록", "작업중지 기록", "보강조치 완료 사진", "작업재개 승인 기록"]),
-        (["분진", "방진", "마스크", "보호구", "ppe"], ["분진 측정 기록", "방진마스크 지급대장", "보호구 착용 점검표", "작업환경측정 결과", "교육 참석자 명부"]),
-        (["중대재해", "사고", "응급", "경영책임자"], ["사고 발생 보고서", "응급조치 기록", "관계기관 보고 기록", "재발방지대책", "개선조치 이행 결과", "경영책임자 보고 기록"]),
-        (["전기", "감전", "접지", "절연"], ["전기설비 점검표", "전원 차단 및 잠금표지 기록", "절연저항 측정 기록", "접지 상태 점검 기록", "작업허가서"]),
-        (["운반", "장비", "협착", "통로", "차량"], ["장비 일상점검표", "작업동선 분리 계획", "신호수 배치 기록", "후진경보장치 점검표", "작업자 교육 기록"]),
-    ]
-    recommended: list[str] = []
-    for keywords, records in rules:
-        if any(keyword in text for keyword in keywords):
-            for record in records:
-                if record not in recommended:
-                    recommended.append(record)
-    if not recommended:
-        recommended = ["작업 전 TBM 회의록", "위험성평가표", "작업중지·재개 판단 기록", "현장 점검 사진", "교육 참석자 명부"]
-    return recommended
-
-
-def render_recommended_evidence_records(records: list[str]) -> None:
-    with st.container(border=True):
-        st.markdown("#### 필요 증빙자료")
-        st.caption("질문과 답변의 키워드를 기준으로 현장 이행자료 후보를 자동 추천합니다.")
-        cols = st.columns(2)
-        for idx, record in enumerate(records):
-            with cols[idx % 2]:
-                st.markdown(f"- {record}")
-        st.info("AI 답변만으로 법적 책임이 면제되는 것은 아니며, 실제 점검표·사진·교육기록·작업중지기록 등 현장 이행자료와 함께 관리해야 합니다.")
-
-
-def source_chunk_labels(results: list[dict[str, Any]]) -> list[str]:
-    labels: list[str] = []
-    for item in results:
-        source = str(item.get("source", "출처 정보 없음"))
-        chunk_id = str(item.get("chunk_id", "정보 없음"))
-        label = f"{source} / {chunk_id}"
-        if label not in labels:
-            labels.append(label)
-    return labels
-
-
-def append_conversation_history(row: dict[str, Any]) -> str:
-    ensure_feature_dirs()
-    history_id = row.get("history_id") or str(uuid.uuid4())
-    row["history_id"] = history_id
-    with CONVERSATION_HISTORY_PATH.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    return history_id
-
-
-def load_conversation_history() -> list[dict[str, Any]]:
-    ensure_feature_dirs()
-    if not CONVERSATION_HISTORY_PATH.exists():
-        CONVERSATION_HISTORY_PATH.write_text("", encoding="utf-8")
-        return []
-    rows = []
-    for line in CONVERSATION_HISTORY_PATH.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        try:
-            rows.append(json.loads(line))
-        except Exception:
-            continue
-    return rows
-
-
-def rewrite_conversation_history(rows: list[dict[str, Any]]) -> None:
-    ensure_feature_dirs()
-    with CONVERSATION_HISTORY_PATH.open("w", encoding="utf-8") as f:
-        for row in rows:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
-
-
-def update_conversation_history(history_id: str, updates: dict[str, Any]) -> bool:
-    rows = load_conversation_history()
-    updated = False
-    for row in rows:
-        if str(row.get("history_id")) == str(history_id):
-            row.update(updates)
-            updated = True
-            break
-    if updated:
-        rewrite_conversation_history(rows)
-    return updated
-
-
-def normalize_conversation_history_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    if not rows:
-        rows = [{"history_id": "", "created_at": "", "question": "", "answer": ""}]
-    normalized_rows = []
-    for row in rows:
-        normalized_rows.append(
-            {
-                "history_id": row.get("history_id", ""),
-                "created_at": row.get("created_at", ""),
-                "question": row.get("question", ""),
-                "answer": row.get("answer", ""),
-                "situation_type": row.get("situation_type", ""),
-                "risk_level": row.get("risk_level", ""),
-                "evidence_documents": " | ".join(row.get("evidence_documents", [])),
-                "source_chunks": " | ".join(row.get("source_chunks", [])),
-                "recommended_evidence_records": " | ".join(row.get("recommended_evidence_records", [])),
-                "user_action_status": row.get("user_action_status", ""),
-                "manager": row.get("manager", ""),
-                "action_due_date": row.get("action_due_date", ""),
-                "memo": row.get("memo", ""),
-            }
-        )
-    return normalized_rows
-
-
-def build_conversation_history_xlsx_bytes(rows: list[dict[str, Any]]) -> bytes:
-    return build_simple_xlsx_bytes("conversation_history", normalize_conversation_history_rows(rows))
-
-
-def normalize_history_display_list(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, (list, tuple, set)):
-        items = [str(item).strip() for item in value if str(item).strip()]
-    else:
-        text = str(value).strip()
-        if not text:
-            return []
-        separator = " | " if " | " in text else "," if "," in text else None
-        items = [part.strip() for part in text.split(separator)] if separator else [text]
-    return [item for item in items if item]
-
-
-def short_history_label(row: dict[str, Any], limit: int = 52) -> str:
-    question = " ".join(str(row.get("question", "")).split())
-    if len(question) > limit:
-        question = question[: limit - 3] + "..."
-    created_at = str(row.get("created_at", ""))[:16]
-    situation = str(row.get("situation_type", "상황 미분류") or "상황 미분류")
-    return f"{created_at} | {situation} | {question}"
-
-
-def render_history_list_card(title: str, items: list[str], empty_message: str = "기록 없음") -> None:
-    with st.container(border=True):
-        st.markdown(f"#### {title}")
-        if not items:
-            st.caption(empty_message)
-            return
-        cols = st.columns(2)
-        for idx, item in enumerate(items):
-            with cols[idx % 2]:
-                st.markdown(
-                    f"""
-                    <div style="background:#f8fafc;border:1px solid #dbe4ef;border-radius:10px;
-                                padding:10px 12px;margin:4px 0;color:#17324d;line-height:1.45;">
-                        <strong style="color:#2563eb;">•</strong> {escape(item)}
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-
-
-def render_history_report_field(title: str, content: str) -> None:
-    st.markdown(
-        f"""
-        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;
-                    padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 2px rgba(15,23,42,0.04);">
-            <div style="font-weight:700;color:#17324d;margin-bottom:6px;">{escape(title)}</div>
-            <div style="color:#334155;line-height:1.6;white-space:pre-wrap;">{escape(content or "기록 없음")}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_history_report_card(selected: dict[str, Any], evidence_documents: list[str], recommended_records: list[str]) -> None:
-    st.subheader("증빙자료 보고서용 보기")
-    render_history_report_field("질문", str(selected.get("question", "")))
-    c1, c2 = st.columns(2)
-    with c1:
-        render_history_report_field("상황 유형", str(selected.get("situation_type", "상황 미분류") or "상황 미분류"))
-    with c2:
-        render_history_report_field("위험도", str(selected.get("risk_level", "검토 필요") or "검토 필요"))
-    render_history_report_field("근거 문서", ", ".join(evidence_documents) if evidence_documents else "기록 없음")
-    render_history_report_field("필요 증빙자료", ", ".join(recommended_records) if recommended_records else "기록 없음")
-    render_history_report_field("조치 상태", str(selected.get("user_action_status", "미조치") or "미조치"))
-
-
-def strip_inline_markdown(text: str) -> str:
-    return str(text or "").replace("**", "").replace("\\|", "|").strip()
-
-
-def split_display_items(text: str) -> list[str]:
-    cleaned = strip_inline_markdown(text)
-    if not cleaned:
-        return []
-    parts = []
-    for raw in cleaned.replace("\r\n", " / ").replace("\n", " / ").split(" / "):
-        item = raw.strip(" -•")
-        if item:
-            parts.append(item)
-    return parts or [cleaned]
-
-
-def kras_risk_badge_html(level: str) -> str:
-    styles = {
-        "낮음": ("#dcfce7", "#166534", "#86efac"),
-        "보통": ("#fef9c3", "#854d0e", "#fde047"),
-        "높음": ("#ffedd5", "#9a3412", "#fdba74"),
-        "매우 높음": ("#fee2e2", "#991b1b", "#fca5a5"),
-    }
-    bg, fg, border = styles.get(level, ("#e2e8f0", "#334155", "#cbd5e1"))
-    return (
-        f'<span style="display:inline-block;background:{bg};color:{fg};border:1px solid {border};'
-        'border-radius:999px;padding:2px 9px;margin:0 3px;font-weight:700;white-space:nowrap;">'
-        f'{escape(level)}</span>'
-    )
-
-
-def emphasize_risk_terms_html(text: str) -> str:
-    cleaned = strip_inline_markdown(text)
-    levels = ["매우 높음", "높음", "보통", "낮음"]
-    parts: list[str] = []
-    index = 0
-    while index < len(cleaned):
-        matched_level = next(
-            (level for level in levels if cleaned.startswith(level, index)),
-            None,
-        )
-        if matched_level:
-            parts.append(kras_risk_badge_html(matched_level))
-            index += len(matched_level)
-        else:
-            parts.append(escape(cleaned[index]))
-            index += 1
-    return "".join(parts)
-
-
-def measure_label_html(label: str) -> str:
-    styles = {
-        "제거": ("#dbeafe", "#1d4ed8"),
-        "대체": ("#e0e7ff", "#4338ca"),
-        "공학적 대책": ("#ccfbf1", "#0f766e"),
-        "관리적 대책": ("#fef3c7", "#92400e"),
-        "보호구/PPE": ("#fce7f3", "#be185d"),
-    }
-    bg, fg = styles.get(label, ("#e2e8f0", "#334155"))
-    return (
-        f'<span style="display:inline-block;background:{bg};color:{fg};border-radius:8px;'
-        'padding:2px 8px;margin-right:6px;font-weight:800;white-space:nowrap;">'
-        f'{escape(label)}</span>'
-    )
-
-
-def emphasize_measure_item_html(item: str) -> str:
-    cleaned = strip_inline_markdown(item)
-    for label in ["공학적 대책", "관리적 대책", "보호구/PPE", "제거", "대체"]:
-        for marker in [f"{label}:", f"{label}："]:
-            if cleaned.startswith(marker):
-                detail = cleaned[len(marker):].strip()
-                return f"{measure_label_html(label)} {emphasize_risk_terms_html(detail)}"
-    return emphasize_risk_terms_html(cleaned)
-
-
-def render_kras_value_card(label: str, value: str) -> None:
-    clean_label = strip_inline_markdown(label)
-    items = split_display_items(value)
-    if len(items) > 1:
-        if clean_label == "위험성 감소대책":
-            body = "".join(f"<li>{emphasize_measure_item_html(item)}</li>" for item in items)
-        else:
-            body = "".join(f"<li>{emphasize_risk_terms_html(item)}</li>" for item in items)
-        value_html = f"<ul style='margin:0;padding-left:18px;line-height:1.8;'>{body}</ul>"
-    else:
-        item = items[0] if items else "기록 필요"
-        if clean_label == "위험성 감소대책":
-            value_html = f"<div style='line-height:1.8;white-space:pre-wrap;'>{emphasize_measure_item_html(item)}</div>"
-        else:
-            value_html = f"<div style='line-height:1.8;white-space:pre-wrap;'>{emphasize_risk_terms_html(item)}</div>"
-    st.markdown(
-        f"""
-        <div style="background:#ffffff;border:1px solid #dbe4ef;border-radius:12px;
-                    padding:13px 15px;margin-bottom:10px;">
-            <div style="font-weight:800;color:#17324d;margin-bottom:8px;">• {escape(clean_label)}</div>
-            <div style="color:#334155;">{value_html}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def parse_markdown_table_lines(lines: list[str]) -> tuple[list[str], list[list[str]]]:
-    rows = []
-    for line in lines:
-        stripped = line.strip()
-        if not stripped.startswith("|"):
-            continue
-        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
-        if cells and all(set(cell) <= {"-"} for cell in cells if cell):
-            continue
-        rows.append(cells)
-    if not rows:
-        return [], []
-    return rows[0], rows[1:]
-
-
-def render_generic_kras_table(headers: list[str], rows: list[list[str]]) -> None:
-    if not headers or not rows:
-        return
-    header_html = "".join(f"<th>{escape(strip_inline_markdown(header))}</th>" for header in headers)
-    row_html = []
-    for row in rows:
-        cells = []
-        for idx, cell in enumerate(row):
-            value = strip_inline_markdown(cell)
-            if " / " in value:
-                items = split_display_items(value)
-                cell_html = "<ul style='margin:0;padding-left:16px;'>" + "".join(f"<li>{escape(item)}</li>" for item in items) + "</ul>"
-            else:
-                cell_html = escape(value)
-            cells.append(f"<td>{cell_html}</td>")
-        row_html.append("<tr>" + "".join(cells) + "</tr>")
-    st.markdown(
-        (
-            "<div class='portal-table-scroll table-wrap'>"
-            "<table class='portal-data-table'>"
-            f"<thead><tr>{header_html}</tr></thead>"
-            f"<tbody>{''.join(row_html)}</tbody></table></div>"
-        ),
-        unsafe_allow_html=True,
-    )
-
-
-def render_kras_readable_markdown(kras_answer: str) -> None:
-    content = strip_kras_title(kras_answer)
-    lines = content.splitlines()
-    idx = 0
-    while idx < len(lines):
-        line = lines[idx].strip()
-        if not line:
-            idx += 1
-            continue
-        if line.startswith(">"):
-            st.info(line.lstrip("> ").strip())
-            idx += 1
-            continue
-        if line.startswith("###"):
-            st.markdown(f"#### {escape(line.lstrip('#').strip())}")
-            idx += 1
-            continue
-        if line.startswith("|"):
-            table_lines = []
-            while idx < len(lines) and lines[idx].strip().startswith("|"):
-                table_lines.append(lines[idx])
-                idx += 1
-            headers, rows = parse_markdown_table_lines(table_lines)
-            if headers[:2] == ["항목", "기입 초안"]:
-                for row in rows:
-                    if len(row) >= 2:
-                        render_kras_value_card(row[0], row[1])
-            else:
-                render_generic_kras_table(headers, rows)
-            continue
-        st.markdown(line)
-        idx += 1
-
-
-def render_export_report_page() -> None:
-    st.header("Excel 내보내기 및 보고서")
-    st.info("현장 점검 보조자료를 Excel로 내려받아 교수님 보고나 내부 기록 정리에 활용할 수 있습니다.")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("#### 중대재해처벌법 체크리스트")
-        checklist_excel_bytes = build_simple_xlsx_bytes("legal_checklist", load_legal_checklist_status())
-        st.download_button(
-            label="체크리스트 Excel 다운로드",
-            data=checklist_excel_bytes,
-            file_name="legal_checklist_export.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="field_download_legal_checklist_excel",
-            use_container_width=True,
-        )
-    with c2:
-        st.markdown("#### 위험성평가 초안")
-        rows = st.session_state.get(
-            "risk_assessment_draft_rows",
-            build_risk_assessment_draft("갱내 작업", "막장 또는 갱내 작업장", "현장 위험요인", "작업 전 위험성평가 필요"),
-        )
-        risk_excel_bytes = build_simple_xlsx_bytes("risk_assessment_draft", rows)
-        st.download_button(
-            label="위험성평가 초안 Excel 다운로드",
-            data=risk_excel_bytes,
-            file_name="risk_assessment_draft_export.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="field_download_risk_assessment_excel",
-            use_container_width=True,
-        )
-    with c3:
-        st.markdown("#### 대화 이력")
-        history_excel_bytes = build_conversation_history_xlsx_bytes(load_conversation_history())
-        st.download_button(
-            label="대화 이력 Excel 다운로드",
-            data=history_excel_bytes,
-            file_name="conversation_history_export.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="field_download_conversation_history_excel",
-            use_container_width=True,
-        )
-    st.caption("AI 답변과 내보낸 파일은 법적 책임 면제 자료가 아니며, 현장 점검표·사진·교육기록·작업중지 기록과 함께 관리해야 합니다.")
-
-
-def export_conversation_history_xlsx(rows: list[dict[str, Any]]) -> Path:
-    write_simple_xlsx(CONVERSATION_HISTORY_EXPORT_PATH, "conversation_history", normalize_conversation_history_rows(rows))
-    return CONVERSATION_HISTORY_EXPORT_PATH
-
-
-def auto_save_conversation_history(
-    question: str,
-    answer: str,
-    situation_type: str,
-    risk_level: str,
-    results: list[dict[str, Any]],
-    recommended_records: list[str],
-    result_key: str,
-) -> str | None:
-    if not question.strip() or not answer.strip():
-        return None
-    history_marker = f"history_saved_{result_key}_{abs(hash(question + answer))}"
-    if st.session_state.get(history_marker):
-        return st.session_state[history_marker]
-    history_id = append_conversation_history(
-        {
-            "history_id": str(uuid.uuid4()),
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "question": question,
-            "answer": answer,
-            "situation_type": situation_type,
-            "risk_level": risk_level,
-            "evidence_documents": list(dict.fromkeys(str(item.get("source", "출처 정보 없음")) for item in results)),
-            "source_chunks": source_chunk_labels(results),
-            "recommended_evidence_records": recommended_records,
-            "user_action_status": "미조치",
-            "manager": "",
-            "action_due_date": "",
-            "memo": "",
-        }
-    )
-    st.session_state[history_marker] = history_id
-    return history_id
-
-
-def infer_risk_keywords(text: str) -> list[str]:
-    lowered = text.lower()
-    mapping = {
-        "발파": ["대피", "출입통제", "발파 전 점검", "불발 확인"],
-        "불발": ["대피", "출입통제", "불발 장약 처리", "작업재개 승인"],
-        "메탄/가스": ["작업중지", "대피", "환기", "재측정", "작업재개 승인"],
-        "낙반": ["지보 점검", "천반 확인", "작업중지", "보강 후 재개"],
-        "분진": ["살수", "집진", "방진마스크", "작업환경측정"],
-        "전기": ["전원 차단", "절연", "잠금표지", "점검자 지정"],
-        "장비/운반": ["동선 분리", "신호수 배치", "속도 제한", "후진 경보"],
-    }
-    selected = []
-    for key, actions in mapping.items():
-        key_parts = key.lower().replace("/", " ").split()
-        if any(part in lowered for part in key_parts):
-            selected.extend(actions)
-    return selected or ["작업중지 기준 확인", "위험성평가", "보호구 확인", "책임자 승인"]
-
-
-def build_risk_assessment_draft(
-    work_name: str,
-    work_place: str,
-    hazards: str,
-    situation: str,
-) -> list[dict[str, Any]]:
-    combined = f"{work_name} {work_place} {hazards} {situation}"
-    actions = infer_risk_keywords(combined)
-    records = recommend_evidence_records(combined, situation)
-    priority = "높음" if any(word in combined for word in ["메탄", "가스", "불발", "낙반", "중대재해", "감전"]) else "보통"
-    return [
-        {
-            "작업명": work_name,
-            "작업 장소": work_place,
-            "위험요인": hazards or "현장 위험요인 확인 필요",
-            "위험상황": situation or "작업 전 위험상황 설명 필요",
-            "현재 안전조치": "작업 전 점검, TBM, 보호구 착용, 작업구역 확인",
-            "추가 개선대책": ", ".join(actions),
-            "필요 증빙자료": ", ".join(records),
-            "조치 우선순위": priority,
-            "담당자": "",
-            "조치 기한": "",
-        }
-    ]
-
-
-def export_risk_assessment_xlsx(rows: list[dict[str, Any]]) -> Path:
-    write_simple_xlsx(RISK_ASSESSMENT_EXPORT_PATH, "risk_assessment_draft", rows)
-    return RISK_ASSESSMENT_EXPORT_PATH
-
-
-def render_legal_checklist_page() -> None:
-    st.header("중대재해처벌법 대응 체크리스트")
-    st.warning("본 기능은 법적 면책 자료가 아니라 안전보건 확보의무 이행 상태 점검 보조 기능입니다.")
-    rows = load_legal_checklist_status()
-    status_counts = Counter(row.get("상태", "미작성") for row in rows)
-    completed = status_counts.get("완료", 0)
-    insufficient = status_counts.get("미흡", 0)
-    missing = status_counts.get("미작성", 0)
-    total = len(rows) or 1
-    response_rate = round(completed / total * 100, 1)
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("전체 대응률", f"{response_rate}%")
-    col2.metric("완료", completed)
-    col3.metric("미흡", insufficient)
-    col4.metric("미작성", missing)
-
-    edited_rows = []
-    with st.form("legal_checklist_form"):
-        for idx, row in enumerate(rows):
-            with st.expander(f"{idx + 1}. {row.get('항목명', '')}", expanded=False):
-                st.caption(row.get("설명", ""))
-                c1, c2, c3 = st.columns([1, 1, 2])
-                status = c1.selectbox("상태", ["완료", "미흡", "미작성"], index=["완료", "미흡", "미작성"].index(row.get("상태", "미작성") if row.get("상태") in ["완료", "미흡", "미작성"] else "미작성"), key=f"legal_status_{idx}")
-                manager = c2.text_input("담당자", value=row.get("담당자", ""), key=f"legal_manager_{idx}")
-                recent_date = c3.text_input("최근 작성일", value=row.get("최근 작성일", ""), placeholder="YYYY-MM-DD", key=f"legal_date_{idx}")
-                memo = st.text_area("비고", value=row.get("비고", ""), height=70, key=f"legal_memo_{idx}")
-                edited_rows.append({**row, "상태": status, "담당자": manager, "최근 작성일": recent_date, "비고": memo})
-        save_clicked = st.form_submit_button("체크리스트 저장", type="primary")
-    if save_clicked:
-        save_legal_checklist_status(edited_rows)
-        st.success(f"체크리스트 저장 완료: {LEGAL_CHECKLIST_STATUS_PATH}")
-        st.rerun()
-
-    checklist_excel_bytes = build_simple_xlsx_bytes("legal_checklist", load_legal_checklist_status())
-    st.download_button(
-        label="체크리스트 Excel 다운로드",
-        data=checklist_excel_bytes,
-        file_name="legal_checklist_export.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key="download_legal_checklist_excel",
-        use_container_width=True,
-    )
-
-
-def render_risk_assessment_draft_page() -> None:
-    st.header("위험성평가 초안")
-    st.warning("본 초안은 안전관리자가 검토·수정해야 하며, 최종 법적 문서로 바로 사용할 수 없습니다.")
-    with st.form("risk_assessment_form"):
-        work_name = st.text_input("작업명", value="갱내 작업")
-        work_place = st.text_input("작업 장소", value="막장 또는 갱내 작업장")
-        hazards = st.text_area("주요 위험요인", value="메탄가스, 환기 불량, 장비 이동")
-        situation = st.text_area("작업 상황 설명", value="작업 전 TBM에서 위험요인을 공유하고 작업 가능 여부를 판단해야 함")
-        submitted = st.form_submit_button("위험성평가 초안 생성", type="primary")
-    if submitted or "risk_assessment_draft_rows" not in st.session_state:
-        st.session_state["risk_assessment_draft_rows"] = build_risk_assessment_draft(work_name, work_place, hazards, situation)
-    rows = st.session_state.get("risk_assessment_draft_rows", [])
-    st.dataframe(rows, use_container_width=True, hide_index=True)
-    risk_excel_bytes = build_simple_xlsx_bytes("risk_assessment_draft", rows)
-    st.download_button(
-        label="위험성평가 초안 Excel 다운로드",
-        data=risk_excel_bytes,
-        file_name="risk_assessment_draft_export.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key="download_risk_assessment_excel",
-        use_container_width=True,
-    )
-
-
-def render_conversation_history_page() -> None:
-    st.header("대화 이력")
-    st.info("대화 이력은 AI 답변과 근거 문서, 추천 증빙자료를 함께 저장하여 안전관리 기록 보조자료로 활용할 수 있습니다. 단, 실제 법적 증빙은 현장 점검표, 사진, 교육기록, 작업중지 기록 등과 함께 관리해야 합니다.")
-    rows = load_conversation_history()
-    st.caption(f"저장 위치: {CONVERSATION_HISTORY_PATH}")
-    if not rows:
-        st.info("아직 저장된 대화 이력이 없습니다. 안전 질의 및 답변 메뉴에서 질문을 생성하면 자동 저장됩니다.")
-        empty_history_excel_bytes = build_conversation_history_xlsx_bytes(rows)
-        st.download_button(
-            label="빈 대화 이력 Excel 다운로드",
-            data=empty_history_excel_bytes,
-            file_name="conversation_history_export.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_empty_conversation_history_excel",
-            use_container_width=True,
-        )
-        return
-
-    keyword = st.text_input("검색창: 질문 키워드")
-    situation_options = ["전체"] + sorted(set(str(row.get("situation_type", "기타")) for row in rows if row.get("situation_type")))
-    risk_options = ["전체"] + sorted(set(str(row.get("risk_level", "검토 필요")) for row in rows if row.get("risk_level")))
-    f1, f2, f3 = st.columns(3)
-    selected_situation = f1.selectbox("상황 유형 필터", situation_options)
-    selected_risk = f2.selectbox("위험도 필터", risk_options)
-    selected_date = f3.text_input("날짜 필터", placeholder="YYYY-MM-DD")
-    filtered = []
-    for row in rows:
-        if keyword and keyword not in str(row.get("question", "")):
-            continue
-        if selected_situation != "전체" and row.get("situation_type") != selected_situation:
-            continue
-        if selected_risk != "전체" and row.get("risk_level") != selected_risk:
-            continue
-        if selected_date and not str(row.get("created_at", "")).startswith(selected_date):
-            continue
-        filtered.append(row)
-    st.metric("조회 결과", f"{len(filtered)}건")
-    if not filtered:
-        st.info("조건에 맞는 대화 이력이 없습니다.")
-        return
-    labels = [short_history_label(row) for row in filtered]
-    selected_label = st.selectbox("저장된 질문 목록", labels)
-    selected = filtered[labels.index(selected_label)]
-
-    evidence_documents = normalize_history_display_list(selected.get("evidence_documents", []))
-    recommended_records = normalize_history_display_list(selected.get("recommended_evidence_records", []))
-
-    with st.container(border=True):
-        st.subheader("질문/답변")
-        st.markdown("**질문**")
-        st.markdown(
-            f"""
-            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;
-                        padding:14px 16px;color:#1e293b;line-height:1.6;white-space:pre-wrap;">
-                {escape(str(selected.get("question", "")))}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        with st.expander("당시 답변 보기", expanded=True):
-            st.markdown(selected.get("answer", ""))
-
-    col_docs, col_records = st.columns(2)
-    with col_docs:
-        render_history_list_card("근거 문서", evidence_documents, "저장된 근거 문서가 없습니다.")
-    with col_records:
-        render_history_list_card("추천 증빙자료", recommended_records, "저장된 추천 증빙자료가 없습니다.")
-
-    render_history_report_card(selected, evidence_documents, recommended_records)
-
-    with st.form(f"history_update_{selected.get('history_id')}"):
-        c1, c2, c3 = st.columns(3)
-        action_status = c1.selectbox("조치 여부", ["미조치", "진행 중", "조치 완료", "보류"], index=["미조치", "진행 중", "조치 완료", "보류"].index(selected.get("user_action_status", "미조치") if selected.get("user_action_status") in ["미조치", "진행 중", "조치 완료", "보류"] else "미조치"))
-        manager = c2.text_input("담당자", value=selected.get("manager", ""))
-        due_date = c3.text_input("조치 완료일", value=selected.get("action_due_date", ""), placeholder="YYYY-MM-DD")
-        memo = st.text_area("메모", value=selected.get("memo", ""), height=80)
-        update_clicked = st.form_submit_button("이력 메타데이터 저장", type="primary")
-    if update_clicked:
-        ok = update_conversation_history(
-            selected.get("history_id", ""),
-            {
-                "user_action_status": action_status,
-                "manager": manager,
-                "action_due_date": due_date,
-                "memo": memo,
-            },
-        )
-        if ok:
-            st.success("대화 이력 메타데이터 저장 완료")
-            st.rerun()
-        else:
-            st.error("대화 이력 저장 실패")
-    history_excel_bytes = build_conversation_history_xlsx_bytes(rows)
-    st.download_button(
-        label="대화 이력 Excel 다운로드",
-        data=history_excel_bytes,
-        file_name="conversation_history_export.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        key="download_conversation_history_excel",
-        use_container_width=True,
-    )
-
-
-def render_notice_guidance_page() -> None:
-    st.header("공지 및 지침")
-    st.info("MineSafe AI는 공식 광산 안전 문서와 중대재해처벌법 관련 자료를 함께 검색하여 답변합니다.")
-    st.markdown(
-        """
-        - 중대재해처벌법 대응 체크리스트는 안전보건 확보의무 이행 상태를 정리하는 보조 기능입니다.
-        - 질문 답변 후 추천되는 증빙자료는 현장 기록 관리 후보이며, 실제 법적 판단은 전문가 검토가 필요합니다.
-        - 위험성평가 초안은 안전관리자가 검토·수정해야 하며 최종 법적 문서로 바로 사용할 수 없습니다.
-        - 대화 이력은 AI 답변 기록이며, 실제 점검표·사진·교육기록 등 이행자료와 함께 관리해야 합니다.
-        """
-    )
-
-
-# ==============================
 # 사이드바
 # ==============================
-audience_mode = st.sidebar.radio(
-    "사용자 모드",
-    ["현장관리자 모드", "관리자/개발자 모드"],
-    index=0,
+st.sidebar.markdown(
+    """
+    <div class="mscc-sidebar-brand">
+        <strong>MineSafe AI</strong><br>
+        <div class="portal-sidebar-en">공식 문서 기반 광산 안전관리 AI 시스템</div>
+    </div>
+    <div class="portal-nav-group">운영 및 답변</div>
+    <div class="portal-nav-item active">안전 질의 및 답변</div>
+    <div class="portal-nav-item">대화 이력</div>
+    <div class="portal-nav-item">즐겨찾기</div>
+    <div class="portal-nav-item">공지 및 지침</div>
+    <div class="portal-nav-group">지식 관리</div>
+    <div class="portal-nav-item">Vector DB 관리</div>
+    <div class="portal-nav-item">문서 관리</div>
+    <div class="portal-nav-item">모델 관리</div>
+    <div class="portal-nav-group">시스템 관리</div>
+    <div class="portal-nav-item">사용자 관리</div>
+    <div class="portal-nav-item">권한 관리</div>
+    <div class="portal-nav-item">설정</div>
+    """,
+    unsafe_allow_html=True,
 )
-is_admin_mode = audience_mode == "관리자/개발자 모드"
-
-if is_admin_mode:
-    st.sidebar.markdown(
-        """
-        <div class="mscc-sidebar-brand">
-            <strong>MineSafe AI</strong><br>
-            <div class="portal-sidebar-en">공식 문서 기반 광산 안전관리 AI 시스템</div>
-        </div>
-        <div class="portal-nav-group">운영 및 답변</div>
-        <div class="portal-nav-item active">안전 질의 및 답변</div>
-        <div class="portal-nav-item">대화 이력</div>
-        <div class="portal-nav-item">공지 및 지침</div>
-        <div class="portal-nav-group">지식 관리</div>
-        <div class="portal-nav-item">Vector DB 관리</div>
-        <div class="portal-nav-item">문서 관리</div>
-        <div class="portal-nav-item">모델 관리</div>
-        <div class="portal-nav-group">시스템 관리</div>
-        <div class="portal-nav-item">사용자 관리</div>
-        <div class="portal-nav-item">권한 관리</div>
-        <div class="portal-nav-item">설정</div>
-        """,
-        unsafe_allow_html=True,
-    )
-else:
-    st.sidebar.markdown(
-        """
-        <div class="mscc-sidebar-brand">
-            <strong>MineSafe AI</strong><br>
-            <div class="portal-sidebar-en">현장 안전관리자용 화면</div>
-        </div>
-        <div class="portal-nav-group">실무 메뉴</div>
-        <div class="portal-nav-item active">안전 질문 답변</div>
-        <div class="portal-nav-item">중대재해처벌법 대응 체크리스트</div>
-        <div class="portal-nav-item">위험성평가 초안</div>
-        <div class="portal-nav-item">대화 이력</div>
-        <div class="portal-nav-item">Excel 내보내기 또는 보고서</div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 chunk_count: int | str = 0
 collection, db_error = load_chroma_collection()
 if db_error:
-    if is_admin_mode:
-        st.sidebar.error("Vector DB · 연결 실패")
-        st.sidebar.write(db_error)
+    st.sidebar.error("Vector DB · 연결 실패")
+    st.sidebar.write(db_error)
 else:
     try:
         chunk_count = collection.count()
     except Exception as e:
         chunk_count = "확인 실패"
-        if is_admin_mode:
-            st.sidebar.warning(f"chunk 수 확인 실패: {e}")
+        st.sidebar.warning(f"chunk 수 확인 실패: {e}")
 
-    if is_admin_mode:
-        st.sidebar.success("Vector DB · 정상")
-        st.sidebar.write(f"저장된 chunk 수: **{chunk_count}개**")
-        st.sidebar.write(f"DB 폴더: `{VECTOR_DB_DIR.name}`")
+    st.sidebar.success("Vector DB · 정상")
+    st.sidebar.write(f"저장된 chunk 수: **{chunk_count}개**")
+    st.sidebar.write(f"DB 폴더: `{VECTOR_DB_DIR.name}`")
 
 law_badges_sidebar = "".join(
     f'<span class="major-law-mini-badge">{escape(label)}</span>'
     for label, _ in MAJOR_ACCIDENT_LAW_DOCS
 )
-if is_admin_mode:
-    st.sidebar.markdown(
-        (
-            '<div class="major-law-sidebar-card">'
-            '<div class="major-law-sidebar-title">법령 자료 반영 현황</div>'
-            '<div class="major-law-sidebar-line">중대재해처벌법 자료 반영 완료</div>'
-            '<div class="major-law-sidebar-line">반영 자료: FAQ / 질의회시집 / 해설서 / 따라하기 안내서</div>'
-            f'<div class="major-law-badge-row">{law_badges_sidebar}</div>'
-            f'<div class="major-law-sidebar-line">통합 chunk 수: {MAJOR_ACCIDENT_DOC_TOTAL_CHUNKS}개</div>'
-            f'<div class="major-law-sidebar-line">추가 자료 chunk 수: {MAJOR_ACCIDENT_DOC_ADDED_CHUNKS}개</div>'
-            f'<div class="major-law-sidebar-line">현재 Vector DB: {escape(VECTOR_DB_DIR.name)}</div>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
+st.sidebar.markdown(
+    (
+        '<div class="major-law-sidebar-card">'
+        '<div class="major-law-sidebar-title">법령 자료 반영 현황</div>'
+        '<div class="major-law-sidebar-line">중대재해처벌법 자료 반영 완료</div>'
+        '<div class="major-law-sidebar-line">반영 자료: FAQ / 질의회시집 / 해설서 / 따라하기 안내서</div>'
+        f'<div class="major-law-badge-row">{law_badges_sidebar}</div>'
+        f'<div class="major-law-sidebar-line">통합 chunk 수: {MAJOR_ACCIDENT_DOC_TOTAL_CHUNKS}개</div>'
+        f'<div class="major-law-sidebar-line">추가 자료 chunk 수: {MAJOR_ACCIDENT_DOC_ADDED_CHUNKS}개</div>'
+        f'<div class="major-law-sidebar-line">현재 Vector DB: {escape(VECTOR_DB_DIR.name)}</div>'
+        "</div>"
+    ),
+    unsafe_allow_html=True,
+)
+
+selected_gemini_model = st.sidebar.selectbox(
+    "Gemini 모델",
+    GEMINI_MODEL_OPTIONS,
+    index=0,
+)
+
+_, gemini_error = load_gemini_client()
+if gemini_error:
+    st.sidebar.warning("Gemini API · 키 미감지")
+    st.sidebar.caption("로컬 .env 또는 Streamlit Cloud Secrets의 GEMINI_API_KEY를 확인하세요.")
+    st.sidebar.caption(gemini_error)
 else:
-    st.sidebar.markdown(
-        (
-            '<div class="major-law-sidebar-card">'
-            '<div class="major-law-sidebar-title">법령 자료 반영</div>'
-            '<div class="major-law-sidebar-line">중대재해처벌법 공식 자료를 함께 활용합니다.</div>'
-            f'<div class="major-law-badge-row">{law_badges_sidebar}</div>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
+    st.sidebar.info("Gemini API · API 키 감지됨")
+    st.sidebar.caption("실제 연결 상태는 연결 테스트 또는 답변 호출 결과로 확인합니다.")
+    st.sidebar.caption(f"선택 모델: {selected_gemini_model}")
+    st.sidebar.write(f"호출 제한: 시도당 약 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초")
+    st.sidebar.write(f"최대 시도: {GEMINI_MAX_ATTEMPTS}회")
 
-if is_admin_mode:
-    selected_gemini_model = st.sidebar.selectbox(
-        "Gemini 모델",
-        GEMINI_MODEL_OPTIONS,
-        index=0,
-    )
-
-    _, gemini_error = load_gemini_client()
-    if gemini_error:
-        st.sidebar.warning("Gemini API · 키 미감지")
-        st.sidebar.caption("로컬 .env 또는 Streamlit Cloud Secrets의 GEMINI_API_KEY를 확인하세요.")
-        st.sidebar.caption(gemini_error)
-    else:
-        st.sidebar.info("Gemini API · API 키 감지됨")
-        st.sidebar.caption("실제 연결 상태는 연결 테스트 또는 답변 호출 결과로 확인합니다.")
-        st.sidebar.caption(f"선택 모델: {selected_gemini_model}")
-        st.sidebar.write(f"호출 제한: 시도당 약 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초")
-        st.sidebar.write(f"최대 시도: {GEMINI_MAX_ATTEMPTS}회")
-
-    if st.sidebar.button("Gemini 연결 테스트", use_container_width=True):
-        with st.sidebar:
-            with st.spinner("선택한 모델로 연결을 확인하는 중입니다..."):
-                test_result = test_gemini_connection(
-                    selected_gemini_model
-                )
-        test_state = classify_gemini_status(test_result)
-        if test_result.get("success"):
-            st.sidebar.success(
-                f"연결 테스트 성공 · {test_result.get('model')} · "
-                f"{test_result.get('elapsed', 0.0):.1f}초"
+if st.sidebar.button("Gemini 연결 테스트", use_container_width=True):
+    with st.sidebar:
+        with st.spinner("선택한 모델로 연결을 확인하는 중입니다..."):
+            test_result = test_gemini_connection(
+                selected_gemini_model
             )
-            st.sidebar.caption(f"Gemini 응답: {test_result.get('answer', '')}")
-        else:
-            st.sidebar.warning(
-                f"연결 테스트 실패 · {test_result.get('model')} · "
-                f"{format_gemini_status(test_state)}"
-            )
-            st.sidebar.caption(test_result.get("message", "Gemini 연결 테스트 실패"))
-            with st.sidebar.expander("오류 상세"):
-                st.write(test_result.get("error") or "오류 메시지 없음")
-                st.write(f"시도 횟수: {test_result.get('attempts', 0)}")
-
-    st.sidebar.divider()
-
-    answer_mode = st.sidebar.selectbox(
-        "답변 생성 방식",
-        [STABLE_MODE, GEMINI_MODE, HYBRID_MODE],
-        index=0,
-    )
-
-    if answer_mode == STABLE_MODE:
-        st.sidebar.info("안정 모드 · 외부 LLM 미호출")
-    elif answer_mode == GEMINI_MODE:
-        st.sidebar.warning("Gemini 모드 · 실패 시 근거 답변 전환")
+    test_state = classify_gemini_status(test_result)
+    if test_result.get("success"):
+        st.sidebar.success(
+            f"연결 테스트 성공 · {test_result.get('model')} · "
+            f"{test_result.get('elapsed', 0.0):.1f}초"
+        )
+        st.sidebar.caption(f"Gemini 응답: {test_result.get('answer', '')}")
     else:
-        st.sidebar.info(
-            "하이브리드 모드\n\n"
-            "- 1차: 검색 근거 기반 안정형 답변\n"
-            "- 2차: Gemini 기반 보조 답변\n"
-            "- Gemini 실패 시에도 1차 답변 유지"
+        st.sidebar.warning(
+            f"연결 테스트 실패 · {test_result.get('model')} · "
+            f"{format_gemini_status(test_state)}"
         )
+        st.sidebar.caption(test_result.get("message", "Gemini 연결 테스트 실패"))
+        with st.sidebar.expander("오류 상세"):
+            st.write(test_result.get("error") or "오류 메시지 없음")
+            st.write(f"시도 횟수: {test_result.get('attempts', 0)}")
 
-    with st.sidebar.expander("시연 권장 설정"):
-        st.markdown(
-            "- **답변 모드:** 하이브리드 모드 권장\n"
-            "- **Gemini 모델:** `gemini-2.5-flash-lite` 권장\n"
-            "- **이유:** 안정형 답변을 먼저 제공하고 Gemini 응답을 보조적으로 확인\n"
-            "- Gemini가 실패해도 검색 근거 기반 답변은 계속 제공됩니다."
-        )
+st.sidebar.divider()
 
-    top_k = st.sidebar.slider(
-        "검색할 근거 문서 수",
-        min_value=3,
-        max_value=5,
-        value=3,
-        step=1,
-    )
+answer_mode = st.sidebar.selectbox(
+    "답변 생성 방식",
+    [STABLE_MODE, GEMINI_MODE, HYBRID_MODE],
+    index=0,
+)
 
-    with st.sidebar.expander("시연 상태 체크"):
-        st.markdown(
-            "- Vector DB 로드 확인\n"
-            "- Gemini 모델 선택 확인\n"
-            "- 답변 모드는 하이브리드 모드 권장\n"
-            "- 답변과 함께 근거 문서가 표시되는지 확인"
-        )
-
-    selected_scenario_label = st.sidebar.selectbox(
-        "질문 시나리오 세트",
-        list(SCENARIO_SET_OPTIONS.keys()),
-        index=list(SCENARIO_SET_OPTIONS.keys()).index("110개 분진·보호구 보강 평가 세트"),
-    )
-    selected_scenario_path = SCENARIO_SET_OPTIONS[selected_scenario_label]
-
-    st.sidebar.markdown(
-        """
-        <div class="mscc-sidebar-note">
-            테스트 모드에서는 선택한 시나리오 세트의 질문 검색, 답변 검토, 평가 저장과 진행률 확인을 지원합니다.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.sidebar.caption("시연 시에는 110개 분진·보호구 보강 평가 세트를 선택하는 것을 권장합니다.")
-    feature_page = st.sidebar.radio(
-        "기능 메뉴",
-        ["안전 질의 및 답변", "중대재해처벌법 대응", "위험성평가 초안", "대화 이력", "공지 및 지침"],
-        index=0,
-    )
-
-    st.sidebar.markdown(
-        f"""
-        <div class="portal-system-state">
-            <div class="portal-system-state-title">시스템 상태</div>
-            <div class="portal-system-state-value">정상 운영 중</div>
-            <div class="portal-system-state-time">
-                마지막 동기화: {escape(time.strftime("%Y-%m-%d %H:%M"))}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+if answer_mode == STABLE_MODE:
+    st.sidebar.info("안정 모드 · 외부 LLM 미호출")
+elif answer_mode == GEMINI_MODE:
+    st.sidebar.warning("Gemini 모드 · 실패 시 근거 답변 전환")
 else:
-    selected_gemini_model = GEMINI_MODEL_OPTIONS[0]
-    gemini_error = "현장관리자 모드에서는 Gemini 상태를 숨깁니다."
-    answer_mode = STABLE_MODE
-    top_k = 3
-    selected_scenario_label = "110개 분진·보호구 보강 평가 세트"
-    selected_scenario_path = SCENARIO_SET_OPTIONS[selected_scenario_label]
-    feature_page = st.sidebar.radio(
-        "기능 메뉴",
-        ["안전 질문 답변", "중대재해처벌법 대응 체크리스트", "위험성평가 초안", "대화 이력", "Excel 내보내기 또는 보고서"],
-        index=0,
+    st.sidebar.info(
+        "하이브리드 모드\n\n"
+        "- 1차: 검색 근거 기반 안정형 답변\n"
+        "- 2차: Gemini 기반 보조 답변\n"
+        "- Gemini 실패 시에도 1차 답변 유지"
     )
+
+with st.sidebar.expander("시연 권장 설정"):
+    st.markdown(
+        "- **답변 모드:** 하이브리드 모드 권장\n"
+        "- **Gemini 모델:** `gemini-2.5-flash-lite` 권장\n"
+        "- **이유:** 안정형 답변을 먼저 제공하고 Gemini 응답을 보조적으로 확인\n"
+        "- Gemini가 실패해도 검색 근거 기반 답변은 계속 제공됩니다."
+    )
+
+top_k = st.sidebar.slider(
+    "검색할 근거 문서 수",
+    min_value=3,
+    max_value=5,
+    value=3,
+    step=1,
+)
+
+with st.sidebar.expander("시연 상태 체크"):
+    st.markdown(
+        "- Vector DB 로드 확인\n"
+        "- Gemini 모델 선택 확인\n"
+        "- 답변 모드는 하이브리드 모드 권장\n"
+        "- 답변과 함께 근거 문서가 표시되는지 확인"
+    )
+
+selected_scenario_label = st.sidebar.selectbox(
+    "질문 시나리오 세트",
+    list(SCENARIO_SET_OPTIONS.keys()),
+    index=list(SCENARIO_SET_OPTIONS.keys()).index("110개 분진·보호구 보강 평가 세트"),
+)
+selected_scenario_path = SCENARIO_SET_OPTIONS[selected_scenario_label]
+
+st.sidebar.markdown(
+    """
+    <div class="mscc-sidebar-note">
+        테스트 모드에서는 선택한 시나리오 세트의 질문 검색, 답변 검토, 평가 저장과 진행률 확인을 지원합니다.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+st.sidebar.caption("시연 시에는 110개 분진·보호구 보강 평가 세트를 선택하는 것을 권장합니다.")
+st.sidebar.markdown(
+    f"""
+    <div class="portal-system-state">
+        <div class="portal-system-state-title">시스템 상태</div>
+        <div class="portal-system-state-value">정상 운영 중</div>
+        <div class="portal-system-state-time">
+            마지막 동기화: {escape(time.strftime("%Y-%m-%d %H:%M"))}
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 # ==============================
@@ -5205,11 +4317,7 @@ scenario_rows, scenario_status_error = load_question_scenarios(selected_scenario
 scenario_count = len(scenario_rows) if not scenario_status_error else 0
 db_status_text = "정상" if not db_error else "점검 필요"
 db_status_accent = "#10b981" if not db_error else "#b45309"
-gemini_status_text = (
-    "관리자 모드에서 확인"
-    if not is_admin_mode
-    else ("API 키 감지됨" if not gemini_error else "키 미감지")
-)
+gemini_status_text = "API 키 감지됨" if not gemini_error else "키 미감지"
 
 status_col1, status_col2, status_col3, status_col4 = st.columns(4)
 with status_col1:
@@ -5241,25 +4349,6 @@ with status_col4:
         "#64748b",
     )
 
-
-# ==============================
-# 메뉴별 화면 전환
-# ==============================
-if feature_page in {"중대재해처벌법 대응", "중대재해처벌법 대응 체크리스트"}:
-    render_legal_checklist_page()
-    st.stop()
-if feature_page == "위험성평가 초안":
-    render_risk_assessment_draft_page()
-    st.stop()
-if feature_page == "대화 이력":
-    render_conversation_history_page()
-    st.stop()
-if feature_page == "공지 및 지침":
-    render_notice_guidance_page()
-    st.stop()
-if feature_page == "Excel 내보내기 또는 보고서":
-    render_export_report_page()
-    st.stop()
 
 # ==============================
 # 질문 입력 + 테스트 모드
@@ -5611,14 +4700,6 @@ def render_major_accident_law_evidence_panel() -> None:
         )
         for label, doc_name in MAJOR_ACCIDENT_LAW_DOCS
     )
-    warning_items = [
-        "유해가스 농도 초과 상태인데 작업을 계속한 경우",
-        "위험성평가를 하지 않거나 형식적으로만 작성한 경우",
-        "작업중지 필요 상황인데 즉시 중지하지 않은 경우",
-        "보호구 지급·착용 확인 없이 작업자를 투입한 경우",
-        "안전교육, 점검, 개선조치 기록이 남아 있지 않은 경우",
-    ]
-    warning_html = "".join(f"<li>{escape(item)}</li>" for item in warning_items)
     st.markdown(
         (
             '<div class="major-law-evidence-box">'
@@ -5630,24 +4711,6 @@ def render_major_accident_law_evidence_panel() -> None:
             f'<div class="major-law-badge-row">{badge_html}'
             '<span class="law-badge law-badge-major">중대재해처벌법</span></div>'
             f'<div class="major-law-doc-list">{docs_html}</div>'
-            "</div>"
-        ),
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        (
-            '<div class="major-law-evidence-box" style="margin-top:12px;">'
-            '<div class="major-law-evidence-title">중대재해처벌법 유의사항</div>'
-            '<div class="major-law-evidence-text">'
-            "아래 사례는 법률 위반 여부를 단정하는 내용이 아니라, 현장에서 "
-            "중대재해처벌법 대응 측면에서 주의가 필요한 대표 상황을 안내하기 위한 것입니다."
-            "</div>"
-            f'<ul style="margin:10px 0 10px 18px;line-height:1.7;">{warning_html}</ul>'
-            '<div class="major-law-evidence-text" style="margin-top:8px;">'
-            "AI 답변이나 체크리스트만으로 법적 책임이 면제되는 것은 아니며, "
-            "점검표, 교육기록, 작업중지 기록, 개선조치 사진, 확인 서명 등 "
-            "실제 이행자료를 함께 관리하는 것이 중요합니다."
-            "</div>"
             "</div>"
         ),
         unsafe_allow_html=True,
@@ -5748,8 +4811,6 @@ def render_rag_result(
     answer_status: dict[str, Any],
     results: list[dict[str, Any]],
     result_key: str = "rag",
-    question_text: str = "",
-    auto_save_history: bool = True,
 ) -> None:
     st.subheader("답변 상세")
     mode_name = answer_status.get("answer_mode", "알 수 없음")
@@ -5777,8 +4838,6 @@ def render_rag_result(
     confidence = "높음" if len(results) >= 3 else "검토 필요"
     generation_time = f"{elapsed:.1f}초" if elapsed > 0 else "즉시 생성"
     core_answer, kras_answer, supplement_answer = split_answer_for_dashboard(answer)
-    effective_question = question_text.strip() or extract_markdown_section(answer, "질문") or "질문 정보 없음"
-    recommended_records = recommend_evidence_records(effective_question, answer)
 
     info_cols = st.columns(5)
     info_cards = [
@@ -5874,7 +4933,10 @@ def render_rag_result(
             unsafe_allow_html=True,
         )
         if kras_answer:
-            render_kras_readable_markdown(kras_answer)
+            st.markdown(
+                decorate_kras_markdown(strip_kras_title(kras_answer)),
+                unsafe_allow_html=True,
+            )
         else:
             st.info("KRAS 초안이 포함되지 않은 답변입니다. 검색 근거를 확인해 주세요.")
 
@@ -5886,20 +4948,6 @@ def render_rag_result(
         st.markdown(answer)
 
     render_major_accident_law_evidence_panel()
-
-    render_recommended_evidence_records(recommended_records)
-    if auto_save_history:
-        saved_history_id = auto_save_conversation_history(
-            effective_question,
-            answer,
-            situation_type,
-            risk_level,
-            results,
-            recommended_records,
-            result_key,
-        )
-        if saved_history_id:
-            st.caption(f"대화 이력 자동 저장 완료: {saved_history_id}")
 
     ribbon_items = "".join(
         (
@@ -6020,7 +5068,6 @@ with direct_tab:
                     answer_status,
                     results,
                     result_key="direct",
-                    question_text=question,
                 )
 
 with scenario_tab:
@@ -6111,7 +5158,6 @@ with scenario_tab:
                 stored_result["answer_status"],
                 stored_result["results"],
                 result_key=f"scenario_{stored_no}",
-                question_text=stored_scenario.get("질문 시나리오", ""),
             )
 
             st.subheader("평가 입력")

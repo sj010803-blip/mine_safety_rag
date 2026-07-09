@@ -1,0 +1,80 @@
+MineSafe AI 법령·증빙·위험성평가·대화이력 기능 구현 보고서
+
+구현한 기능 목록:
+- 중대재해처벌법 대응 체크리스트 화면 및 JSON 저장
+- 체크리스트 Excel 내보내기
+- 질문 답변 후 필요 증빙자료 자동 추천
+- 위험성평가 초안 생성 및 Excel 내보내기
+- 대화기록 자동 저장, 조회, 메타데이터 수정, 검색/필터, Excel 내보내기
+
+수정한 파일 목록:
+- app.py
+
+생성한 파일 목록:
+- app_backup_before_legal_evidence_history_features.py
+- data/legal_checklist_status.json
+- data/conversation_history.jsonl
+- 18_legal_evidence_features/legal_evidence_history_feature_report.txt
+- 18_legal_evidence_features/legal_checklist_export.xlsx
+- 18_legal_evidence_features/risk_assessment_draft_export.xlsx
+- 18_legal_evidence_features/conversation_history_export.xlsx
+
+백업 파일 경로:
+- C:\Users\USER\Desktop\mine_safety_rag\app_backup_before_legal_evidence_history_features.py
+
+테스트한 질문 3개:
+1. 갱내 메탄가스 농도가 높게 감지되면 어떻게 조치해야 해?
+2. 발파 후 불발이 의심될 때 작업자는 어떻게 대응해야 해?
+3. 낙반 위험이 있는 막장에서 작업을 계속해도 되는지 판단해줘.
+
+증빙자료 추천 결과 예시:
+- 메탄/가스/환기 질문: 가스 측정 기록지, 환기설비 점검표, 작업중지 지시 기록, 작업재개 승인 기록, TBM 회의록
+- 발파/불발 질문: 발파작업 허가서, 발파 전 점검표, 화약류 사용 기록, 불발 장약 처리 기록, 대피 확인 기록
+- 낙반/붕락 질문: 막장 점검표, 지보 상태 점검 기록, 작업중지 기록, 보강조치 완료 사진, 작업재개 승인 기록
+
+위험성평가 초안 예시:
+- 작업명: 갱내 환기 점검
+- 위험요인: 메탄가스, 환기 불량
+- 추가 개선대책: 작업중지, 대피, 환기 강화, 재측정, 작업재개 승인
+- 필요 증빙자료: 가스 측정 기록지, 환기설비 점검표, 작업중지 지시 기록
+
+대화 이력 저장 예시:
+- history_id: sample-history-legal-evidence-001
+- 저장 위치: data/conversation_history.jsonl
+- 저장 항목: 질문, 답변, 상황 유형, 위험도, 근거문서, 추천 증빙자료, 조치 상태, 담당자, 조치 기한, 메모
+
+Excel 내보내기 결과:
+- legal_checklist_export.xlsx 생성
+- risk_assessment_draft_export.xlsx 생성
+- conversation_history_export.xlsx 생성
+
+금지 파일 수정 여부:
+- .env 열람/출력/수정 없음
+- Vector DB 수정 없음
+- chunks 파일 수정 없음
+- 기존 평가 파일 및 최종 산출물 파일 수정 없음
+- Git commit/push 없음
+
+남은 한계점:
+- 체크리스트와 위험성평가 초안은 법적 면책 자료가 아니라 안전관리 보조자료임
+- 증빙자료 추천은 keyword rule 기반이므로 현장 상황에 따라 안전관리자가 보완해야 함
+- 대화 이력은 AI 답변 기록이며 실제 이행자료 원본을 대체하지 않음
+
+교수님께 설명할 한 문단:
+이번 보완에서는 MineSafe AI가 답변만 제공하는 수준을 넘어, 중대재해처벌법 대응 체크리스트, 질문별 필요 증빙자료 추천, KRAS 형식에 가까운 위험성평가 초안, 대화 이력 저장·조회·Excel 내보내기 기능을 추가했습니다. 이를 통해 사용자는 광산 안전 질문에 대한 답변을 받은 뒤 필요한 현장 기록과 후속 조치까지 함께 관리할 수 있으며, 다만 모든 기능은 법적 면책 문서가 아니라 안전보건 확보의무 이행 상태를 정리하고 전문가 검토를 돕는 보조 기능입니다.
+
+=== 최종 검증 결과 ===
+- app.py 백업 파일 생성: 확인
+- app.py 문법 검사(py_compile): 통과
+- Streamlit 실행 확인: python -m streamlit run app.py 방식으로 임시 포트 8507에서 HTTP 200 응답 확인
+- 새 메뉴 렌더링: 중대재해처벌법 대응 / 위험성평가 초안 / 대화 이력 / 공지 및 지침 모두 통과
+- Streamlit AppTest 첫 화면: 통과
+- 체크리스트 JSON: 12개 항목 확인
+- 대화 이력 JSONL: 예시 1건 저장 확인
+- legal_checklist_export.xlsx: 열기 가능, 12개 항목 + 헤더 확인
+- risk_assessment_draft_export.xlsx: 열기 가능, 위험성평가 초안 예시 확인
+- conversation_history_export.xlsx: 열기 가능, 대화 이력 예시 확인
+- .env/API Key: 열람/출력/수정하지 않음
+- Vector DB/chunks/기존 평가 파일/기존 비교 실험 파일: 수정하지 않음
+- Git commit/push: 수행하지 않음
+

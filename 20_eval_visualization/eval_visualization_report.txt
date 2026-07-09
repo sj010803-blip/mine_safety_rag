@@ -1,0 +1,26 @@
+v2 50문항 블라인드 다중평가 시각화 보고서
+
+1. 사용 데이터
+- 입력 파일: 15_fair_eval_v2_50/multi_judge_score_summary_50_v2_final_complete.xlsx
+- 사용 시트: merged_scores
+- 총 점수 행 수: 450개
+- 모델별 점수 수: ChatGPT 150개, Gemini 150개, MineSafe AI 150개
+
+2. 최종 요약
+- MineSafe AI: 평균 85.61점, 표준편차 7.58
+- Gemini: 평균 69.91점, 표준편차 15.79
+- ChatGPT: 평균 60.33점, 표준편차 12.82
+
+3. 시각화 해석
+- 박스플롯은 평균 점수뿐 아니라 모델별 점수 분포, 중앙값, 변동성, 이상치를 함께 보여주기 위한 시각화이다.
+- 평균 ± 표준편차 막대그래프는 최종 평균 점수와 평가 변동성을 한눈에 비교하기 위한 보조 그래프이다.
+- MineSafe AI는 평균 점수가 가장 높고 표준편차가 가장 낮아, 이번 v2 평가에서 높은 점수와 상대적으로 안정적인 평가 분포를 함께 보였다.
+
+4. 생성 파일
+- 20_eval_visualization/model_score_boxplot.png
+- 20_eval_visualization/model_score_mean_std_bar.png
+- 20_eval_visualization/model_score_summary_table.xlsx
+- 20_eval_visualization/eval_visualization_report.txt
+
+5. 그래프 생성 방식
+- matplotlib이 설치되어 있지 않아 Pillow 기반 PNG 직접 그리기 방식으로 그래프를 생성함

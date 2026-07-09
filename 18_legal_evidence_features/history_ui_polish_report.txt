@@ -1,0 +1,45 @@
+MineSafe AI 대화 이력 UI 개선 보고서
+
+1. 수정한 UI 영역
+- app.py의 대화 이력 메뉴 화면을 개선함
+- 근거 문서 표시를 st.write(list) 방식에서 카드형 2열 목록으로 변경
+- 추천 증빙자료 표시를 st.write(list) 방식에서 카드형 2열 목록으로 변경
+- 증빙자료 보고서용 보기를 dataframe 표에서 흰색 카드형 보고서 UI로 변경
+- 저장된 질문 목록 라벨을 날짜 | 상황 유형 | 질문 요약 형태로 정리
+- 화면 상단에 대화 이력 활용 목적과 법적 증빙 주의 문구 추가
+- 긴 답변은 기존처럼 expander 내부에 표시되도록 유지
+
+2. 백업 파일 경로
+- C:\Users\USER\Desktop\mine_safety_rag\app_backup_before_history_ui_polish.py
+
+3. JSON/code block 제거 여부
+- 대화 이력 화면에서 근거 문서와 추천 증빙자료를 리스트 원문/JSON/code block 형태로 직접 출력하지 않도록 수정함
+- st.write(selected.get(... list ...)) 형태 제거 확인
+- 증빙자료 보고서용 보기의 dataframe 표를 카드형 UI로 교체함
+
+4. Excel 다운로드 유지 여부
+- 대화 이력 Excel 다운로드 버튼 라벨 유지: 대화 이력 Excel 다운로드
+- 기존 st.download_button 방식 유지
+- Streamlit 테스트에서 다운로드 버튼 렌더링 확인
+
+5. 검증 결과
+- app.py py_compile 문법 검사: 통과
+- Streamlit AppTest:
+  - 대화 이력 화면 렌더링 통과
+  - 중대재해처벌법 대응 화면 렌더링 통과
+  - 위험성평가 초안 화면 렌더링 통과
+  - 안전 질의 및 답변 화면 렌더링 통과
+- 대화 이력 화면 필수 UI 문구 확인:
+  - 근거 문서
+  - 추천 증빙자료
+  - 증빙자료 보고서용 보기
+  - 대화 이력 Excel 다운로드
+- python -m streamlit run app.py 임시 실행: HTTP 200 응답 확인
+- .env/API Key: 열람/출력/수정하지 않음
+- Vector DB/chunks/기존 평가 파일: 코드 수정 또는 재생성 작업 없음
+- Git commit/push: 수행하지 않음
+
+6. 남은 한계점
+- Streamlit 기본 download_button 스타일은 브라우저와 Streamlit 버전에 따라 세부 색상이 다르게 보일 수 있음
+- 현재 UI는 로컬 JSONL 저장 데이터를 기반으로 하므로, 여러 사용자가 동시에 쓰는 운영 환경에서는 별도 DB 도입이 필요함
+- AI 답변 이력은 안전관리 기록 보조자료이며, 실제 법적 증빙은 현장 점검표·사진·교육기록·작업중지 기록과 함께 관리해야 함

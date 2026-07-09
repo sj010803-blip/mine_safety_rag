@@ -1,0 +1,190 @@
+MineSafe AI 교수님 피드백 반영 Git commit/push 보고서
+
+- 검사 시간: 2026-07-09 21:41:24
+- 프로젝트 경로: C:\Users\USER\Desktop\mine_safety_rag
+- 사용 Git: C:\Users\USER\AppData\Local\GitHubDesktop\app-3.6.2\resources\app\git\cmd\git.exe
+- app.py 문법 검사 결과: 통과(ast.parse)
+- whitelist 후보 파일 수: 34
+- 실제 존재한 파일 수: 34
+- 누락된 whitelist 후보 수: 0
+
+1. 실제 stage된 파일 목록
+- 16_final_outputs/01_final_excel/MineSafe_AI_v2_최종평가_통합보고서_SAFE_WITH_SIMILARITY.xlsx
+- 16_final_outputs/03_presentation/MineSafe_AI_주간발표자료_WITH_SIMILARITY.pptx
+- 16_final_outputs/04_report_text/최종_1페이지_요약_WITH_SIMILARITY.txt
+- 16_final_outputs/06_professor_QA/교수님_예상질문_답변_WITH_SIMILARITY.txt
+- 17_similarity_index/similarity_index_bar_chart.png
+- 17_similarity_index/similarity_overall_report.txt
+- 17_similarity_index/similarity_summary.xlsx
+- 18_legal_evidence_features/conversation_history_export.xlsx
+- 18_legal_evidence_features/excel_download_button_fix_report.txt
+- 18_legal_evidence_features/history_ui_polish_report.txt
+- 18_legal_evidence_features/legal_checklist_export.xlsx
+- 18_legal_evidence_features/legal_evidence_history_feature_report.txt
+- 18_legal_evidence_features/risk_assessment_draft_export.xlsx
+- 19_similarity_comparison/similarity_comparison_bar_chart.png
+- 19_similarity_comparison/similarity_comparison_report.txt
+- 19_similarity_comparison/similarity_comparison_summary.xlsx
+- 19_similarity_comparison/similarity_comparison_template.xlsx
+- 20_eval_visualization/eval_visualization_report.txt
+- 20_eval_visualization/legal_warning_ui_update_report.txt
+- 20_eval_visualization/model_score_boxplot.png
+- 20_eval_visualization/model_score_mean_std_bar.png
+- 20_eval_visualization/model_score_summary_table.xlsx
+- 20_eval_visualization/professor_feedback_update_report.txt
+- 20_eval_visualization/risk_badge_similarity_note_update_report.txt
+- app.py
+- app_backup_before_excel_download_fix.py
+- app_backup_before_history_ui_polish.py
+- app_backup_before_legal_evidence_history_features.py
+- app_backup_before_legal_warning_ui_update.py
+- app_backup_before_professor_feedback_ui.py
+- app_backup_before_risk_badge_similarity_note.py
+- data/conversation_history.jsonl
+- data/legal_checklist_status.json
+- safe_github_commit_push_professor_feedback.py
+
+2. 누락된 whitelist 후보 파일
+- 없음
+
+3. 금지 패턴 검사 결과
+- stage 금지 파일 검사: 통과
+- .env/API Key/Vector DB/chunks/__pycache__/*.pyc/~$* whitelist 제외 확인
+
+4. 커밋 및 push
+- 메인 커밋 메시지: feat: apply professor feedback updates
+- 메인 커밋 해시: a3a8f91b0fc87dbe82f697c8c8b232f898745e7c
+- push 성공 여부: 성공
+- origin/main 일치 여부(메인 커밋 기준): 일치
+- 보고서 처리: 보고서 파일은 main 커밋 후 생성되어 별도 작은 커밋으로 추가
+
+5. git status 결과(메인 push 직후)
+ M 02_질문시나리오/question_scenarios_100.tsv
+ M 02_질문시나리오/question_scenarios_30.tsv
+ M 02_질문시나리오/question_scenarios_65.tsv
+ M 09_answer_tests/auto_eval_100_summary.tsv
+ M 09_answer_tests/auto_eval_70_detail_report_readable.xlsx
+ M 09_answer_tests/auto_eval_Q031_Q065.tsv
+ M 09_answer_tests/auto_eval_Q066_Q100.tsv
+ D 09_answer_tests/~$auto_eval_100_report.xlsx
+ D 09_answer_tests/~$auto_eval_70_detail_report.xlsx
+ M README.md
+?? 01_raw_docs/
+?? 08_chunks/chunks_backup_before_major_accident_docs_20260707_172146.jsonl
+?? 08_chunks/chunks_backup_before_major_accident_docs_20260707_172341.jsonl
+?? 08_chunks/chunks_with_major_accident_docs.jsonl
+?? 09_answer_tests/auto_eval_110_summary.tsv
+?? 09_answer_tests/auto_eval_70_teacher_view.xlsx
+?? 09_answer_tests/auto_eval_80_teacher_view_110.xlsx
+?? 09_answer_tests/auto_eval_Q001_Q030.tsv
+?? 09_answer_tests/auto_eval_Q031_Q110.tsv
+?? 09_answer_tests/auto_eval_Q031_Q110_summary.tsv
+?? 09_answer_tests/auto_eval_Q066_Q110.tsv
+?? 09_answer_tests/auto_eval_Q101_Q110.tsv
+?? 09_answer_tests/auto_eval_Q101_Q110_summary.tsv
+?? 09_answer_tests/dust_ppe_added_questions_Q101_Q110.xlsx
+?? 10_vector_db_backup_before_major_accident_docs_20260707_172628/
+?? 10_vector_db_replace_tmp_20260707_172628/
+?? 10_vector_db_with_major_accident_docs/
+?? 12_compare_experiment/.artifact_runtime/
+?? 12_compare_experiment/git_commit_push_report.txt
+?? 12_compare_experiment/llm_rag_comparison_result.xlsx
+?? 12_compare_experiment/llm_rag_comparison_result.xlsx.inspect.ndjson
+?? 12_compare_experiment/llm_rag_comparison_result_polished.xlsx.inspect.ndjson
+?? 12_compare_experiment/llm_rag_comparison_template.xlsx
+?? 13_added_docs_tests/
+?? 15_fair_eval_v2_50/MineSafe_AI_v2_최종평가_통합보고서.xlsx
+?? 15_fair_eval_v2_50/final_figures/
+?? 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_01_FQ001_FQ005.tsv
+?? 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_02_FQ006_FQ010.tsv
+?? 16_final_outputs/01_final_excel/MineSafe_AI_v2_최종평가_통합보고서_CLEAN.xlsx
+?? 16_final_outputs/01_final_excel/MineSafe_AI_v2_최종평가_통합보고서_CLEAN_report.txt
+?? 16_final_outputs/01_final_excel/MineSafe_AI_v2_최종평가_통합보고서_SAFE.xlsx
+?? 16_final_outputs/01_final_excel/MineSafe_AI_v2_최종평가_통합보고서_SAFE_report.txt
+?? 16_final_outputs/01_final_excel/MineSafe_AI_최종평가_통합보고서.xlsx
+?? 16_final_outputs/02_figures/
+?? 16_final_outputs/03_presentation/MineSafe_AI_주간발표자료.pptx
+?? 16_final_outputs/03_presentation/MineSafe_AI_주간발표자료_WITH_SIMILARITY.pptx.inspect.ndjson
+?? 16_final_outputs/03_presentation/~$MineSafe_AI_주간발표자료_WITH_SIMILARITY.pptx
+?? 16_final_outputs/04_report_text/final_packaging_generation_report.txt
+?? 16_final_outputs/04_report_text/final_packaging_verification.json
+?? 16_final_outputs/04_report_text/similarity_update_verification.json
+?? 16_final_outputs/04_report_text/유사성지수_보완결과.txt
+?? 16_final_outputs/04_report_text/최종_1페이지_요약.txt
+?? 16_final_outputs/05_demo_script/
+?? 16_final_outputs/06_professor_QA/교수님_예상질문_답변.txt
+?? 16_final_outputs/07_github_records/
+?? 16_final_outputs/generate_final_outputs.py
+?? 17_similarity_index/run_similarity_index_test.py
+?? 17_similarity_index/similarity_index_final_summary.tsv
+?? 17_similarity_index/similarity_pairwise_scores.xlsx
+?? 17_similarity_index/similarity_questions_10.xlsx
+?? 17_similarity_index/similarity_raw_answers.xlsx
+?? 20_eval_visualization/git_commit_push_professor_feedback_report.txt
+?? README_backup_before_final_packaging.md
+?? README_backup_before_similarity_update.md
+?? add_major_accident_docs_to_rag.py
+?? auto_eval_Q101_Q110.py
+?? check_110_eval_ready.py
+?? check_answer_draft.py
+?? clear_minesafe_placeholder.py
+?? extend_dust_ppe_questions_110.py
+?? fix_110_dust_ppe_categories.py
+?? fix_110_scenario_schema.py
+?? inspect_syntax.py
+?? make_readable_auto_eval_excel.py
+?? make_teacher_view_110_excel.py
+?? make_teacher_view_excel.py
+?? merge_auto_eval_Q031_Q110.py
+?? patch_app_add_110_scenario.py
+?? patch_app_eval_110.py
+?? patch_question_label_display.py
+?? patch_tbm_label.py
+?? rebuild_110_from_100_schema.py
+?? rebuild_eval_Q001_Q030_100.py
+?? repair_q101_q110.py
+?? repair_q101_q110_final.py
+?? safe_github_commit_push.py
+?? split_dust_ppe_category.py
+
+
+6. 커밋 출력
+[main a3a8f91] feat: apply professor feedback updates
+ 34 files changed, 37554 insertions(+), 136 deletions(-)
+ create mode 100644 16_final_outputs/01_final_excel/MineSafe_AI_v2_최종평가_통합보고서_SAFE_WITH_SIMILARITY.xlsx
+ create mode 100644 16_final_outputs/03_presentation/MineSafe_AI_주간발표자료_WITH_SIMILARITY.pptx
+ create mode 100644 16_final_outputs/04_report_text/최종_1페이지_요약_WITH_SIMILARITY.txt
+ create mode 100644 16_final_outputs/06_professor_QA/교수님_예상질문_답변_WITH_SIMILARITY.txt
+ create mode 100644 17_similarity_index/similarity_index_bar_chart.png
+ create mode 100644 17_similarity_index/similarity_overall_report.txt
+ create mode 100644 17_similarity_index/similarity_summary.xlsx
+ create mode 100644 18_legal_evidence_features/conversation_history_export.xlsx
+ create mode 100644 18_legal_evidence_features/excel_download_button_fix_report.txt
+ create mode 100644 18_legal_evidence_features/history_ui_polish_report.txt
+ create mode 100644 18_legal_evidence_features/legal_checklist_export.xlsx
+ create mode 100644 18_legal_evidence_features/legal_evidence_history_feature_report.txt
+ create mode 100644 18_legal_evidence_features/risk_assessment_draft_export.xlsx
+ create mode 100644 19_similarity_comparison/similarity_comparison_bar_chart.png
+ create mode 100644 19_similarity_comparison/similarity_comparison_report.txt
+ create mode 100644 19_similarity_comparison/similarity_comparison_summary.xlsx
+ create mode 100644 19_similarity_comparison/similarity_comparison_template.xlsx
+ create mode 100644 20_eval_visualization/eval_visualization_report.txt
+ create mode 100644 20_eval_visualization/legal_warning_ui_update_report.txt
+ create mode 100644 20_eval_visualization/model_score_boxplot.png
+ create mode 100644 20_eval_visualization/model_score_mean_std_bar.png
+ create mode 100644 20_eval_visualization/model_score_summary_table.xlsx
+ create mode 100644 20_eval_visualization/professor_feedback_update_report.txt
+ create mode 100644 20_eval_visualization/risk_badge_similarity_note_update_report.txt
+ create mode 100644 app_backup_before_excel_download_fix.py
+ create mode 100644 app_backup_before_history_ui_polish.py
+ create mode 100644 app_backup_before_legal_evidence_history_features.py
+ create mode 100644 app_backup_before_legal_warning_ui_update.py
+ create mode 100644 app_backup_before_professor_feedback_ui.py
+ create mode 100644 app_backup_before_risk_badge_similarity_note.py
+ create mode 100644 data/conversation_history.jsonl
+ create mode 100644 data/legal_checklist_status.json
+ create mode 100644 safe_github_commit_push_professor_feedback.py
+
+7. push 출력
+To https://github.com/sj010803-blip/mine_safety_rag.git
+   7a7f743..a3a8f91  main -> main

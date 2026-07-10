@@ -1,0 +1,214 @@
+3모델 유사성 지수 비교 평가 최종 결과 Git commit/push 보고서
+
+- 검사 시간: 2026-07-10 15:51:20
+- 프로젝트 경로: C:\Users\USER\Desktop\mine_safety_rag
+- Git 실행 파일: C:\Users\USER\AppData\Local\GitHubDesktop\app-3.6.2\resources\app\git\cmd\git.exe
+- 커밋 메시지: eval: add final similarity comparison results
+
+1. 초기 git status --short
+M "02_\354\247\210\353\254\270\354\213\234\353\202\230\353\246\254\354\230\244/question_scenarios_100.tsv"
+ M "02_\354\247\210\353\254\270\354\213\234\353\202\230\353\246\254\354\230\244/question_scenarios_30.tsv"
+ M "02_\354\247\210\353\254\270\354\213\234\353\202\230\353\246\254\354\230\244/question_scenarios_65.tsv"
+ M 09_answer_tests/auto_eval_100_summary.tsv
+ M 09_answer_tests/auto_eval_70_detail_report_readable.xlsx
+ M 09_answer_tests/auto_eval_Q031_Q065.tsv
+ M 09_answer_tests/auto_eval_Q066_Q100.tsv
+ D 09_answer_tests/~$auto_eval_100_report.xlsx
+ D 09_answer_tests/~$auto_eval_70_detail_report.xlsx
+A  19_similarity_comparison/similarity_answer_collection_filled_from_raw.xlsx
+A  19_similarity_comparison/similarity_answer_collection_template.xlsx
+ M README.md
+?? 01_raw_docs/
+?? 08_chunks/chunks_backup_before_major_accident_docs_20260707_172146.jsonl
+?? 08_chunks/chunks_backup_before_major_accident_docs_20260707_172341.jsonl
+?? 08_chunks/chunks_with_major_accident_docs.jsonl
+?? 09_answer_tests/auto_eval_110_summary.tsv
+?? 09_answer_tests/auto_eval_70_teacher_view.xlsx
+?? 09_answer_tests/auto_eval_80_teacher_view_110.xlsx
+?? 09_answer_tests/auto_eval_Q001_Q030.tsv
+?? 09_answer_tests/auto_eval_Q031_Q110.tsv
+?? 09_answer_tests/auto_eval_Q031_Q110_summary.tsv
+?? 09_answer_tests/auto_eval_Q066_Q110.tsv
+?? 09_answer_tests/auto_eval_Q101_Q110.tsv
+?? 09_answer_tests/auto_eval_Q101_Q110_summary.tsv
+?? 09_answer_tests/dust_ppe_added_questions_Q101_Q110.xlsx
+?? 10_vector_db_backup_before_major_accident_docs_20260707_172628/
+?? 10_vector_db_replace_tmp_20260707_172628/
+?? 10_vector_db_with_major_accident_docs/
+?? 12_compare_experiment/.artifact_runtime/
+?? 12_compare_experiment/git_commit_push_report.txt
+?? 12_compare_experiment/llm_rag_comparison_result.xlsx
+?? 12_compare_experiment/llm_rag_comparison_result.xlsx.inspect.ndjson
+?? 12_compare_experiment/llm_rag_comparison_result_polished.xlsx.inspect.ndjson
+?? 12_compare_experiment/llm_rag_comparison_template.xlsx
+?? 13_added_docs_tests/
+?? "15_fair_eval_v2_50/MineSafe_AI_v2_\354\265\234\354\242\205\355\217\211\352\260\200_\355\206\265\355\225\251\353\263\264\352\263\240\354\204\234.xlsx"
+?? 15_fair_eval_v2_50/final_figures/
+?? 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_01_FQ001_FQ005.tsv
+?? 15_fair_eval_v2_50/judge_raw_outputs/GPT/GPT_result_02_FQ006_FQ010.tsv
+?? "16_final_outputs/01_final_excel/MineSafe_AI_v2_\354\265\234\354\242\205\355\217\211\352\260\200_\355\206\265\355\225\251\353\263\264\352\263\240\354\204\234_CLEAN.xlsx"
+?? "16_final_outputs/01_final_excel/MineSafe_AI_v2_\354\265\234\354\242\205\355\217\211\352\260\200_\355\206\265\355\225\251\353\263\264\352\263\240\354\204\234_CLEAN_report.txt"
+?? "16_final_outputs/01_final_excel/MineSafe_AI_v2_\354\265\234\354\242\205\355\217\211\352\260\200_\355\206\265\355\225\251\353\263\264\352\263\240\354\204\234_SAFE.xlsx"
+?? "16_final_outputs/01_final_excel/MineSafe_AI_v2_\354\265\234\354\242\205\355\217\211\352\260\200_\355\206\265\355\225\251\353\263\264\352\263\240\354\204\234_SAFE_report.txt"
+?? "16_final_outputs/01_final_excel/MineSafe_AI_\354\265\234\354\242\205\355\217\211\352\260\200_\355\206\265\355\225\251\353\263\264\352\263\240\354\204\234.xlsx"
+?? 16_final_outputs/02_figures/
+?? "16_final_outputs/03_presentation/MineSafe_AI_\354\243\274\352\260\204\353\260\234\355\221\234\354\236\220\353\243\214.pptx"
+?? "16_final_outputs/03_presentation/MineSafe_AI_\354\243\274\352\260\204\353\260\234\355\221\234\354\236\220\353\243\214_WITH_SIMILARITY.pptx.inspect.ndjson"
+?? "16_final_outputs/03_presentation/~$MineSafe_AI_\354\243\274\352\260\204\353\260\234\355\221\234\354\236\220\353\243\214_WITH_SIMILARITY.pptx"
+?? 16_final_outputs/04_report_text/final_packaging_generation_report.txt
+?? 16_final_outputs/04_report_text/final_packaging_verification.json
+?? 16_final_outputs/04_report_text/similarity_update_verification.json
+?? "16_final_outputs/04_report_text/\354\234\240\354\202\254\354\204\261\354\247\200\354\210\230_\353\263\264\354\231\204\352\262\260\352\263\274.txt"
+?? "16_final_outputs/04_report_text/\354\265\234\354\242\205_1\355\216\230\354\235\264\354\247\200_\354\232\224\354\225\275.txt"
+?? 16_final_outputs/05_demo_script/
+?? "16_final_outputs/06_professor_QA/\352\265\220\354\210\230\353\213\230_\354\230\210\354\203\201\354\247\210\353\254\270_\353\213\265\353\263\200.txt"
+?? 16_final_outputs/07_github_records/
+?? 16_final_outputs/generate_final_outputs.py
+?? 17_similarity_index/run_similarity_index_test.py
+?? 17_similarity_index/similarity_index_final_summary.tsv
+?? 17_similarity_index/similarity_pairwise_scores.xlsx
+?? 17_similarity_index/similarity_questions_10.xlsx
+?? 17_similarity_index/similarity_raw_answers.xlsx
+?? 19_similarity_comparison/backup_before_raw_import_20260710_143522/
+?? 19_similarity_comparison/backup_before_raw_import_20260710_143612/
+?? 19_similarity_comparison/backup_before_raw_import_20260710_143641/
+?? 19_similarity_comparison/backup_before_raw_import_20260710_144038/
+?? 19_similarity_comparison/backup_before_raw_import_20260710_144145/
+?? 19_similarity_comparison/backup_before_raw_import_20260710_150927/
+?? 19_similarity_comparison/calculate_similarity_comparison.py
+?? 19_similarity_comparison/raw_answer_import_and_similarity_report.txt
+?? 19_similarity_comparison/raw_answer_reimport_final_similarity_report.txt
+?? 19_similarity_comparison/raw_answers/
+?? 19_similarity_comparison/raw_answers_backup_20260710_145902/
+?? 19_similarity_comparison/similarity_actual_eval_setup_report.txt
+?? 19_similarity_comparison/similarity_comparison_final_bar_chart.png
+?? 19_similarity_comparison/similarity_comparison_final_report.txt
+?? 19_similarity_comparison/similarity_comparison_model_summary.xlsx
+?? 19_similarity_comparison/similarity_comparison_pairwise_scores.xlsx
+?? 19_similarity_comparison/similarity_comparison_question_summary.xlsx
+?? README_backup_before_final_packaging.md
+?? README_backup_before_similarity_update.md
+?? add_major_accident_docs_to_rag.py
+?? auto_eval_Q101_Q110.py
+?? check_110_eval_ready.py
+?? check_answer_draft.py
+?? clear_minesafe_placeholder.py
+?? extend_dust_ppe_questions_110.py
+?? fix_110_dust_ppe_categories.py
+?? fix_110_scenario_schema.py
+?? inspect_syntax.py
+?? make_readable_auto_eval_excel.py
+?? make_teacher_view_110_excel.py
+?? make_teacher_view_excel.py
+?? merge_auto_eval_Q031_Q110.py
+?? patch_app_add_110_scenario.py
+?? patch_app_eval_110.py
+?? patch_question_label_display.py
+?? patch_tbm_label.py
+?? rebuild_110_from_100_schema.py
+?? rebuild_eval_Q001_Q030_100.py
+?? repair_q101_q110.py
+?? repair_q101_q110_final.py
+?? safe_github_commit_push.py
+?? safe_github_commit_push_similarity_final.py
+?? split_dust_ppe_category.py
+
+2. 초기 staged 파일
+- 19_similarity_comparison/similarity_answer_collection_filled_from_raw.xlsx
+- 19_similarity_comparison/similarity_answer_collection_template.xlsx
+
+3. whitelist 후보 파일 검사
+- whitelist 후보 파일 수: 22
+- 실제 존재한 파일 수: 22
+- 누락 파일 수: 0
+- 차단 파일 수: 0
+
+4. 누락 파일 목록
+- 없음
+
+5. 금지 패턴 검사 결과
+- 금지 경로/비밀키 유사 패턴 감지 없음
+
+6. raw_answers 포함 여부
+- 포함 파일 수: 10/10
+- 19_similarity_comparison/raw_answers/ChatGPT_repeat_1.txt
+- 19_similarity_comparison/raw_answers/ChatGPT_repeat_2.txt
+- 19_similarity_comparison/raw_answers/ChatGPT_repeat_3.txt
+- 19_similarity_comparison/raw_answers/ChatGPT_repeat_4.txt
+- 19_similarity_comparison/raw_answers/ChatGPT_repeat_5.txt
+- 19_similarity_comparison/raw_answers/Gemini_repeat_1.txt
+- 19_similarity_comparison/raw_answers/Gemini_repeat_2.txt
+- 19_similarity_comparison/raw_answers/Gemini_repeat_3.txt
+- 19_similarity_comparison/raw_answers/Gemini_repeat_4.txt
+- 19_similarity_comparison/raw_answers/Gemini_repeat_5.txt
+
+7. commit 전 staged 파일 목록
+- 19_similarity_comparison/calculate_similarity_comparison.py
+- 19_similarity_comparison/raw_answer_import_and_similarity_report.txt
+- 19_similarity_comparison/raw_answer_reimport_final_similarity_report.txt
+- 19_similarity_comparison/raw_answers/ChatGPT_repeat_1.txt
+- 19_similarity_comparison/raw_answers/ChatGPT_repeat_2.txt
+- 19_similarity_comparison/raw_answers/ChatGPT_repeat_3.txt
+- 19_similarity_comparison/raw_answers/ChatGPT_repeat_4.txt
+- 19_similarity_comparison/raw_answers/ChatGPT_repeat_5.txt
+- 19_similarity_comparison/raw_answers/Gemini_repeat_1.txt
+- 19_similarity_comparison/raw_answers/Gemini_repeat_2.txt
+- 19_similarity_comparison/raw_answers/Gemini_repeat_3.txt
+- 19_similarity_comparison/raw_answers/Gemini_repeat_4.txt
+- 19_similarity_comparison/raw_answers/Gemini_repeat_5.txt
+- 19_similarity_comparison/similarity_actual_eval_setup_report.txt
+- 19_similarity_comparison/similarity_answer_collection_filled_from_raw.xlsx
+- 19_similarity_comparison/similarity_answer_collection_template.xlsx
+- 19_similarity_comparison/similarity_answer_collection_template_backup_before_raw_import.xlsx
+- 19_similarity_comparison/similarity_comparison_final_bar_chart.png
+- 19_similarity_comparison/similarity_comparison_final_report.txt
+- 19_similarity_comparison/similarity_comparison_model_summary.xlsx
+- 19_similarity_comparison/similarity_comparison_pairwise_scores.xlsx
+- 19_similarity_comparison/similarity_comparison_question_summary.xlsx
+
+8. staged 안전 검사
+- 통과
+
+9. 첫 번째 commit 결과
+[main c4f1b6a] eval: add final similarity comparison results
+ 22 files changed, 947 insertions(+)
+ create mode 100644 19_similarity_comparison/calculate_similarity_comparison.py
+ create mode 100644 19_similarity_comparison/raw_answer_import_and_similarity_report.txt
+ create mode 100644 19_similarity_comparison/raw_answer_reimport_final_similarity_report.txt
+ create mode 100644 19_similarity_comparison/raw_answers/ChatGPT_repeat_1.txt
+ create mode 100644 19_similarity_comparison/raw_answers/ChatGPT_repeat_2.txt
+ create mode 100644 19_similarity_comparison/raw_answers/ChatGPT_repeat_3.txt
+ create mode 100644 19_similarity_comparison/raw_answers/ChatGPT_repeat_4.txt
+ create mode 100644 19_similarity_comparison/raw_answers/ChatGPT_repeat_5.txt
+ create mode 100644 19_similarity_comparison/raw_answers/Gemini_repeat_1.txt
+ create mode 100644 19_similarity_comparison/raw_answers/Gemini_repeat_2.txt
+ create mode 100644 19_similarity_comparison/raw_answers/Gemini_repeat_3.txt
+ create mode 100644 19_similarity_comparison/raw_answers/Gemini_repeat_4.txt
+ create mode 100644 19_similarity_comparison/raw_answers/Gemini_repeat_5.txt
+ create mode 100644 19_similarity_comparison/similarity_actual_eval_setup_report.txt
+ create mode 100644 19_similarity_comparison/similarity_answer_collection_filled_from_raw.xlsx
+ create mode 100644 19_similarity_comparison/similarity_answer_collection_template.xlsx
+ create mode 100644 19_similarity_comparison/similarity_answer_collection_template_backup_before_raw_import.xlsx
+ create mode 100644 19_similarity_comparison/similarity_comparison_final_bar_chart.png
+ create mode 100644 19_similarity_comparison/similarity_comparison_final_report.txt
+ create mode 100644 19_similarity_comparison/similarity_comparison_model_summary.xlsx
+ create mode 100644 19_similarity_comparison/similarity_comparison_pairwise_scores.xlsx
+ create mode 100644 19_similarity_comparison/similarity_comparison_question_summary.xlsx
+
+10. 첫 번째 push 결과
+To https://github.com/sj010803-blip/mine_safety_rag.git
+   5a8bf07..c4f1b6a  main -> main
+
+11. 모델별 최종 유사성 지수
+- ChatGPT: 평균 41.73, 표준편차 7.98, 상태 COMPLETE
+- Gemini: 평균 40.09, 표준편차 9.57, 상태 COMPLETE
+- MineSafe AI: 평균 100.00, 표준편차 0.00, 상태 COMPLETE
+
+12. 미커밋 금지 항목 확인
+- .env/API Key/Vector DB/chunks/__pycache__/*.pyc/~$* 미커밋 확인: staged 안전 검사 통과
+- 유사성 지수는 정확도 평가가 아니라 동일 질문 반복 답변의 구조와 핵심 안전조치 일관성을 보는 보조 지표
+
+13. 보고서 파일 커밋 안내
+- 이 보고서는 첫 번째 결과 커밋과 push 결과를 기록한 뒤 별도 whitelist 커밋으로 추가됩니다.
+- 보고서 커밋 해시는 self-referential 파일 해시 문제를 피하기 위해 콘솔/최종 응답에서 별도로 보고합니다.
+

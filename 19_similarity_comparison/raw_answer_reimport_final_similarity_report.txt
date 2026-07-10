@@ -1,0 +1,97 @@
+ChatGPT/Gemini raw 답변 재반영 및 최종 유사성 지수 계산 보고서
+
+- 검사 시간: 2026-07-10 15:09:28
+- 입력 폴더: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\raw_answers
+- 기준 템플릿: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_answer_collection_template.xlsx
+- 실제 계산 입력 파일: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_answer_collection_filled_from_raw.xlsx
+- 기준 템플릿 직접 저장 상태: SAVED
+
+1. raw_answers txt 파일 10개 존재 여부
+- ChatGPT_repeat_1.txt: 존재, size=10435
+- ChatGPT_repeat_2.txt: 존재, size=9372
+- ChatGPT_repeat_3.txt: 존재, size=13313
+- ChatGPT_repeat_4.txt: 존재, size=13776
+- ChatGPT_repeat_5.txt: 존재, size=13607
+- Gemini_repeat_1.txt: 존재, size=12056
+- Gemini_repeat_2.txt: 존재, size=7890
+- Gemini_repeat_3.txt: 존재, size=11345
+- Gemini_repeat_4.txt: 존재, size=9556
+- Gemini_repeat_5.txt: 존재, size=11106
+
+1-1. 0바이트 파일 여부
+- 없음
+
+1-2. 누락 파일 여부
+- 없음
+
+2. 파일별 파싱 결과
+- ChatGPT_repeat_1.txt: 10/10개 답변 추출
+- ChatGPT_repeat_2.txt: 10/10개 답변 추출
+- ChatGPT_repeat_3.txt: 10/10개 답변 추출
+- ChatGPT_repeat_4.txt: 10/10개 답변 추출
+- ChatGPT_repeat_5.txt: 10/10개 답변 추출
+- Gemini_repeat_1.txt: 10/10개 답변 추출
+- Gemini_repeat_2.txt: 10/10개 답변 추출
+- Gemini_repeat_3.txt: 10/10개 답변 추출
+- Gemini_repeat_4.txt: 10/10개 답변 추출
+- Gemini_repeat_5.txt: 10/10개 답변 추출
+
+3. 모델별 입력 답변 수
+- ChatGPT: READY=50, PARSE_FAILED=0, NEED_INPUT=0
+- Gemini: READY=50, PARSE_FAILED=0, NEED_INPUT=0
+- MineSafe AI: READY=50, PARSE_FAILED=0, NEED_INPUT=0
+
+4. 파싱 실패 항목 목록
+- 없음
+
+5. 모델별 pairwise 점수 개수 및 최종 지수
+- ChatGPT: pairwise=100, mean=41.73, std=7.98, min=23.17, max=63.19, status=COMPLETE
+- Gemini: pairwise=100, mean=40.09, std=9.57, min=14.98, max=61.52, status=COMPLETE
+- MineSafe AI: pairwise=100, mean=100, std=0, min=100, max=100, status=COMPLETE
+
+5-1. 최종 완료 기준 확인
+- ChatGPT READY 수: 50/50
+- Gemini READY 수: 50/50
+- MineSafe AI 답변 수: 50/50
+- ChatGPT pairwise 점수: 100/100
+- Gemini pairwise 점수: 100/100
+- MineSafe AI pairwise 점수: 100/100
+- ChatGPT 최종 상태: COMPLETE
+- Gemini 최종 상태: COMPLETE
+- MineSafe AI 최종 상태: COMPLETE
+
+6. 산출 파일
+- similarity_answer_collection_template.xlsx
+- similarity_answer_collection_filled_from_raw.xlsx
+- similarity_comparison_pairwise_scores.xlsx
+- similarity_comparison_model_summary.xlsx
+- similarity_comparison_question_summary.xlsx
+- similarity_comparison_final_report.txt
+- similarity_comparison_final_bar_chart.png
+
+7. 해석
+- 유사성 지수는 정확도 평가가 아니라 동일 질문 반복 답변의 구조와 핵심 조치 일관성을 보는 보조 지표이다.
+- ChatGPT/Gemini/MineSafe AI의 평균 유사성 지수는 5회 반복 답변이 모두 존재하는 질문에 대해서만 산출된다.
+- 답변이 비어 있거나 파싱에 실패한 모델/질문은 COMPLETE가 아니라 NEED_INPUT 또는 PARSE_FAILED로 관리한다.
+
+8. 계산 스크립트 실행 출력
+CALCULATION_COMPLETE
+['ChatGPT', 50, 50, 10, 100, 41.73, 7.98, 23.17, 63.19, '����', 'COMPLETE']
+['Gemini', 50, 50, 10, 100, 40.09, 9.57, 14.98, 61.52, '����', 'COMPLETE']
+['MineSafe AI', 50, 50, 10, 100, 100.0, 0.0, 100.0, 100.0, '�ſ� ����', 'COMPLETE']
+
+9. 백업 파일
+- 19_similarity_comparison\similarity_answer_collection_template_backup_before_raw_import.xlsx
+- 19_similarity_comparison\backup_before_raw_import_20260710_150927\similarity_answer_collection_filled_from_raw.xlsx
+- 19_similarity_comparison\backup_before_raw_import_20260710_150927\similarity_comparison_pairwise_scores.xlsx
+- 19_similarity_comparison\backup_before_raw_import_20260710_150927\similarity_comparison_model_summary.xlsx
+- 19_similarity_comparison\backup_before_raw_import_20260710_150927\similarity_comparison_question_summary.xlsx
+- 19_similarity_comparison\backup_before_raw_import_20260710_150927\similarity_comparison_final_report.txt
+- 19_similarity_comparison\backup_before_raw_import_20260710_150927\similarity_comparison_final_bar_chart.png
+
+10. 보존/금지사항
+- 기존 17_similarity_index 결과는 수정하지 않음
+- 기존 MineSafe AI 답변 내용은 덮어쓰지 않고 기존 답변을 Q001~Q010 기준으로 매핑해 유지
+- 기존 110문항 평가 결과는 수정하지 않음
+- chunks, Vector DB, .env, API Key는 열람/수정/출력하지 않음
+- Git commit/push 수행하지 않음

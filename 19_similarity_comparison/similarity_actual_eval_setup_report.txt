@@ -1,0 +1,49 @@
+유사성 비교 실제 평가 준비 작업 보고서
+
+1. 작업 범위
+- 폴더: 19_similarity_comparison
+- 기존 17_similarity_index 결과는 보존하고 읽기만 수행
+- chunks, Vector DB, .env, API Key는 열람/수정/출력하지 않음
+- Git commit/push 수행하지 않음
+
+2. 백업
+- 기존 대상 파일은 덮어쓰기 전 backup_before_actual_eval_setup_* 폴더로 복사
+- 백업 파일 수: 0
+
+
+3. 답변 수집 템플릿
+- 파일: 19_similarity_comparison/similarity_answer_collection_template.xlsx
+- 컬럼: model, question_id, repeat_no, question, answer, collection_status, memo
+- 총 행 수: 150
+- READY 행 수: 50
+- NEED_INPUT 행 수: 100
+- MineSafe AI 답변: 기존 17_similarity_index/similarity_raw_answers.xlsx에서 자동 입력
+- ChatGPT/Gemini 답변: 사용자가 직접 붙여넣도록 빈칸 유지
+
+4. 계산 스크립트
+- 파일: 19_similarity_comparison/calculate_similarity_comparison.py
+- 기능: model/question_id별 5개 답변이 모두 있는 경우에만 pairwise 10개 계산
+- 계산 방식: difflib.SequenceMatcher
+- 빈 답변 모델/질문은 NEED_INPUT으로 표시
+
+5. 다음 단계
+- ChatGPT와 Gemini에 대표 질문 10개를 각각 5회 입력하고 답변을 템플릿에 붙여넣는다.
+- 이후 python .\19_similarity_comparison\calculate_similarity_comparison.py 명령으로 최종 비교 점수를 재계산한다.
+
+6. 실행 검증 결과
+- calculate_similarity_comparison.py 문법 검사: ast.parse 통과
+- 빈 답변 포함 상태 실행: 오류 없이 완료
+- ChatGPT: ready_answers 0/50, NEED_INPUT
+- Gemini: ready_answers 0/50, NEED_INPUT
+- MineSafe AI: ready_answers 50/50, complete_question_count 10, pairwise_score_count 100, 평균 유사성 100.00, COMPLETE
+- similarity_answer_collection_template.xlsx: 헤더 포함 151행 확인
+- similarity_comparison_pairwise_scores.xlsx: 헤더 포함 101행 확인
+- similarity_comparison_model_summary.xlsx: 헤더 포함 4행 확인
+- similarity_comparison_question_summary.xlsx: 헤더 포함 31행 확인
+- similarity_comparison_final_report.txt 생성 확인
+- similarity_comparison_final_bar_chart.png 정상 이미지 확인
+
+7. 중요 해석 문구
+- 유사성 지수는 정확도 평가가 아니라 동일 질문 반복 입력 시 답변 구조와 핵심 조치가 얼마나 일관되게 유지되는지 확인하는 보조 지표이다.
+- 답변이 비어 있는 모델은 최종 비교 완료로 표시하지 않고 NEED_INPUT으로 표시한다.
+

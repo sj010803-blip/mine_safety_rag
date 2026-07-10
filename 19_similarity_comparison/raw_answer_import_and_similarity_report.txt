@@ -1,0 +1,95 @@
+ChatGPT/Gemini raw 답변 반영 및 유사성 지수 계산 보고서
+
+- 검사 시간: 2026-07-10 14:41:47
+- 입력 폴더: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\raw_answers
+- 기준 템플릿: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_answer_collection_template.xlsx
+- 실제 계산 입력 파일: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_answer_collection_filled_from_raw.xlsx
+- 기준 템플릿 직접 저장 상태: LOCKED_SAVED_TO_FILLED_COPY_ONLY
+
+1. raw_answers txt 파일 10개 존재 여부
+- ChatGPT_repeat_1.txt: 존재, size=9747
+- ChatGPT_repeat_2.txt: 존재, size=11081
+- ChatGPT_repeat_3.txt: 존재, size=10323
+- ChatGPT_repeat_4.txt: 존재, size=12056
+- ChatGPT_repeat_5.txt: 존재, size=14419
+- Gemini_repeat_1.txt: 존재, size=11483
+- Gemini_repeat_2.txt: 존재, size=11504
+- Gemini_repeat_3.txt: 존재, size=10199
+- Gemini_repeat_4.txt: 존재, size=10804
+- Gemini_repeat_5.txt: 존재, size=0
+
+2. 파일별 파싱 결과
+
+참고: 기준 템플릿 직접 저장 실패
+- 원인: [Errno 13] Permission denied: 'C:\\Users\\USER\\Desktop\\mine_safety_rag\\19_similarity_comparison\\similarity_answer_collection_template.xlsx'
+- Excel에서 similarity_answer_collection_template.xlsx가 열려 있으면 닫은 뒤 스크립트를 다시 실행하면 동일 파일에도 저장됩니다.
+- 이번 계산은 similarity_answer_collection_filled_from_raw.xlsx를 입력으로 정상 수행했습니다.
+
+- ChatGPT_repeat_1.txt: 10/10개 답변 추출
+- ChatGPT_repeat_2.txt: 10/10개 답변 추출
+- ChatGPT_repeat_3.txt: 10/10개 답변 추출
+- ChatGPT_repeat_4.txt: 10/10개 답변 추출
+- ChatGPT_repeat_5.txt: 10/10개 답변 추출
+- Gemini_repeat_1.txt: 10/10개 답변 추출
+- Gemini_repeat_2.txt: 10/10개 답변 추출
+- Gemini_repeat_3.txt: 10/10개 답변 추출
+- Gemini_repeat_4.txt: 10/10개 답변 추출
+- Gemini_repeat_5.txt: 0/10개 답변 추출
+
+3. 모델별 입력 답변 수
+- ChatGPT: READY=50, PARSE_FAILED=0, NEED_INPUT=0
+- Gemini: READY=40, PARSE_FAILED=10, NEED_INPUT=0
+- MineSafe AI: READY=50, PARSE_FAILED=0, NEED_INPUT=0
+
+4. 파싱 실패 항목 목록
+- Gemini_repeat_5.txt / Q001
+- Gemini_repeat_5.txt / Q002
+- Gemini_repeat_5.txt / Q003
+- Gemini_repeat_5.txt / Q004
+- Gemini_repeat_5.txt / Q005
+- Gemini_repeat_5.txt / Q006
+- Gemini_repeat_5.txt / Q007
+- Gemini_repeat_5.txt / Q008
+- Gemini_repeat_5.txt / Q009
+- Gemini_repeat_5.txt / Q010
+
+5. 모델별 pairwise 점수 개수 및 최종 지수
+- ChatGPT: pairwise=100, mean=32.92, std=8.88, min=10.47, max=63, status=COMPLETE
+- Gemini: pairwise=0, mean=NEED_INPUT, std=NEED_INPUT, min=NEED_INPUT, max=NEED_INPUT, status=NEED_INPUT
+- MineSafe AI: pairwise=100, mean=100, std=0, min=100, max=100, status=COMPLETE
+
+6. 산출 파일
+- similarity_answer_collection_template.xlsx
+- similarity_answer_collection_filled_from_raw.xlsx
+- similarity_comparison_pairwise_scores.xlsx
+- similarity_comparison_model_summary.xlsx
+- similarity_comparison_question_summary.xlsx
+- similarity_comparison_final_report.txt
+- similarity_comparison_final_bar_chart.png
+
+7. 해석
+- 유사성 지수는 정확도 평가가 아니라 동일 질문 반복 답변의 일관성을 보는 보조 지표이다.
+- ChatGPT/Gemini/MineSafe AI의 평균 유사성 지수는 5회 반복 답변이 모두 존재하는 질문에 대해서만 산출된다.
+- 답변이 비어 있거나 파싱에 실패한 모델/질문은 COMPLETE가 아니라 NEED_INPUT 또는 PARSE_FAILED로 관리한다.
+
+8. 계산 스크립트 실행 출력
+CALCULATION_COMPLETE
+['ChatGPT', 50, 50, 10, 100, 32.92, 8.88, 10.47, 63.0, '����', 'COMPLETE']
+['Gemini', 50, 40, 0, 0, 'NEED_INPUT', 'NEED_INPUT', 'NEED_INPUT', 'NEED_INPUT', 'NEED_INPUT', 'NEED_INPUT']
+['MineSafe AI', 50, 50, 10, 100, 100.0, 0.0, 100.0, 100.0, '�ſ� ����', 'COMPLETE']
+
+9. 백업 파일
+- 19_similarity_comparison\similarity_answer_collection_template_backup_before_raw_import.xlsx
+- 19_similarity_comparison\backup_before_raw_import_20260710_144145\similarity_answer_collection_filled_from_raw.xlsx
+- 19_similarity_comparison\backup_before_raw_import_20260710_144145\similarity_comparison_pairwise_scores.xlsx
+- 19_similarity_comparison\backup_before_raw_import_20260710_144145\similarity_comparison_model_summary.xlsx
+- 19_similarity_comparison\backup_before_raw_import_20260710_144145\similarity_comparison_question_summary.xlsx
+- 19_similarity_comparison\backup_before_raw_import_20260710_144145\similarity_comparison_final_report.txt
+- 19_similarity_comparison\backup_before_raw_import_20260710_144145\similarity_comparison_final_bar_chart.png
+
+10. 보존/금지사항
+- 기존 17_similarity_index 결과는 수정하지 않음
+- 기존 MineSafe AI 답변 내용은 덮어쓰지 않고 기존 답변을 Q001~Q010 기준으로 매핑해 유지
+- 기존 110문항 평가 결과는 수정하지 않음
+- chunks, Vector DB, .env, API Key는 열람/수정/출력하지 않음
+- Git commit/push 수행하지 않음

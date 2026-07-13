@@ -1,0 +1,74 @@
+MineSafe AI live Naver news Git commit/push 보고서
+
+생성 시간: 2026-07-13 16:57:12
+커밋 메시지: feat: add live Naver news case search
+
+Git 사용 가능 여부:
+- git --version 실행 결과: Git 명령 사용 불가
+- 오류: git 명령이 PATH에서 인식되지 않음
+- 안전 원칙에 따라 git status, stage, commit, push를 진행하지 않음
+
+커밋 해시:
+- 없음
+
+커밋된 파일 목록:
+- 없음
+
+화이트리스트 파일 존재 확인:
+- 존재: app.py
+- 존재: 18_legal_evidence_features/mode_ui_polish_report.txt
+- 존재: 18_legal_evidence_features/general_question_coverage_expansion_report.txt
+- 존재: 18_legal_evidence_features/final_stability_check_report.txt
+- 존재: 18_legal_evidence_features/random_question_coverage_test_questions.txt
+- 존재: 18_legal_evidence_features/random_question_coverage_expansion_report.txt
+- 존재: 18_legal_evidence_features/latest_reference_cases.json
+- 존재: 18_legal_evidence_features/latest_reference_case_card_report.txt
+- 존재: 18_legal_evidence_features/case_based_warning_points_report.txt
+- 존재: 18_legal_evidence_features/live_naver_news_case_search_report.txt
+- 없음/skip 파일 없음
+
+skip된 파일 목록:
+- 없음
+
+제외한 금지 파일 목록:
+- .env
+- API Key / Client Secret
+- app_backup_before_*.py
+- 10_vector_db/
+- 10_vector_db_with_major_accident_docs/
+- 08_chunks/
+- __pycache__/
+- *.pyc
+- ~$*
+- 임시 엑셀 파일
+- 보고서 파일 자체: 18_legal_evidence_features/git_commit_push_live_naver_news_report.txt
+
+git add . 미사용 여부:
+- 사용하지 않음
+
+git add -A 미사용 여부:
+- 사용하지 않음
+
+.env/API Key/Client Secret 미커밋 확인:
+- Git 명령 사용 불가로 stage/commit 작업 자체를 수행하지 않음
+- .env, API Key, Client Secret 커밋 없음
+
+Vector DB/chunks 미커밋 확인:
+- 10_vector_db, 10_vector_db_with_major_accident_docs, 08_chunks 커밋 없음
+
+백업 파일 미커밋 확인:
+- app_backup_before_*.py 커밋 없음
+
+commit 성공 여부:
+- 실패/미수행: Git 명령 사용 불가
+
+push 성공 여부:
+- 실패/미수행: Git 명령 사용 불가
+
+최종 git status 요약:
+- 확인 불가: Git 명령 사용 불가
+
+오류 여부:
+- Git 명령 사용 불가로 commit/push 중단
+- 금지 파일은 stage/commit/push되지 않음
+- 보고서에는 API Key, Client Secret, .env 내용을 기록하지 않음

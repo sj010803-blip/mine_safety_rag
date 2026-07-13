@@ -1,0 +1,40 @@
+MineSafe AI 3모델 유사성 지수 통합 엑셀 생성 보고서
+
+- 생성 시간: 2026-07-10 16:17:07
+
+1. 입력 파일 목록
+- model_summary: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_comparison_model_summary.xlsx
+- question_summary: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_comparison_question_summary.xlsx
+- pairwise_scores: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_comparison_pairwise_scores.xlsx
+- answer_collection: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_answer_collection_filled_from_raw.xlsx
+- final_report: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_comparison_final_report.txt
+
+2. 생성된 통합 엑셀 경로
+- C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\MineSafe_AI_유사성지수_3모델_통합보고서.xlsx
+
+3. 생성된 시트 목록
+- 01_모델별_최종요약
+- 02_질문별_요약
+- 03_Pairwise_상세점수
+- 04_답변수집_원문
+- 05_해석_및_주의사항
+
+4. 행 수 요약
+- 01_모델별_최종요약: 3행
+- 02_질문별_요약: 30행
+- 03_Pairwise_상세점수: 300행
+- 04_답변수집_원문: 150행
+- 05_해석_및_주의사항: 7행
+
+5. 모델별 핵심 수치 검증
+- ChatGPT: 평균 41.73, 표준편차 7.98, COMPLETE
+- Gemini: 평균 40.09, 표준편차 9.57, COMPLETE
+- MineSafe AI: 평균 100.00, 표준편차 0.00, COMPLETE
+
+6. 오류 여부
+- 오류 없음
+
+7. 보존/금지사항
+- 기존 파일 삭제/덮어쓰기 없음
+- 기존 17_similarity_index, 110문항 평가 결과, chunks, Vector DB, .env, API Key 미수정/미열람
+- Git commit/push 수행하지 않음

@@ -1,0 +1,60 @@
+MineSafe AI 최종 Git commit/push 보고서
+
+생성 시간: 2026-07-13 15:23:38
+커밋 메시지: feat: expand safety question coverage and warning points
+
+Git 사용 가능 여부:
+- git --version 실행 결과: Git 명령 사용 불가
+- 오류: git 명령이 PATH에서 인식되지 않음
+- 사용자 지침에 따라 억지로 진행하지 않고 stage/commit/push를 중단함
+
+커밋된 파일 목록:
+- 없음
+
+화이트리스트 파일 존재 여부:
+- 존재: app.py
+- 존재: 18_legal_evidence_features/mode_ui_polish_report.txt
+- 존재: 18_legal_evidence_features/general_question_coverage_expansion_report.txt
+- 존재: 18_legal_evidence_features/final_stability_check_report.txt
+- 존재: 18_legal_evidence_features/random_question_coverage_test_questions.txt
+- 존재: 18_legal_evidence_features/random_question_coverage_expansion_report.txt
+- 존재: 18_legal_evidence_features/latest_reference_cases.json
+- 존재: 18_legal_evidence_features/latest_reference_case_card_report.txt
+- 존재: 18_legal_evidence_features/case_based_warning_points_report.txt
+- 없음으로 기록할 화이트리스트 파일 없음
+
+제외한 파일 목록:
+- .env
+- app_backup_before_*.py
+- 10_vector_db/
+- 10_vector_db_with_major_accident_docs/
+- 08_chunks/
+- __pycache__/
+- *.pyc
+- ~$*
+- 임시 엑셀 파일
+- 보고서 파일 자체: 18_legal_evidence_features/git_commit_push_final_ui_question_report.txt
+
+금지 파일 stage 여부:
+- Git 명령 사용 불가로 stage 작업 자체를 수행하지 않음
+- 금지 파일 stage 없음
+
+git add . / git add -A 미사용 여부:
+- 사용하지 않음
+- 개별 git add도 수행하지 않음
+
+commit 성공 여부:
+- 실패/미수행: Git 명령 사용 불가
+
+push 성공 여부:
+- 실패/미수행: Git 명령 사용 불가
+
+커밋 해시:
+- 없음
+
+최종 git status 요약:
+- 확인 불가: Git 명령 사용 불가
+
+오류 여부:
+- Git 명령 사용 불가로 commit/push 중단
+- .env, API Key, Vector DB, chunks, __pycache__, *.pyc, 백업 파일, 임시 엑셀 파일은 커밋하지 않음

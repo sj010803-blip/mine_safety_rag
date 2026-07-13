@@ -1,0 +1,88 @@
+{
+  "chunk_info": {
+    "backup_chunks": "C:\\Users\\USER\\Desktop\\mine_safety_rag\\08_chunks\\chunks_backup_before_major_accident_docs_20260707_172341.jsonl",
+    "pdf_files": [
+      "C:\\Users\\USER\\Desktop\\mine_safety_rag\\01_raw_docs\\중대재해처벌법_추가자료\\중대재해처벌법령_FAQ_중대산업재해.pdf\\중대재해처벌법_따라하기_안내서.pdf.pdf",
+      "C:\\Users\\USER\\Desktop\\mine_safety_rag\\01_raw_docs\\중대재해처벌법_추가자료\\중대재해처벌법령_FAQ_중대산업재해.pdf\\중대재해처벌법_질의회시집.pdf.pdf",
+      "C:\\Users\\USER\\Desktop\\mine_safety_rag\\01_raw_docs\\중대재해처벌법_추가자료\\중대재해처벌법령_FAQ_중대산업재해.pdf\\중대재해처벌법_해설서.pdf.pdf",
+      "C:\\Users\\USER\\Desktop\\mine_safety_rag\\01_raw_docs\\중대재해처벌법_추가자료\\중대재해처벌법령_FAQ_중대산업재해.pdf\\중대재해처벌법령_FAQ_중대산업재해.pdf.pdf"
+    ],
+    "missing_expected": [],
+    "pdf_summaries": [
+      {
+        "file_name": "중대재해처벌법_따라하기_안내서.pdf",
+        "raw_file_name": "중대재해처벌법_따라하기_안내서.pdf.pdf",
+        "page_count": 134,
+        "char_count": 96140,
+        "chunk_count": 76
+      },
+      {
+        "file_name": "중대재해처벌법_질의회시집.pdf",
+        "raw_file_name": "중대재해처벌법_질의회시집.pdf.pdf",
+        "page_count": 233,
+        "char_count": 125152,
+        "chunk_count": 100
+      },
+      {
+        "file_name": "중대재해처벌법_해설서.pdf",
+        "raw_file_name": "중대재해처벌법_해설서.pdf.pdf",
+        "page_count": 249,
+        "char_count": 181408,
+        "chunk_count": 142
+      },
+      {
+        "file_name": "중대재해처벌법령_FAQ_중대산업재해.pdf",
+        "raw_file_name": "중대재해처벌법령_FAQ_중대산업재해.pdf.pdf",
+        "page_count": 55,
+        "char_count": 18533,
+        "chunk_count": 15
+      }
+    ],
+    "original_chunk_count": 487,
+    "added_chunk_count": 333,
+    "new_chunk_count": 820,
+    "new_chunks_path": "C:\\Users\\USER\\Desktop\\mine_safety_rag\\08_chunks\\chunks_with_major_accident_docs.jsonl"
+  },
+  "vector_info": {
+    "new_vector_dir": "C:\\Users\\USER\\Desktop\\mine_safety_rag\\10_vector_db_with_major_accident_docs",
+    "vector_chunk_count": 820
+  },
+  "search_test_path": "C:\\Users\\USER\\Desktop\\mine_safety_rag\\13_added_docs_tests\\major_accident_docs_search_test.txt",
+  "search_summary": [
+    {
+      "query": "중대재해처벌법 FAQ",
+      "added_doc_hits": 5,
+      "top_source": "중대재해처벌법_해설서.pdf"
+    },
+    {
+      "query": "경영책임자 안전보건 확보의무",
+      "added_doc_hits": 4,
+      "top_source": "중대재해처벌법_해설서.pdf"
+    },
+    {
+      "query": "안전보건관리체계 구축",
+      "added_doc_hits": 3,
+      "top_source": "중대재해처벌법_따라하기_안내서.pdf"
+    },
+    {
+      "query": "중대재해처벌법 질의회시",
+      "added_doc_hits": 5,
+      "top_source": "중대재해처벌법_질의회시집.pdf"
+    },
+    {
+      "query": "중대산업재해 예방",
+      "added_doc_hits": 4,
+      "top_source": "03_산업안전보건법.txt"
+    },
+    {
+      "query": "도급 용역 위탁 안전보건 확보의무",
+      "added_doc_hits": 3,
+      "top_source": "중대재해처벌법_따라하기_안내서.pdf"
+    },
+    {
+      "query": "유해위험요인 확인 개선 절차",
+      "added_doc_hits": 4,
+      "top_source": "중대재해처벌법_해설서.pdf"
+    }
+  ]
+}

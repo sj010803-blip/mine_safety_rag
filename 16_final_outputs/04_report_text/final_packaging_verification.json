@@ -1,0 +1,25 @@
+{
+  "final_excel_exists": true,
+  "final_pptx_exists": true,
+  "sheet_names": [
+    "00_최종요약",
+    "01_질문별_답변_점수",
+    "02_모델별_최종점수",
+    "03_평가자별_점수",
+    "04_그래프용_데이터",
+    "05_보고서용_문장",
+    "06_한계점"
+  ],
+  "question_rows": 50,
+  "model_score_rows": 3,
+  "readme_backup_exists": true,
+  "copied_figures": [
+    "final_model_score_bar_chart.png",
+    "final_model_std_bar_chart.png",
+    "judge_model_average_chart.png"
+  ],
+  "github_records": [
+    "git_commit_push_v2_eval_report.txt",
+    "multi_judge_v2_final_complete_report.txt"
+  ]
+}

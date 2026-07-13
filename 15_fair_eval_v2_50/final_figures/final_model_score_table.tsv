@@ -1,0 +1,4 @@
+rank	model	average_score_100	std_score	score_count	missing_score_count	interpretation
+1	MineSafe AI	85.61	7.58	150	0	세 평가자 평균 기준 가장 높은 답변 품질을 보임
+2	Gemini	69.91	15.79	150	0	중간 수준의 평균 점수를 보였으나 평가자 간 편차가 큼
+3	ChatGPT	60.33	12.82	150	0	비교 모델 중 평균 점수가 가장 낮음

@@ -1,0 +1,25 @@
+ChatGPT/Gemini/MineSafe AI 유사성 지수 비교 평가 보고서
+
+- 입력 파일: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_answer_collection_filled_from_raw.xlsx
+- 대표 질문 수: 10개
+- 반복 기준: 각 질문당 5회 답변
+- pairwise 기준: 질문별 10개, 모델별 최대 100개 유사도 점수
+- 계산 방식: difflib.SequenceMatcher
+
+1. 모델별 계산 상태
+- ChatGPT: ready_answers 20/50, pairwise 0, mean NEED_INPUT, status NEED_INPUT
+- Gemini: ready_answers 40/50, pairwise 0, mean NEED_INPUT, status NEED_INPUT
+- MineSafe AI: ready_answers 50/50, pairwise 100, mean 100.0, status COMPLETE
+
+2. 해석
+- 유사성 지수는 정확도 평가가 아니라 동일 질문 반복 입력 시 답변 구조와 핵심 조치가 얼마나 일관되게 유지되는지 확인하는 보조 지표이다.
+- MineSafe AI는 기존 반복 답변 기준 계산 완료 상태이다.
+- ChatGPT/Gemini는 사용자가 동일 질문을 각 5회씩 입력해 답변을 붙여넣은 뒤 계산해야 한다.
+- 답변이 비어 있는 모델은 최종 비교 완료로 표시하지 않고 NEED_INPUT으로 표시한다.
+
+3. 생성 파일
+- similarity_comparison_pairwise_scores.xlsx
+- similarity_comparison_model_summary.xlsx
+- similarity_comparison_question_summary.xlsx
+- similarity_comparison_final_report.txt
+- similarity_comparison_final_bar_chart.png

@@ -1,0 +1,93 @@
+MineSafe AI 110개 평가 질문 Training/Vector DB Leakage 점검 보고서
+작성일: 2026-07-08
+
+1. 점검 대상
+- 질문 시나리오: 02_질문시나리오/question_scenarios_110.tsv
+- 평가 결과: 09_answer_tests/auto_eval_Q001_Q110.tsv
+- 평가 요약: 09_answer_tests/auto_eval_110_full_summary.tsv
+- 검색 corpus chunks: 08_chunks/chunks_with_major_accident_docs.jsonl
+- Vector DB: 10_vector_db_with_major_accident_docs
+- 앱 검색 설정: app.py
+
+2. 점검 방법
+- .env 파일은 열거나 출력하거나 수정하지 않았다.
+- 기존 평가 파일, Vector DB, app.py는 수정하지 않았다.
+- Vector DB는 재생성하지 않고 chroma.sqlite3를 읽기 전용으로 확인했다.
+- 질문 원문, 평가 답변, 평가 근거, 평가 점수/요약 파일 흔적을 chunks 본문 및 Vector DB 저장 본문과 정규화된 문자열 기준으로 대조했다.
+
+3. 핵심 결론
+- 110개 평가 질문 원문이 chunks 또는 Vector DB 본문에 포함된 증거는 없다.
+- 평가 답변(answer_draft), 평가 근거, 평가 점수/요약 파일 내용이 chunks 또는 Vector DB 본문에 섞인 증거는 없다.
+- 현재 앱 검색은 평가 TSV 파일을 검색 corpus로 읽지 않고, 10_vector_db_with_major_accident_docs의 mine_safety_docs 컬렉션을 질의한다.
+- question_scenarios_110.tsv와 auto_eval 파일들은 평가 시나리오/평가 결과 파일이며, 검색 corpus 구축 입력으로 사용된 흔적은 확인되지 않았다.
+
+4. 상세 점검 결과
+
+4.1 질문 원문 포함 여부
+- question_scenarios_110.tsv 행 수: 110개
+- 질문 컬럼: "질문 시나리오"
+- chunks_with_major_accident_docs.jsonl 본문에서 110개 질문 원문 exact match: 0건
+- Vector DB chroma:document 본문에서 110개 질문 원문 exact match: 0건
+- 따라서 Q001~Q110 질문 문장이 검색 corpus 또는 Vector DB 본문에 직접 포함된 것으로 보이지 않는다.
+
+4.2 평가 답변/평가 점수 파일 혼입 여부
+- auto_eval_Q001_Q110.tsv 행 수: 110개
+- 주요 컬럼: question_id, category, question, expected_keywords, retrieved_chunk_ids, retrieved_sources, retrieved_distances, answer_draft, 검색_적합성, 근거_기반성, 안전법령_판단정확성, 실무성, 총점, 판정, 검토필요, 평가_근거, 평가방식
+- answer_draft 110개 긴 셀 exact match: chunks 0건, Vector DB 0건
+- 평가_근거 긴 셀 40개 exact match: chunks 0건, Vector DB 0건
+- auto_eval_Q001_Q110.tsv 전체 행 단위 exact match: chunks 0건
+- auto_eval_110_full_summary.tsv 요약 행 exact match: chunks 0건
+- 평가 점수 헤더(검색_적합성, 근거_기반성, 안전법령_판단정확성, 실무성, 총점, 판정, 검토필요 등) exact match: chunks 0건
+- 평가 파일명/디렉터리명(question_scenarios_110.tsv, auto_eval_Q001_Q110.tsv, auto_eval_110_full_summary.tsv, 09_answer_tests 등) exact match: chunks 0건
+
+4.3 Vector DB와 chunks 일치 여부
+- Vector DB 컬렉션: mine_safety_docs
+- embedding dimension: 384
+- Vector DB embedding 수: 820개
+- chunks_with_major_accident_docs.jsonl chunk 수: 820개
+- chunk_id 기준 공통 ID: 820개
+- chunks에만 있는 ID: 0개
+- Vector DB에만 있는 ID: 0개
+- chunks 본문과 Vector DB chroma:document 본문 불일치: 0개
+- 결론: 현재 Vector DB는 chunks_with_major_accident_docs.jsonl의 820개 chunks와 1:1로 일치한다.
+
+4.4 검색 corpus의 주요 출처
+- 원래 처리된 공식/제도 문서(06_processed_texts 기반): 487 chunks
+- 중대재해처벌법 추가 공식 자료(01_raw_docs/중대재해처벌법_추가자료 기반): 333 chunks
+- 주요 source_file 분포:
+  - 중대재해처벌법_해설서.txt: 142 chunks
+  - 05_산업안전보건법_시행규칙.txt: 103 chunks
+  - 중대재해처벌법_질의회시집.txt: 100 chunks
+  - 03_산업안전보건법.txt: 83 chunks
+  - 중대재해처벌법_따라하기_안내서.txt: 76 chunks
+  - 11_안전보건관리체계_구축_가이드북.txt: 63 chunks
+  - 13_2023_새로운_위험성평가_안내서.txt: 59 chunks
+  - 09_광산안전기술기준_제10차개정_2024-12-19.txt: 51 chunks
+  - 04_산업안전보건법_시행령.txt: 50 chunks
+  - 10_광산안전업무_처리지침_2025-35_latest.txt: 18 chunks
+  - 중대재해처벌법령_FAQ_중대산업재해.txt: 15 chunks
+  - 08_광산안전법_시행규칙.txt: 14 chunks
+  - 06_광산안전법.txt: 12 chunks
+  - 07_광산안전법_시행령.txt: 11 chunks
+  - 02_중대재해처벌법_시행령.txt: 10 chunks
+  - 01_중대재해_처벌_등에_관한_법률.txt: 7 chunks
+  - 12_안전보건관리체계_자율점검표.txt: 6 chunks
+
+4.5 Vector DB 생성 근거 확인
+- add_major_accident_docs_to_rag.py 기준으로 새 chunks 경로는 08_chunks/chunks_with_major_accident_docs.jsonl이고, 새 Vector DB 경로는 10_vector_db_with_major_accident_docs이다.
+- 해당 스크립트는 기존 08_chunks/chunks.jsonl을 읽고, 01_raw_docs/중대재해처벌법_추가자료 아래 PDF에서 추출한 텍스트 chunks를 추가해 chunks_with_major_accident_docs.jsonl을 만든다.
+- Vector DB 생성 단계는 chunks_with_major_accident_docs.jsonl의 rows에서 text를 추출해 documents로 넣고, metadata는 source_file/source_path/chunk_id 등을 넣는다.
+- 해당 생성 경로에서 question_scenarios_110.tsv, auto_eval_Q001_Q110.tsv, auto_eval_110_full_summary.tsv, 09_answer_tests를 corpus 입력으로 읽는 흐름은 확인되지 않았다.
+- chunks 및 Vector DB metadata에 added_stage: after_Q001_Q110_evaluation 라벨이 333개 존재한다. 이는 "Q001~Q110 평가 이후에 중대재해처벌법 추가 공식 문서를 반영했다"는 시점 표시이며, 평가 질문/답변 본문이 corpus에 들어갔다는 의미는 아니다.
+
+4.6 app.py 검색 대상 확인
+- app.py는 VECTOR_DB_DIR을 ROOT_DIR / "10_vector_db_with_major_accident_docs"로 설정한다.
+- COLLECTION_NAME은 "mine_safety_docs"이다.
+- search_vector_db()는 load_chroma_collection()으로 Chroma 컬렉션을 열고 collection.query(include=["documents", "metadatas", "distances"])를 수행한다.
+- question_scenarios_110.tsv 및 auto_eval 파일들은 앱의 평가 시나리오 표시, 평가 진행률/요약 표시 목적으로 경로가 선언되어 있으며, search_vector_db()의 검색 corpus로 직접 사용되지 않는다.
+
+5. 110개 질문의 성격
+Q001~Q110은 모델 학습 또는 검색 corpus 입력용 문서가 아니라, MineSafe AI가 공식 문서 기반 Vector DB에서 적절한 근거를 검색하고 답변하는지 검증하기 위한 평가 시나리오이다. auto_eval_Q001_Q110.tsv와 auto_eval_110_full_summary.tsv 역시 검색 결과와 답변 품질을 사후 평가한 산출물이며, 현재 점검 범위에서는 이 평가 산출물이 chunks나 Vector DB 본문으로 들어간 흔적이 없다.
+
+6. 교수님께 설명할 수 있는 한 문단 요약
+MineSafe AI의 110개 질문은 모델에 넣은 훈련 데이터나 검색 corpus가 아니라 성능 평가용 질문 시나리오입니다. 실제 검색에 사용되는 Vector DB는 08_chunks/chunks_with_major_accident_docs.jsonl의 820개 공식 문서 chunks와 1:1로 일치하며, 주요 출처는 광산안전법/산업안전보건법/광산안전기술기준/위험성평가 안내서/안전보건관리체계 가이드북 및 중대재해처벌법 해설서·질의회시집·따라하기 안내서 등 공식 문서입니다. 질문 원문 110개, 평가 답변, 평가 근거, 평가 점수/요약 파일 문구를 chunks와 Vector DB 본문에 대조한 결과 exact match는 0건이었으므로, 평가 세트가 검색 DB에 유입되어 성능이 부풀려진 정황은 확인되지 않았습니다.

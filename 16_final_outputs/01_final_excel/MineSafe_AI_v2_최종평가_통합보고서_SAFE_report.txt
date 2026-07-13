@@ -1,0 +1,38 @@
+MineSafe AI v2 최종평가 통합보고서 SAFE 생성 보고서
+
+생성 파일 경로: C:\Users\USER\Desktop\mine_safety_rag\16_final_outputs\01_final_excel\MineSafe_AI_v2_최종평가_통합보고서_SAFE.xlsx
+SAFE 파일 생성 확인: True
+기존 CLEAN 파일 보존 확인: True
+시트 목록: 01_질문답변, 02_질문별점수, 03_최종요약, 04_그래프_표, 05_전체평가_raw
+
+각 시트 행 수:
+- 01_질문답변: 50행
+- 02_질문별점수: 50행
+- 03_최종요약: 3행
+- 04_그래프_표: 3행
+- 05_전체평가_raw: 450행
+
+답변 개수 검증 결과:
+- ChatGPT_answer: 50개
+- Gemini_answer: 50개
+- MineSafe_AI_answer: 50개
+
+최종 점수 검증 결과:
+- MineSafe AI: 85.61 / 일치
+- Gemini: 69.91 / 일치
+- ChatGPT: 60.33 / 일치
+
+복구 창 방지 검증:
+- 엑셀 Table 객체 수: 0
+- AutoFilter ref 수: 0
+- zip 내부 xl/tables/table*.xml 존재 여부: False
+- zip 내부 worksheet autoFilter XML 존재 여부: False
+- zip 내부 tableParts 존재 여부: False
+- zip 내부 엑셀 chart XML 존재 여부: False
+- PNG 이미지 삽입 수: 3
+- 삽입 이미지: final_model_score_bar_chart.png, final_model_std_bar_chart.png, judge_model_average_chart.png
+
+깨진 문자 의심 셀 수: 0
+NaN/None/Unnamed 셀 수: 0
+기존 CLEAN 파일은 수정하지 않고 SAFE 새 파일만 생성함
+app.py, Vector DB, chunks, .env는 열람/수정하지 않음

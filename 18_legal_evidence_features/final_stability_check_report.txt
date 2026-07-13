@@ -1,0 +1,65 @@
+MineSafe AI 최종 안정화 점검 보고서
+
+생성 시간: 2026-07-10 21:38:03
+점검 대상 파일: C:\Users\USER\Desktop\mine_safety_rag\app.py
+백업 파일 경로: C:\Users\USER\Desktop\mine_safety_rag\app_backup_before_final_stability_check_20260710_212723.py
+
+문법 검사 결과:
+- 명령: python -m py_compile app.py
+- 결과: 통과
+
+Streamlit 실행 확인 결과:
+- 명령: python -m streamlit run app.py
+- 결과: Streamlit 서버 기동 확인
+- HTTP 확인: http://localhost:8514 응답 및 앱 화면 렌더링 확인
+- 서버 로그: Uvicorn server started 확인
+
+테스트 질문 10개 결과 요약:
+- 1. 안전화를 써야 하는 이유가 뭐야? -> 보호구/PPE 일반 설명형 / 통과
+- 2. 안전모는 어떨 때 쓰는 거야? -> 보호구/PPE 일반 설명형 / 통과
+- 3. 방진마스크는 왜 써야 해? -> 보호구/PPE 일반 설명형 / 통과
+- 4. 갱내 메탄가스 농도가 높게 나오면 어떻게 해야 해? -> 위험상황 대응형 / 환기·유해가스 / 통과
+- 5. 발파 작업 후 불발공이 의심되면 어떤 조치를 해야 해? -> 위험상황 대응형 / 발파·불발 / 통과
+- 6. 천반에 균열이 보이면 어떻게 해야 해? -> 위험상황 대응형 / 낙반·붕락·지보 / 통과
+- 7. 작업 전 TBM은 왜 해야 해? -> 일반 안전교육형 / TBM / 통과
+- 8. 위험성평가는 왜 하는 거야? -> 위험성평가/KRAS형 / 통과
+- 9. 중대재해처벌법 대응을 위해 현장관리자는 뭘 기록해야 해? -> 법령/증빙자료 중심 / 통과
+- 10. 오늘 점심 뭐 먹을까? -> 범위 밖 질문 안내 / 통과
+
+세 모드 차이 확인 결과:
+- 안정성 모드: 메탄가스 질문에서 짧은 체크리스트형 안정 답변, RAG 근거, chunk_id, KRAS, 중대재해처벌법 활용 근거 표시 확인.
+- 자연어 설명 모드: 답변 모드 선택지와 별도 Gemini 프롬프트/실행 경로 확인. 실제 호출은 외부 LLM 호출 실패로 안정형 fallback 전환 확인. fallback 안내는 작은 안내로 표시되고 RAG 근거는 유지됨.
+- 하이브리드 모드: 답변 모드 선택지와 안정형 초안 + Gemini 보완 실행 경로 확인. 실제 호출은 외부 LLM 호출 실패로 안정형 fallback 전환 확인. fallback 안내는 작은 안내로 표시되고 RAG 근거는 유지됨.
+- 코드 경로: STABLE_MODE, GEMINI_MODE, HYBRID_MODE 분기와 prompt_kind=gemini/hybrid 분리 유지 확인.
+
+RAG 근거 표시 유지 여부:
+- 범위 내 질문에서 관련 법령 및 문서 근거 표, 문서명, chunk_id, 거리값, KRAS 위험성평가, 중대재해처벌법 활용 근거, 추천 증빙자료 섹션 유지 확인.
+
+범위 밖 질문 처리 여부:
+- "오늘 점심 뭐 먹을까?" 질문에서 광산 안전관리 범위 밖 안내 확인.
+- 범위 밖 질문에서는 RAG 근거 문서, KRAS, 중대재해처벌법 패널이 억지로 표시되지 않는 것 확인.
+
+개발자 정보 노출 정리 여부:
+- 현장관리자 모드에서 개발자용 실행 정보 expander 미표시 확인.
+- 현장관리자 모드에서 Gemini API 호출 여부, 호출 성공 여부, 사용 모델명, 실제 실행 방식 상세, API Key 값 미표시 확인.
+- 관리자/개발자 모드에서는 개발자용 실행 정보 expander 표시 확인.
+- API Key 값 또는 .env 내용 출력 없음.
+
+코드 정리 점검:
+- 불필요한 print/debug 출력 없음.
+- GEMINI_API_KEY는 환경변수/Secrets 확인과 안내 문구에만 사용되며 값 출력 없음.
+- 빈 검색 결과 및 범위 밖 질문 분기에서 앱 오류 없이 안내 표시 확인.
+- 근거 문서 메타데이터 st.json은 근거 카드 expander 내 표시용이며 API Key 값 노출과 무관.
+
+수정 요약:
+- app.py 수정 없음. 점검 결과 문법/실행/UI 안정성에 치명 오류가 없어 추가 코드는 변경하지 않음.
+- 생성 파일: C:\Users\USER\Desktop\mine_safety_rag\18_legal_evidence_features\final_stability_check_report.txt
+
+오류 여부:
+- 문법 오류 없음.
+- Streamlit 기동 오류 없음.
+- 10개 질문 UI 테스트 중 Traceback, NameError, KeyError, IndentationError, TypeError 미발생.
+- 자연어 설명/하이브리드 모드의 외부 LLM 호출은 테스트 시 실패했으나, 의도된 안정형 fallback으로 전환되어 앱 오류는 없음.
+
+Git commit/push 여부:
+- Git commit/push 수행하지 않음.

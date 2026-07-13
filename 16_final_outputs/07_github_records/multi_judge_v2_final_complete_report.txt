@@ -1,0 +1,62 @@
+MineSafe AI v2 다중 평가 최종 완성본 집계 보고서
+
+1. 사용한 TSV 파일 목록
+- judge_raw_outputs\GPT\GPT_result_20q_01_FQ001_FQ020.tsv
+- judge_raw_outputs\GPT\GPT_result_20q_02_FQ021_FQ040.tsv
+- judge_raw_outputs\GPT\GPT_result_20q_03_FQ041_FQ050.tsv
+- judge_raw_outputs\Gemini\Gemini_result_20q_01_FQ001_FQ020.tsv
+- judge_raw_outputs\Gemini\Gemini_result_20q_02_FQ021_FQ040.tsv
+- judge_raw_outputs\Gemini\Gemini_result_20q_03_FQ041_FQ050.tsv
+- judge_raw_outputs\Claude\Claude_result_20q_01_FQ001_FQ020.tsv
+- judge_raw_outputs\Claude\Claude_result_20q_02_FQ021_FQ040.tsv
+- judge_raw_outputs\Claude\Claude_result_20q_03_FQ041_FQ050.tsv
+- judge_raw_outputs\Gemini\Gemini_result_missing_3_scores.tsv
+
+2. 제외한 5문항/비사용 TSV 파일 목록
+- judge_raw_outputs\GPT\GPT_result_01_FQ001_FQ005.tsv
+- judge_raw_outputs\GPT\GPT_result_02_FQ006_FQ010.tsv
+
+3. 전체 평가 행 수
+- 기대 조합 수: 450행 = 50문항 x Answer A/B/C 3개 x 평가자 3명
+- 실제 점수 병합 행 수: 450행
+- MISSING_SCORE 행 수: 0행
+
+4. 모델별 평균점수 및 표준편차
+- MineSafe AI: 평균 85.61점, 표준편차 7.58, 점수 수 150/150, 최종 순위 1
+- Gemini: 평균 69.91점, 표준편차 15.79, 점수 수 150/150, 최종 순위 2
+- ChatGPT: 평균 60.33점, 표준편차 12.82, 점수 수 150/150, 최종 순위 3
+
+5. 모델별 평가자별 평균점수
+- ChatGPT / GPT judge: 평균 75.60점, 표준편차 2.56, 점수 수 50/50
+- ChatGPT / Gemini judge: 평균 60.06점, 표준편차 4.77, 점수 수 50/50
+- ChatGPT / Claude judge: 평균 45.34점, 표준편차 1.69, 점수 수 50/50
+- Gemini / GPT judge: 평균 83.12점, 표준편차 2.30, 점수 수 50/50
+- Gemini / Gemini judge: 평균 78.46점, 표준편차 3.95, 점수 수 50/50
+- Gemini / Claude judge: 평균 48.14점, 표준편차 0.83, 점수 수 50/50
+- MineSafe AI / GPT judge: 평균 85.22점, 표준편차 4.97, 점수 수 50/50
+- MineSafe AI / Gemini judge: 평균 94.32점, 표준편차 0.82, 점수 수 50/50
+- MineSafe AI / Claude judge: 평균 77.28점, 표준편차 0.97, 점수 수 50/50
+
+6. 가장 높은 평균점수를 받은 모델
+- MineSafe AI (평균 85.61점)
+
+7. 검증 결과
+- GPT 20q 결과 파일 3개 사용: 예
+- Gemini 20q 결과 파일 3개 사용: 예
+- Claude 20q 결과 파일 3개 사용: 예
+- Gemini 누락 보완 TSV 1개 사용: 예
+- 5문항 batch 결과 파일 제외: 예
+- 전체 평가 행 수 450행: 예
+- MISSING_SCORE 0개: 예
+- 전체 question_id FQ001~FQ050 포함: 예
+- Answer A/B/C 실제 모델명 매칭: 예
+- app.py 수정 여부: 아니오
+- Vector DB 수정 여부: 아니오
+- chunks 파일 수정 여부: 아니오
+- 기존 09_answer_tests 평가 파일 수정 여부: 아니오
+- 기존 12_compare_experiment 비교 실험 파일 수정 여부: 아니오
+- 기존 94.90점 결과 재계산/덮어쓰기 여부: 아니오
+- .env/API Key 열람 또는 출력 여부: 아니오
+
+8. 교수님께 설명할 수 있는 한 문단 요약
+이번 최종 완성본은 기존 20문항 batch 평가 결과 9개 파일에 Gemini judge 누락 보완 TSV 1개를 추가 병합하여 총 450개 평가 점수를 모두 채운 결과입니다. Answer A/B/C는 blind_eval_answer_key_50_v2.xlsx를 통해 실제 모델명으로 매칭했고, 5문항 batch 결과는 제외했습니다. 따라서 v2 다중 평가는 50문항, 3개 답변, 3명의 평가자 기준으로 MISSING_SCORE 없이 모델별 평균점수, 표준편차, 평가자별 평균, 질문별 순위를 산출한 완성본입니다.

@@ -1,0 +1,157 @@
+{"kind":"deck","id":"pr/986jpg","name":"Deck"}
+{"kind":"layout","layoutId":"/ppt/slideMasters/slideMaster1.xml","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"/ppt/slideLayouts/slideLayout1.xml","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/2x4nap4r","slide":1,"title":"MineSafe AI","textShapes":5}
+{"kind":"textbox","id":"sh/nap4r65w","slide":1,"text":"MineSafe AI","textPreview":"MineSafe AI","textChars":11,"textLines":1,"bbox":[80,116,820,74]}
+{"kind":"textbox","id":"sh/cvixczed","slide":1,"text":"광산 안전 지침 및 중대재해처벌법 대응 RAG 가상 안전관리자","textPreview":"광산 안전 지침 및 중대재해처벌법 대응 RAG 가상 안전관리자","textChars":34,"textLines":1,"bbox":[84,206,900,42]}
+{"kind":"shape","id":"sh/5gbq1ory","slide":1,"bbox":[84,320,430,120]}
+{"kind":"textbox","id":"sh/udg7adsj","slide":1,"text":"v2 블라인드 다중평가 결과","textPreview":"v2 블라인드 다중평가 결과","textChars":15,"textLines":1,"bbox":[112,344,370,30]}
+{"kind":"textbox","id":"sh/nyd0z610","slide":1,"text":"MineSafe AI 평균 85.61점, 1위","textPreview":"MineSafe AI 평균 85.61점, 1위","textChars":25,"textLines":1,"bbox":[112,390,370,34]}
+{"kind":"textbox","id":"sh/cj6tovah","slide":1,"text":"강원대학교 에너지자원공학과","textPreview":"강원대학교 에너지자원공학과","textChars":14,"textLines":1,"bbox":[84,588,560,34]}
+{"kind":"notes","id":"nt/2x4nap4r","slide":1,"text":""}
+{"kind":"slide","id":"sl/pg3ex0nu","slide":2,"title":"광산 현장은 즉시 판단 가능한 근거형 답변이 필요하다","textShapes":8}
+{"kind":"textbox","id":"sh/yxobm58z","slide":2,"text":"광산 현장은 즉시 판단 가능한 근거형 답변이 필요하다","textPreview":"광산 현장은 즉시 판단 가능한 근거형 답변이 필요하다","textChars":29,"textLines":1,"bbox":[68,46,960,54]}
+{"kind":"textbox","id":"sh/5o7qpg3e","slide":2,"text":"발파, 유해가스, 낙반, 장비 협착 상황은 일반 설명보다 조치 우선순위가 중요합니다.","textPreview":"발파, 유해가스, 낙반, 장비 협착 상황은 일반 설명보다 조치 우선순위가 중요합니다.","textChars":47,"textLines":1,"bbox":[70,104,1040,42]}
+{"kind":"shape","id":"sh/g3ex0nux","slide":2,"bbox":[68,150,1140,2]}
+{"kind":"textbox","id":"sh/r65wjudg","slide":2,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[98,215,28,34]}
+{"kind":"textbox","id":"sh/ylc7u54z","slide":2,"text":"안전관리자는 작업중지, 접근통제, 보고, 작업재개 조건을 빠르게 판단해야 함","textPreview":"안전관리자는 작업중지, 접근통제, 보고, 작업재개 조건을 빠르게 판단해야 함","textChars":42,"textLines":1,"bbox":[132,215,976,42]}
+{"kind":"textbox","id":"sh/9cvixcze","slide":2,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[98,287,28,34]}
+{"kind":"textbox","id":"sh/gr2p8nqx","slide":2,"text":"일반 생성형 AI는 공식 문서 근거와 광산 현장 절차를 일관되게 제시하기 어려움","textPreview":"일반 생성형 AI는 공식 문서 근거와 광산 현장 절차를 일관되게 제시하기 어려움","textChars":44,"textLines":1,"bbox":[132,287,976,42]}
+{"kind":"textbox","id":"sh/rytsvu9k","slide":2,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[98,359,28,34]}
+{"kind":"textbox","id":"sh/yd0z6103","slide":2,"text":"법령 대응까지 고려하려면 안전보건관리체계와 기록·보고 관점이 함께 필요함","textPreview":"법령 대응까지 고려하려면 안전보건관리체계와 기록·보고 관점이 함께 필요함","textChars":40,"textLines":1,"bbox":[132,359,976,42]}
+{"kind":"notes","id":"nt/pg3ex0nu","slide":2,"text":""}
+{"kind":"slide","id":"sl/s72x4nap","slide":3,"title":"문제는 답변 속도가 아니라 현장 적합성과 근거 추적성이다","textShapes":8}
+{"kind":"textbox","id":"sh/vmtwra5g","slide":3,"text":"문제는 답변 속도가 아니라 현장 적합성과 근거 추적성이다","textPreview":"문제는 답변 속도가 아니라 현장 적합성과 근거 추적성이다","textChars":31,"textLines":1,"bbox":[68,46,960,54]}
+{"kind":"textbox","id":"sh/o7qpg3ex","slide":3,"text":"MineSafe AI는 안전관리자가 실제로 확인해야 할 판단 항목을 중심에 둡니다.","textPreview":"MineSafe AI는 안전관리자가 실제로 확인해야 할 판단 항목을 중심에 둡니다.","textChars":46,"textLines":1,"bbox":[70,104,1040,42]}
+{"kind":"shape","id":"sh/dsji5sne","slide":3,"bbox":[68,150,1140,2]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":3,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,210,28,34]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":3,"text":"질문에 대한 직접 판단과 위험 수준 설명이 필요함","textPreview":"질문에 대한 직접 판단과 위험 수준 설명이 필요함","textChars":27,"textLines":1,"bbox":[134,210,1006,42]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":3,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,284,28,34]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":3,"text":"공식 문서 근거, 출처 추적성, 현장 조치가 답변 품질의 핵심임","textPreview":"공식 문서 근거, 출처 추적성, 현장 조치가 답변 품질의 핵심임","textChars":35,"textLines":1,"bbox":[134,284,1006,42]}
+{"kind":"textbox","id":"sh/6hcrmhk3","slide":3,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,358,28,34]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":3,"text":"작업재개는 위험요인 제거, 책임자 확인, 기록 완료 후 판단해야 함","textPreview":"작업재개는 위험요인 제거, 책임자 확인, 기록 완료 후 판단해야 함","textChars":37,"textLines":1,"bbox":[134,358,1006,42]}
+{"kind":"notes","id":"nt/s72x4nap","slide":3,"text":""}
+{"kind":"slide","id":"sl/val87ed8","slide":4,"title":"MineSafe AI는 공식 문서 기반 RAG로 안전 답변을 생성한다","textShapes":12}
+{"kind":"textbox","id":"sh/1gvy90je","slide":4,"text":"MineSafe AI는 공식 문서 기반 RAG로 안전 답변을 생성한다","textPreview":"MineSafe AI는 공식 문서 기반 RAG로 안전 답변을 생성한다","textChars":38,"textLines":1,"bbox":[68,46,960,54]}
+{"kind":"textbox","id":"sh/qtcj6tov","slide":4,"text":"Streamlit 앱, Vector DB, 통합 chunks, 답변 템플릿을 하나의 흐름으로 구성했습니다.","textPreview":"Streamlit 앱, Vector DB, 통합 chunks, 답변 템플릿을 하나의 흐름으로 구성했습니다.","textChars":59,"textLines":1,"bbox":[70,104,1040,42]}
+{"kind":"shape","id":"sh/je9cvixc","slide":4,"bbox":[68,150,1140,2]}
+{"kind":"shape","id":"sh/87ed8bat","slide":4,"bbox":[90,220,250,110]}
+{"kind":"textbox","id":"sh/xs72x4na","slide":4,"text":"사용자 질문","textPreview":"사용자 질문","textChars":6,"textLines":1,"bbox":[125,256,190,38]}
+{"kind":"shape","id":"sh/q1orytsv","slide":4,"bbox":[380,220,250,110]}
+{"kind":"textbox","id":"sh/fmlkjm1c","slide":4,"text":"Vector DB 검색","textPreview":"Vector DB 검색","textChars":12,"textLines":1,"bbox":[410,256,210,38]}
+{"kind":"shape","id":"sh/8jqh0fep","slide":4,"bbox":[670,220,250,110]}
+{"kind":"textbox","id":"sh/x4nap4r6","slide":4,"text":"근거 기반 생성","textPreview":"근거 기반 생성","textChars":8,"textLines":1,"bbox":[700,256,210,38]}
+{"kind":"shape","id":"sh/1w7mp0bi","slide":4,"bbox":[960,220,230,110]}
+{"kind":"textbox","id":"sh/8bat47y1","slide":4,"text":"안전관리 답변","textPreview":"안전관리 답변","textChars":7,"textLines":1,"bbox":[988,256,190,38]}
+{"kind":"textbox","id":"sh/jqh0fepk","slide":4,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[120,420,28,34]}
+{"kind":"textbox","id":"sh/q5o7qpg3","slide":4,"text":"검색 컬렉션: mine_safety_docs","textPreview":"검색 컬렉션: mine_safety_docs","textChars":24,"textLines":1,"bbox":[154,420,956,42]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":4,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[120,472,28,34]}
+{"kind":"textbox","id":"sh/8nqxs72x","slide":4,"text":"통합 chunks: 820개","textPreview":"통합 chunks: 820개","textChars":15,"textLines":1,"bbox":[154,472,956,42]}
+{"kind":"textbox","id":"sh/j2t83itg","slide":4,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[120,524,28,34]}
+{"kind":"textbox","id":"sh/qh0fepkz","slide":4,"text":"답변 항목: 즉시 판단, 조치, 재개 조건, KRAS, 기록·보고","textPreview":"답변 항목: 즉시 판단, 조치, 재개 조건, KRAS, 기록·보고","textChars":36,"textLines":1,"bbox":[154,524,956,42]}
+{"kind":"notes","id":"nt/val87ed8","slide":4,"text":""}
+{"kind":"slide","id":"sl/mlkjm1cf","slide":5,"title":"RAG corpus는 공식 문서 기반 chunks로 구성했다","textShapes":10}
+{"kind":"textbox","id":"sh/vahoza1g","slide":5,"text":"RAG corpus는 공식 문서 기반 chunks로 구성했다","textPreview":"RAG corpus는 공식 문서 기반 chunks로 구성했다","textChars":33,"textLines":1,"bbox":[68,46,960,54]}
+{"kind":"textbox","id":"sh/ovahoza1","slide":5,"text":"평가 질문은 검색 corpus가 아니라 별도 평가 시나리오로 분리해 관리했습니다.","textPreview":"평가 질문은 검색 corpus가 아니라 별도 평가 시나리오로 분리해 관리했습니다.","textChars":45,"textLines":1,"bbox":[70,104,1040,42]}
+{"kind":"shape","id":"sh/dg7adsji","slide":5,"bbox":[68,150,1140,2]}
+{"kind":"textbox","id":"sh/6hcrmhk3","slide":5,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,210,28,34]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":5,"text":"사용 Vector DB: 10_vector_db_with_major_accident_docs","textPreview":"사용 Vector DB: 10_vector_db_with_major_accident_docs","textChars":51,"textLines":1,"bbox":[124,210,1046,42]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":5,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,272,28,34]}
+{"kind":"textbox","id":"sh/d8v6psfi","slide":5,"text":"통합 chunks 파일: 08_chunks/chunks_with_major_accident_docs.jsonl","textPreview":"통합 chunks 파일: 08_chunks/chunks_with_major_accident_docs.jsonl","textChars":61,"textLines":1,"bbox":[124,272,1046,42]}
+{"kind":"textbox","id":"sh/6dcbulwv","slide":5,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,334,28,34]}
+{"kind":"textbox","id":"sh/vy90je9c","slide":5,"text":"v2 평가 질문과 답변 파일은 corpus가 아닌 평가용 파일로 보존","textPreview":"v2 평가 질문과 답변 파일은 corpus가 아닌 평가용 파일로 보존","textChars":38,"textLines":1,"bbox":[124,334,1046,42]}
+{"kind":"textbox","id":"sh/nuxc3ylc","slide":5,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,396,28,34]}
+{"kind":"textbox","id":"sh/y90je9cv","slide":5,"text":"leakage 검사에서 Q001~Q110 질문 원문 exact match 0건 확인","textPreview":"leakage 검사에서 Q001~Q110 질문 원문 exact match 0건 확인","textChars":46,"textLines":1,"bbox":[124,396,1046,42]}
+{"kind":"notes","id":"nt/mlkjm1cf","slide":5,"text":""}
+{"kind":"slide","id":"sl/58z25kb6","slide":6,"title":"중대재해처벌법 자료는 관리체계 관점을 보완한다","textShapes":8}
+{"kind":"textbox","id":"sh/9cvixcze","slide":6,"text":"중대재해처벌법 자료는 관리체계 관점을 보완한다","textPreview":"중대재해처벌법 자료는 관리체계 관점을 보완한다","textChars":25,"textLines":1,"bbox":[68,46,960,54]}
+{"kind":"textbox","id":"sh/ylc7u54z","slide":6,"text":"사고 대응을 기술 조치에만 머물지 않게 하고 기록·보고와 재발방지까지 연결합니다.","textPreview":"사고 대응을 기술 조치에만 머물지 않게 하고 기록·보고와 재발방지까지 연결합니다.","textChars":45,"textLines":1,"bbox":[70,104,1040,42]}
+{"kind":"shape","id":"sh/r65wjudg","slide":6,"bbox":[68,150,1140,2]}
+{"kind":"textbox","id":"sh/g3ex0nux","slide":6,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,215,28,34]}
+{"kind":"textbox","id":"sh/5o7qpg3e","slide":6,"text":"안전보건관리체계, 경영책임자 의무, 재발방지 관점 반영","textPreview":"안전보건관리체계, 경영책임자 의무, 재발방지 관점 반영","textChars":30,"textLines":1,"bbox":[134,215,986,42]}
+{"kind":"textbox","id":"sh/yxobm58z","slide":6,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,287,28,34]}
+{"kind":"textbox","id":"sh/nih4byhg","slide":6,"text":"작업중지, 접근통제, 기록·보고, 작업재개 조건을 답변 구조에 포함","textPreview":"작업중지, 접근통제, 기록·보고, 작업재개 조건을 답변 구조에 포함","textChars":37,"textLines":1,"bbox":[134,287,986,42]}
+{"kind":"textbox","id":"sh/g7adsji5","slide":6,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,359,28,34]}
+{"kind":"textbox","id":"sh/9s36hcrm","slide":6,"text":"법령 조문을 무리하게 단정하기보다 확인 가능한 근거 중심으로 답변","textPreview":"법령 조문을 무리하게 단정하기보다 확인 가능한 근거 중심으로 답변","textChars":36,"textLines":1,"bbox":[134,359,986,42]}
+{"kind":"notes","id":"nt/58z25kb6","slide":6,"text":""}
+{"kind":"slide","id":"sl/0z61032l","slide":7,"title":"Streamlit 앱은 현장 질문을 조치 중심 답변으로 바꾼다","textShapes":10}
+{"kind":"textbox","id":"sh/qd4vmtwr","slide":7,"text":"Streamlit 앱은 현장 질문을 조치 중심 답변으로 바꾼다","textPreview":"Streamlit 앱은 현장 질문을 조치 중심 답변으로 바꾼다","textChars":34,"textLines":1,"bbox":[68,46,960,54]}
+{"kind":"textbox","id":"sh/x4nap4r6","slide":7,"text":"시연에서는 질문 입력 후 근거, 우선 조치, 체크리스트, 보고 항목을 순서대로 확인합니다.","textPreview":"시연에서는 질문 입력 후 근거, 우선 조치, 체크리스트, 보고 항목을 순서대로 확인합니다.","textChars":50,"textLines":1,"bbox":[70,104,1040,42]}
+{"kind":"shape","id":"sh/8jqh0fep","slide":7,"bbox":[68,150,1140,2]}
+{"kind":"textbox","id":"sh/fa9w3m94","slide":7,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,205,28,34]}
+{"kind":"textbox","id":"sh/qpg3ex0n","slide":7,"text":"광산 안전 질문 입력과 RAG 검색 기반 답변 생성","textPreview":"광산 안전 질문 입력과 RAG 검색 기반 답변 생성","textChars":28,"textLines":1,"bbox":[134,205,1016,42]}
+{"kind":"textbox","id":"sh/xczed8v6","slide":7,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,267,28,34]}
+{"kind":"textbox","id":"sh/8v6psfil","slide":7,"text":"즉시 판단, 우선 조치, 작업 재개 조건 자동 정리","textPreview":"즉시 판단, 우선 조치, 작업 재개 조건 자동 정리","textChars":28,"textLines":1,"bbox":[134,267,1016,42]}
+{"kind":"textbox","id":"sh/je9cvixc","slide":7,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,329,28,34]}
+{"kind":"textbox","id":"sh/qtcj6tov","slide":7,"text":"KRAS식 위험성평가 초안과 현장 조치 체크리스트 제공","textPreview":"KRAS식 위험성평가 초안과 현장 조치 체크리스트 제공","textChars":30,"textLines":1,"bbox":[134,329,1016,42]}
+{"kind":"textbox","id":"sh/svu9knih","slide":7,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,391,28,34]}
+{"kind":"textbox","id":"sh/hgn29gr2","slide":7,"text":"기록·보고 사항을 별도 항목으로 정리","textPreview":"기록·보고 사항을 별도 항목으로 정리","textChars":20,"textLines":1,"bbox":[134,391,1016,42]}
+{"kind":"notes","id":"nt/0z61032l","slide":7,"text":""}
+{"kind":"slide","id":"sl/fu18jqh0","slide":8,"title":"v2 평가는 기존 비교의 공정성 한계를 보완했다","textShapes":12}
+{"kind":"textbox","id":"sh/1032lszq","slide":8,"text":"v2 평가는 기존 비교의 공정성 한계를 보완했다","textPreview":"v2 평가는 기존 비교의 공정성 한계를 보완했다","textChars":26,"textLines":1,"bbox":[68,46,960,54]}
+{"kind":"textbox","id":"sh/u9knih4b","slide":8,"text":"질문 수, 익명화, 랜덤화, 다중 평가자를 함께 적용했습니다.","textPreview":"질문 수, 익명화, 랜덤화, 다중 평가자를 함께 적용했습니다.","textChars":34,"textLines":1,"bbox":[70,104,1040,42]}
+{"kind":"shape","id":"sh/judg7ads","slide":8,"bbox":[68,150,1140,2]}
+{"kind":"textbox","id":"sh/c7u54zid","slide":8,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,190,28,34]}
+{"kind":"textbox","id":"sh/1orytsvu","slide":8,"text":"평가 질문을 20문항에서 50문항으로 확장","textPreview":"평가 질문을 20문항에서 50문항으로 확장","textChars":23,"textLines":1,"bbox":[124,190,1026,42]}
+{"kind":"textbox","id":"sh/u18jqh0f","slide":8,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,248,28,34]}
+{"kind":"textbox","id":"sh/jm1cfa9w","slide":8,"text":"ChatGPT, Gemini, MineSafe AI 답변을 Answer A/B/C로 블라인드 처리","textPreview":"ChatGPT, Gemini, MineSafe AI 답변을 Answer A/B/C로 블라인드 처리","textChars":54,"textLines":1,"bbox":[124,248,1026,42]}
+{"kind":"textbox","id":"sh/cvixczed","slide":8,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,306,28,34]}
+{"kind":"textbox","id":"sh/5gbq1ory","slide":8,"text":"질문마다 답변 순서를 랜덤화해 위치 편향을 줄임","textPreview":"질문마다 답변 순서를 랜덤화해 위치 편향을 줄임","textChars":26,"textLines":1,"bbox":[124,306,1026,42]}
+{"kind":"textbox","id":"sh/18jqh0fe","slide":8,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,364,28,34]}
+{"kind":"textbox","id":"sh/8nqxs72x","slide":8,"text":"GPT/Gemini/Claude 3개 평가자가 참여해 총 450개 점수 산출","textPreview":"GPT/Gemini/Claude 3개 평가자가 참여해 총 450개 점수 산출","textChars":42,"textLines":1,"bbox":[124,364,1026,42]}
+{"kind":"textbox","id":"sh/j2t83itg","slide":8,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,422,28,34]}
+{"kind":"textbox","id":"sh/qh0fepkz","slide":8,"text":"MISSING_SCORE 0개로 최종 병합본 완성","textPreview":"MISSING_SCORE 0개로 최종 병합본 완성","textChars":27,"textLines":1,"bbox":[124,422,1026,42]}
+{"kind":"notes","id":"nt/fu18jqh0","slide":8,"text":""}
+{"kind":"slide","id":"sl/qh0fepkz","slide":9,"title":"MineSafe AI가 v2 블라인드 다중평가에서 1위를 기록했다","textShapes":3}
+{"kind":"textbox","id":"sh/vahoza1g","slide":9,"text":"MineSafe AI가 v2 블라인드 다중평가에서 1위를 기록했다","textPreview":"MineSafe AI가 v2 블라인드 다중평가에서 1위를 기록했다","textChars":36,"textLines":1,"bbox":[68,46,960,54]}
+{"kind":"textbox","id":"sh/ovahoza1","slide":9,"text":"평균점수와 표준편차 모두 발표자료에 바로 사용할 수 있도록 정리했습니다.","textPreview":"평균점수와 표준편차 모두 발표자료에 바로 사용할 수 있도록 정리했습니다.","textChars":40,"textLines":1,"bbox":[70,104,1040,42]}
+{"kind":"shape","id":"sh/dg7adsji","slide":9,"bbox":[68,150,1140,2]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":9,"text":"MineSafe AI 85.61점 > Gemini 69.91점 > ChatGPT 60.33점","textPreview":"MineSafe AI 85.61점 > Gemini 69.91점 > ChatGPT 60.33점","textChars":51,"textLines":1,"bbox":[128,600,1000,38]}
+{"kind":"image","id":"im/wval87ed","slide":9,"name":"","bbox":[76,202,540,324]}
+{"kind":"image","id":"im/36hcrmhk","slide":9,"name":"","bbox":[660,204,500,300]}
+{"kind":"notes","id":"nt/qh0fepkz","slide":9,"text":""}
+{"kind":"slide","id":"sl/29gr2p8n","slide":10,"title":"결론은 긍정적이지만 전문가 검토가 필요하다","textShapes":10}
+{"kind":"textbox","id":"sh/2p8nqxs7","slide":10,"text":"결론은 긍정적이지만 전문가 검토가 필요하다","textPreview":"결론은 긍정적이지만 전문가 검토가 필요하다","textChars":23,"textLines":1,"bbox":[68,46,960,54]}
+{"kind":"textbox","id":"sh/9gr2p8nq","slide":10,"text":"MineSafe AI는 연구용 RAG 안전관리 보조도구로 가능성을 보였고, 현장 적용 전 검증이 필요합니다.","textPreview":"MineSafe AI는 연구용 RAG 안전관리 보조도구로 가능성을 보였고, 현장 적용 전 검증이 필요합니다.","textChars":60,"textLines":1,"bbox":[70,104,1040,42]}
+{"kind":"shape","id":"sh/gvy90je9","slide":10,"bbox":[68,150,1140,2]}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":10,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,205,28,34]}
+{"kind":"textbox","id":"sh/94fu18jq","slide":10,"text":"공식 문서 기반 검색과 현장 조치 중심 답변이 강점","textPreview":"공식 문서 기반 검색과 현장 조치 중심 답변이 강점","textChars":28,"textLines":1,"bbox":[124,205,536,42]}
+{"kind":"textbox","id":"sh/kjm1cfa9","slide":10,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,265,28,34]}
+{"kind":"textbox","id":"sh/rqd4vmtw","slide":10,"text":"AI 평가자 기반 결과이므로 절대적 정답으로 해석하면 안 됨","textPreview":"AI 평가자 기반 결과이므로 절대적 정답으로 해석하면 안 됨","textChars":33,"textLines":1,"bbox":[124,265,536,42]}
+{"kind":"textbox","id":"sh/25kb6xkf","slide":10,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,325,28,34]}
+{"kind":"textbox","id":"sh/4fu18jqh","slide":10,"text":"50문항 평가이며 광산별 작업 조건을 모두 대표하지는 않음","textPreview":"50문항 평가이며 광산별 작업 조건을 모두 대표하지는 않음","textChars":32,"textLines":1,"bbox":[124,325,536,42]}
+{"kind":"textbox","id":"sh/x0nuxc3y","slide":10,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[90,385,28,34]}
+{"kind":"textbox","id":"sh/m94fu18j","slide":10,"text":"실제 적용 전 광산 안전 전문가와 법률 전문가 검토 필요","textPreview":"실제 적용 전 광산 안전 전문가와 법률 전문가 검토 필요","textChars":31,"textLines":1,"bbox":[124,385,536,42]}
+{"kind":"image","id":"im/oza1gvy9","slide":10,"name":"","bbox":[710,228.68,470,262.65]}
+{"kind":"notes","id":"nt/29gr2p8n","slide":10,"text":""}
+{"kind":"slide","id":"sl/re1w7mp0","slide":11,"title":"향후에는 전문가 평가와 현장 피드백으로 신뢰도를 높인다","textShapes":10}
+{"kind":"textbox","id":"sh/dg7adsji","slide":11,"text":"향후에는 전문가 평가와 현장 피드백으로 신뢰도를 높인다","textPreview":"향후에는 전문가 평가와 현장 피드백으로 신뢰도를 높인다","textChars":30,"textLines":1,"bbox":[68,46,960,54]}
+{"kind":"textbox","id":"sh/6tovahoz","slide":11,"text":"최종 목표는 안전관리자가 근거 있는 판단을 더 빠르게 하도록 돕는 보조도구입니다.","textPreview":"최종 목표는 안전관리자가 근거 있는 판단을 더 빠르게 하도록 돕는 보조도구입니다.","textChars":45,"textLines":1,"bbox":[70,104,1040,42]}
+{"kind":"shape","id":"sh/vahoza1g","slide":11,"bbox":[68,150,1140,2]}
+{"kind":"textbox","id":"sh/onyd0z61","slide":11,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,215,28,34]}
+{"kind":"textbox","id":"sh/d8v6psfi","slide":11,"text":"최신 법령과 지침 문서의 지속 업데이트","textPreview":"최신 법령과 지침 문서의 지속 업데이트","textChars":21,"textLines":1,"bbox":[134,215,976,42]}
+{"kind":"textbox","id":"sh/6hcrmhk3","slide":11,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,287,28,34]}
+{"kind":"textbox","id":"sh/z25kb6xk","slide":11,"text":"광종·작업별 시나리오와 평가 질문 확대","textPreview":"광종·작업별 시나리오와 평가 질문 확대","textChars":21,"textLines":1,"bbox":[134,287,976,42]}
+{"kind":"textbox","id":"sh/oj2t83it","slide":11,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,359,28,34]}
+{"kind":"textbox","id":"sh/d4vmtwra","slide":11,"text":"광산 안전 전문가 평가를 추가해 AI 평가 한계 보완","textPreview":"광산 안전 전문가 평가를 추가해 AI 평가 한계 보완","textChars":29,"textLines":1,"bbox":[134,359,976,42]}
+{"kind":"textbox","id":"sh/h4byhgn2","slide":11,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[100,431,28,34]}
+{"kind":"textbox","id":"sh/sji5snel","slide":11,"text":"현장 피드백 기반 답변 구조와 출처 표시 고도화","textPreview":"현장 피드백 기반 답변 구조와 출처 표시 고도화","textChars":26,"textLines":1,"bbox":[134,431,976,42]}
+{"kind":"notes","id":"nt/re1w7mp0","slide":11,"text":""}
+{"kind":"slide","id":"sl/wyl1aq","slide":12,"title":"동일 질문 반복 답변 유사성 지수","textShapes":14}
+{"kind":"textbox","id":"sh/94fu18jq","slide":12,"text":"동일 질문 반복 답변 유사성 지수","textPreview":"동일 질문 반복 답변 유사성 지수","textChars":18,"textLines":1,"bbox":[70,42,900,54]}
+{"kind":"textbox","id":"sh/2hwfyxob","slide":12,"text":"반복 입력 시 답변 구조와 핵심 안전조치가 얼마나 안정적으로 유지되는지 확인했습니다.","textPreview":"반복 입력 시 답변 구조와 핵심 안전조치가 얼마나 안정적으로 유지되는지 확인했습니다.","textChars":47,"textLines":1,"bbox":[72,98,1030,36]}
+{"kind":"shape","id":"sh/r2p8nqxs","slide":12,"bbox":[70,142,1140,2]}
+{"kind":"textbox","id":"sh/gvy90je9","slide":12,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[82,180,28,32]}
+{"kind":"textbox","id":"sh/9gr2p8nq","slide":12,"text":"대표 질문 10개, 질문당 5회 반복","textPreview":"대표 질문 10개, 질문당 5회 반복","textChars":20,"textLines":1,"bbox":[116,180,476,44]}
+{"kind":"textbox","id":"sh/2p8nqxs7","slide":12,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[82,236,28,32]}
+{"kind":"textbox","id":"sh/ra5gbq1o","slide":12,"text":"총 50개 답변 수집","textPreview":"총 50개 답변 수집","textChars":11,"textLines":1,"bbox":[116,236,476,44]}
+{"kind":"textbox","id":"sh/kzupwb2h","slide":12,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[82,292,28,32]}
+{"kind":"textbox","id":"sh/9knih4by","slide":12,"text":"같은 질문 내 답변 조합 100개 pairwise 비교","textPreview":"같은 질문 내 답변 조합 100개 pairwise 비교","textChars":30,"textLines":1,"bbox":[116,292,526,44]}
+{"kind":"textbox","id":"sh/p8nqxs72","slide":12,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[82,348,28,32]}
+{"kind":"textbox","id":"sh/0nuxc3yl","slide":12,"text":"전체 평균 유사성 지수 100.00점, consistency_level 매우 높음","textPreview":"전체 평균 유사성 지수 100.00점, consistency_level 매우 높음","textChars":45,"textLines":1,"bbox":[116,348,586,44]}
+{"kind":"textbox","id":"sh/72x4nap4","slide":12,"text":"•","textPreview":"•","textChars":1,"textLines":1,"bbox":[82,404,28,32]}
+{"kind":"textbox","id":"sh/ih4byhgn","slide":12,"text":"외부 LLM API 사용 없음, difflib.SequenceMatcher fallback 사용","textPreview":"외부 LLM API 사용 없음, difflib.SequenceMatcher fallback 사용","textChars":53,"textLines":1,"bbox":[116,404,586,44]}
+{"kind":"textbox","id":"sh/pkzupwb2","slide":12,"text":"해석","textPreview":"해석","textChars":2,"textLines":1,"bbox":[88,486,120,30]}
+{"kind":"textbox","id":"sh/0z61032l","slide":12,"text":"동일 질문에 대해 검색 근거와 핵심 안전조치가 일관되게 유지됨을 보여준다. 다만 정확도 평가가 아니라 응답 일관성을 확인하는 보조 지표이다.","textPreview":"동일 질문에 대해 검색 근거와 핵심 안전조치가 일관되게 유지됨을 보여준다. 다만 정확도 평가가 아니라 응답 일관성을 확인하는 보조 지표이다.","textChars":78,"textLines":1,"bbox":[88,526,1060,64]}
+{"kind":"image","id":"im/0bi9s36h","slide":12,"name":"","alt":"MineSafe AI 동일 질문 반복 답변 유사성 지수 그래프","bbox":[675,178,520,300]}
+{"kind":"notes","id":"nt/wyl1aq","slide":12,"text":""}

@@ -1,0 +1,28 @@
+{
+  "safe_with_similarity_excel_exists": true,
+  "excel_sheet_names": [
+    "01_질문답변",
+    "02_질문별점수",
+    "03_최종요약",
+    "04_그래프_표",
+    "05_전체평가_raw",
+    "06_유사성지수"
+  ],
+  "similarity_sheet_exists": true,
+  "similarity_sheet_max_row": 29,
+  "similarity_question_rows": 10,
+  "ppt_with_similarity_exists": true,
+  "ppt_slide_count": 12,
+  "ppt_builder_info": {
+    "output": "C:\\Users\\USER\\Desktop\\mine_safety_rag\\16_final_outputs\\03_presentation\\MineSafe_AI_주간발표자료_WITH_SIMILARITY.pptx",
+    "slide_count": 12
+  },
+  "readme_backup_exists": true,
+  "readme_similarity_section_exists": true,
+  "one_page_with_similarity_exists": true,
+  "one_page_similarity_text_exists": true,
+  "qa_with_similarity_exists": true,
+  "qa_similarity_question_exists": true,
+  "original_safe_preserved": true,
+  "original_ppt_preserved": true
+}

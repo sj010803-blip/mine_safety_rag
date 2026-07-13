@@ -1,0 +1,61 @@
+MineSafe AI 최종 평가 + 유사성 지수 통합 엑셀 생성 보고서
+
+- 생성 시간: 2026-07-10 16:24:49
+
+1. 입력 파일 목록
+- multi_judge_complete_xlsx: C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\multi_judge_score_summary_50_v2_final_complete.xlsx
+- multi_judge_complete_tsv: C:\Users\USER\Desktop\mine_safety_rag\15_fair_eval_v2_50\multi_judge_score_summary_50_v2_final_complete.tsv
+- model_score_summary_table: C:\Users\USER\Desktop\mine_safety_rag\20_eval_visualization\model_score_summary_table.xlsx
+- model_score_boxplot: C:\Users\USER\Desktop\mine_safety_rag\20_eval_visualization\model_score_boxplot.png
+- model_score_mean_std_bar: C:\Users\USER\Desktop\mine_safety_rag\20_eval_visualization\model_score_mean_std_bar.png
+- eval_visualization_report: C:\Users\USER\Desktop\mine_safety_rag\20_eval_visualization\eval_visualization_report.txt
+- similarity_integrated: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\MineSafe_AI_유사성지수_3모델_통합보고서.xlsx
+- similarity_model_summary: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_comparison_model_summary.xlsx
+- similarity_question_summary: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_comparison_question_summary.xlsx
+- similarity_pairwise_scores: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_comparison_pairwise_scores.xlsx
+- similarity_answer_collection: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_answer_collection_filled_from_raw.xlsx
+- similarity_bar_chart: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_comparison_final_bar_chart.png
+- similarity_final_report: C:\Users\USER\Desktop\mine_safety_rag\19_similarity_comparison\similarity_comparison_final_report.txt
+
+2. 생성된 통합 엑셀 경로
+- C:\Users\USER\Desktop\mine_safety_rag\16_final_outputs\01_final_excel\MineSafe_AI_최종평가_통합보고서_WITH_EVAL_AND_SIMILARITY.xlsx
+
+3. 생성된 시트 목록
+- 00_요약
+- 01_50문항_모델별요약
+- 02_50문항_상세점수
+- 03_50문항_시각화
+- 04_유사성_모델별요약
+- 05_유사성_질문별요약
+- 06_유사성_Pairwise상세
+- 07_유사성_답변원문
+- 08_해석_및_주의사항
+
+4. 각 시트 행 수
+- 00_요약: 8행
+- 01_50문항_모델별요약: 3행
+- 02_50문항_상세점수: 450행
+- 03_50문항_시각화: 2행
+- 04_유사성_모델별요약: 3행
+- 05_유사성_질문별요약: 30행
+- 06_유사성_Pairwise상세: 300행
+- 07_유사성_답변원문: 150행
+- 08_해석_및_주의사항: 7행
+
+5. 이미지 삽입 여부
+- 삽입 이미지 수: 2
+- C:\Users\USER\Desktop\mine_safety_rag\20_eval_visualization\model_score_boxplot.png
+- C:\Users\USER\Desktop\mine_safety_rag\20_eval_visualization\model_score_mean_std_bar.png
+
+6. 핵심 점수 반영 여부
+- 50문항 블라인드 다중평가: MineSafe AI 85.61 / Gemini 69.91 / ChatGPT 60.33 반영
+- 유사성 지수: MineSafe AI 100.00 / ChatGPT 41.73 / Gemini 40.09 반영
+
+7. 오류 여부
+- 오류 없음
+
+8. 보존/금지사항
+- 기존 파일 삭제 없음
+- 기존 110문항 평가 결과 덮어쓰기 없음
+- chunks, Vector DB, .env, API Key 미열람/미수정
+- Git commit/push 수행하지 않음

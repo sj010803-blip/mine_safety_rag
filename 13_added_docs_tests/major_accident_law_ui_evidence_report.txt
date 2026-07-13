@@ -1,0 +1,92 @@
+MineSafe AI 중대재해처벌법 활용 증거 UI 개선 보고서
+생성일: 2026-07-07
+
+1. 수정한 파일 목록
+- C:\Users\USER\Desktop\mine_safety_rag\app.py
+
+2. app.py 수정 위치 요약
+- 표시용 상수 추가:
+  - MAJOR_ACCIDENT_DOC_TOTAL_CHUNKS = 820
+  - MAJOR_ACCIDENT_DOC_ADDED_CHUNKS = 333
+  - MAJOR_ACCIDENT_LAW_DOCS 4종 자료 목록
+- CSS 추가:
+  - 중대재해처벌법 badge, 사이드바 카드, 답변 하단 근거 박스 스타일
+- 사이드바 추가:
+  - "법령 자료 반영 현황" 카드
+  - 반영 자료, 통합 chunk 수, 추가 자료 chunk 수, 현재 Vector DB 표시
+- 근거 표 badge 보강:
+  - 중대재해처벌법 추가자료 검색 시 FAQ, 질의회시, 해설서, 따라하기, 중대재해법 badge 표시
+- 답변 결과 하단 추가:
+  - "중대재해처벌법 활용 근거" 섹션
+  - 공식 자료 4종 목록 표시
+
+3. 사이드바 표시 여부
+- 표시됨.
+- 문구:
+  - 중대재해처벌법 자료 반영 완료
+  - 반영 자료: FAQ / 질의회시집 / 해설서 / 따라하기 안내서
+  - 통합 chunk 수: 820개
+  - 추가 자료 chunk 수: 333개
+  - 현재 Vector DB: 10_vector_db_with_major_accident_docs
+
+4. 답변 결과 하단 표시 여부
+- 표시됨.
+- "본 시스템은 광산 안전 지침뿐 아니라 중대재해처벌법 관련 공식 자료를 함께 검색하여 답변 생성에 활용합니다." 문구를 답변 결과 하단에 표시함.
+
+5. 중대재해처벌법 자료 4종 표시 여부
+- 표시됨.
+  - 중대재해처벌법령 FAQ 중대산업재해
+  - 중대재해처벌법 질의회시집
+  - 중대재해처벌법 해설서
+  - 중대재해처벌법 따라하기 안내서
+
+6. Vector DB 경로 유지 여부
+- 유지됨.
+- app.py의 VECTOR_DB_DIR은 ROOT_DIR / "10_vector_db_with_major_accident_docs" 그대로 유지됨.
+
+7. 기존 평가 파일 수정 여부
+- 수정하지 않음.
+- 09_answer_tests 폴더의 기존 평가 파일은 건드리지 않음.
+
+8. 기존 비교 실험 파일 수정 여부
+- 수정하지 않음.
+- 12_compare_experiment 폴더의 기존 비교 실험 결과는 건드리지 않음.
+
+9. py_compile 통과 여부
+- 통과함.
+- 실행 기준:
+  C:\Users\USER\Desktop\mine_safety_rag\.venv\Scripts\python.exe -m py_compile C:\Users\USER\Desktop\mine_safety_rag\app.py
+
+10. 검색 테스트 결과 요약
+- 테스트 DB: 10_vector_db_with_major_accident_docs
+- 총 chunk 수: 820개
+
+질문 1:
+중대재해처벌법상 경영책임자의 안전보건 확보의무는 무엇이야?
+- top5 중 중대재해처벌법 추가자료 hit: 4개
+- 주요 근거:
+  - 중대재해처벌법_해설서.pdf / chunk_00718
+  - 중대재해처벌법_해설서.pdf / chunk_00677
+  - 중대재해처벌법_해설서.pdf / chunk_00702
+  - 중대재해처벌법_따라하기_안내서.pdf / chunk_00490
+
+질문 2:
+중대재해처벌법 FAQ 기준으로 중대산업재해 예방을 위해 관리자가 확인할 사항은?
+- top5 중 중대재해처벌법 추가자료 hit: 5개
+- 주요 근거:
+  - 중대재해처벌법_따라하기_안내서.pdf / chunk_00488
+  - 중대재해처벌법_해설서.pdf / chunk_00713
+  - 중대재해처벌법_해설서.pdf / chunk_00712
+  - 중대재해처벌법_해설서.pdf / chunk_00704
+  - 중대재해처벌법_질의회시집.pdf / chunk_00625
+
+11. 롤백 방법
+- app.py 백업 파일:
+  C:\Users\USER\Desktop\mine_safety_rag\app_backup_major_law_ui_evidence_20260707_202239.py
+- 롤백 명령어:
+  Copy-Item -LiteralPath C:\Users\USER\Desktop\mine_safety_rag\app_backup_major_law_ui_evidence_20260707_202239.py -Destination C:\Users\USER\Desktop\mine_safety_rag\app.py -Force
+
+주의
+- .env, API Key, Streamlit Secrets는 열거나 수정하지 않았음.
+- Vector DB와 chunks 파일은 재생성하거나 수정하지 않았음.
+- 기존 평가 결과와 비교 실험 결과는 수정하지 않았음.

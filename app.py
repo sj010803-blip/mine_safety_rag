@@ -91,8 +91,8 @@ GEMINI_MAX_OUTPUT_TOKENS = 800
 GEMINI_CONTEXT_TOP_K = 3
 CONTEXT_CHUNK_CHAR_LIMIT = 800
 
-STABLE_MODE = "안정 모드: 검색 근거 기반 답변만 생성"
-GEMINI_MODE = "Gemini 모드: Gemini 답변 생성 시도"
+STABLE_MODE = "안정성 모드: 검색 근거 기반 체크리스트형 답변"
+GEMINI_MODE = "자연어 설명 모드: 검색 근거 기반 설명형 답변"
 HYBRID_MODE = "하이브리드 모드: 검색 근거 답변을 먼저 표시하고 Gemini 답변도 추가 시도"
 
 DATA_DIR = ROOT_DIR / "data"
@@ -103,6 +103,9 @@ LEGAL_CHECKLIST_EXPORT_PATH = FEATURE_OUTPUT_DIR / "legal_checklist_export.xlsx"
 RISK_ASSESSMENT_EXPORT_PATH = FEATURE_OUTPUT_DIR / "risk_assessment_draft_export.xlsx"
 CONVERSATION_HISTORY_EXPORT_PATH = FEATURE_OUTPUT_DIR / "conversation_history_export.xlsx"
 FEATURE_REPORT_PATH = FEATURE_OUTPUT_DIR / "legal_evidence_history_feature_report.txt"
+LATEST_REFERENCE_CASES_PATH = FEATURE_OUTPUT_DIR / "latest_reference_cases.json"
+NAVER_NEWS_API_URL = "https://openapi.naver.com/v1/search/news.json"
+LIVE_CASE_SEARCH_TTL_SECONDS = 1800
 
 BLASTING_QUESTION_TYPE = "발파/불발"
 BLASTING_KEYWORDS = [
@@ -972,12 +975,12 @@ def inject_dashboard_css() -> None:
 
         .mscc-status-value {
             color: #172033;
-            font-size: 1.22rem;
-            font-weight: 760;
+            font-size: 1.05rem;
+            font-weight: 740;
             line-height: 1.35;
             word-break: keep-all;
-            overflow-wrap: anywhere;
-            white-space: normal;
+            overflow-wrap: normal;
+            white-space: nowrap;
         }
 
         .mscc-status-description {
@@ -1000,6 +1003,28 @@ def inject_dashboard_css() -> None:
             font-size: 0.78rem;
             margin-bottom: 0.75rem;
             line-height: 1.5;
+        }
+
+        .answer-runtime-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem 0.9rem;
+            align-items: center;
+            width: fit-content;
+            max-width: 100%;
+            margin: 0.25rem 0 0.75rem 0;
+            padding: 0.48rem 0.7rem;
+            border: 1px solid #d9e2ec;
+            border-radius: 8px;
+            background: #f8fafc;
+            color: #475569;
+            font-size: 0.86rem;
+            line-height: 1.45;
+        }
+
+        .answer-runtime-summary strong {
+            color: #172033;
+            font-weight: 720;
         }
 
         .info-card {
@@ -1796,6 +1821,8 @@ def get_risk_level(situation_type: str) -> tuple[str, str]:
         "장비/운반": ("중간~높음", "#64748b"),
         "낙반/붕락": ("높음", "#b45309"),
         "중대재해처벌법": ("높음", "#b45309"),
+        PPE_GENERAL_INTENT: ("중간", "#64748b"),
+        OUT_OF_SCOPE_INTENT: ("범위 밖", "#64748b"),
     }
     return risk_map.get(situation_type, ("보통", "#64748b"))
 
@@ -1816,6 +1843,8 @@ def get_priority_action(situation_type: str) -> str:
         "장비/운반": "에너지 차단 · 접근통제 · 장비와 작업자 위치 확인",
         "낙반/붕락": "작업중지 · 출입통제 · 대피 · 천반·부석·지보공 확인",
         "중대재해처벌법": "작업중지 · 보고 · 원인조사 · 재발방지대책 검토",
+        PPE_GENERAL_INTENT: "작업 위험에 맞는 보호구 선정 · 착용상태 확인 · 지급/교육 기록",
+        OUT_OF_SCOPE_INTENT: "광산 안전관리와 연결된 질문으로 다시 입력",
     }
     return priority_map.get(
         situation_type,
@@ -2133,6 +2162,447 @@ def classify_question_type(question: str) -> str:
     return "일반"
 
 
+PPE_GENERAL_INTENT = "보호구/PPE 일반 설명"
+VENTILATION_GAS_INTENT = "환기/유해가스"
+BLASTING_MISFIRE_INTENT = "발파/불발"
+ROOF_FALL_INTENT = "낙반/붕락/지보"
+DUST_RESPIRATORY_INTENT = "분진/호흡보호"
+ELECTRICAL_SAFETY_INTENT = "전기안전"
+EQUIPMENT_TRANSPORT_INTENT = "장비/운반/차량"
+PREWORK_TBM_INTENT = "작업 전 점검/TBM/교육"
+ACCIDENT_EMERGENCY_INTENT = "사고보고/응급조치"
+KRAS_INTENT = "위험성평가/KRAS"
+LAW_INTENT = "중대재해처벌법/법령 설명"
+GENERAL_MINE_SAFETY_INTENT = "일반 광산 안전 질문"
+FIRE_EMERGENCY_INTENT = "화재/소화/비상대응"
+EVACUATION_ACCESS_SIGN_INTENT = "비상대피로/출입통제/표지"
+LIGHTING_VISIBILITY_INTENT = "조명/시야/작업환경"
+GAS_DETECTOR_INTENT = "가스측정기/계측기 관리"
+VENTILATION_EQUIPMENT_INTENT = "환기설비/팬/통풍 이상"
+FLOOD_DRAINAGE_INTENT = "침수/배수/수해"
+WALKWAY_HOUSEKEEPING_INTENT = "이동통로/정리정돈/미끄럼"
+BACKING_SIGNAL_INTENT = "장비 후진/신호수/충돌 방지"
+CONVEYOR_ROTATING_INTENT = "컨베이어/회전체/끼임"
+HOT_WORK_INTENT = "용접/절단/화기작업"
+HEIGHT_WORK_INTENT = "고소작업/사다리/작업발판"
+LIFTING_HEAVY_INTENT = "중량물/인양/크레인/호이스트"
+FATIGUE_WORKER_INTENT = "피로/무리한 작업/작업자 상태"
+CONTRACTOR_PERMIT_INTENT = "외주/협력업체/작업허가"
+NEW_WORKER_TRAINING_INTENT = "교육/훈련/신규 작업자"
+INSPECTION_RECORD_INTENT = "점검/순찰/기록관리"
+ERGONOMICS_MANUAL_INTENT = "근골격계/수작업/작업자세"
+NOISE_VIBRATION_INTENT = "소음/진동"
+CHEMICAL_FUEL_INTENT = "화학물질/유류/가연물"
+DOCUMENT_EVIDENCE_INTENT = "문서/증빙자료 추천"
+OUT_OF_SCOPE_INTENT = "범위 밖 질문"
+
+QUESTION_INTENT_KEYWORDS: dict[str, list[str]] = {
+    PPE_GENERAL_INTENT: [
+        "안전화", "안전모", "방진마스크", "마스크", "보호구", "ppe", "보안경",
+        "귀마개", "귀덮개", "안전대", "장갑", "보호장갑", "작업복", "반사조끼",
+    ],
+    VENTILATION_GAS_INTENT: [
+        "메탄", "메탄가스", "산소", "일산화탄소", "유해가스", "가스농도",
+        "환기", "통기", "산소결핍", "질식", "폭발위험",
+    ],
+    BLASTING_MISFIRE_INTENT: [
+        "발파", "폭약", "장약", "뇌관", "불발", "불발공", "대피",
+        "발파 후 점검", "발파작업",
+    ],
+    ROOF_FALL_INTENT: [
+        "낙반", "붕락", "지보", "천반", "측벽", "균열", "암반", "부석", "갱도 붕괴",
+    ],
+    DUST_RESPIRATORY_INTENT: [
+        "분진", "먼지", "굴진", "천공", "파쇄", "살수", "집진", "호흡보호구",
+    ],
+    ELECTRICAL_SAFETY_INTENT: [
+        "전기", "감전", "누전", "차단기", "접지", "케이블", "전원", "전기설비", "전기작업",
+    ],
+    EQUIPMENT_TRANSPORT_INTENT: [
+        "장비", "굴삭기", "굴착기", "로더", "덤프", "덤프트럭", "운반", "차량",
+        "후진", "협착", "끼임", "충돌", "적재", "운반로",
+    ],
+    PREWORK_TBM_INTENT: [
+        "작업 전", "점검", "tbm", "툴박스", "안전회의", "교육", "작업허가",
+        "체크리스트", "위험예지", "작업 시작 전",
+    ],
+    ACCIDENT_EMERGENCY_INTENT: [
+        "사고", "다침", "부상", "응급", "구조", "신고", "보고", "119", "병원", "재해",
+    ],
+    KRAS_INTENT: [
+        "위험성평가", "kras", "가능성", "중대성", "감소대책", "제거", "대체",
+        "공학적 대책", "관리적 대책",
+    ],
+    LAW_INTENT: [
+        "중대재해", "중대재해처벌법", "산업안전보건법", "광산안전법", "법령",
+        "처벌", "의무", "안전보건관리체계", "경영책임자",
+    ],
+    FIRE_EMERGENCY_INTENT: [
+        "화재", "불", "소화기", "소화전", "소방", "비상", "비상대응",
+        "피난", "연기", "연소", "화재위험",
+    ],
+    EVACUATION_ACCESS_SIGN_INTENT: [
+        "대피로", "비상구", "출입통제", "통로", "안전표지", "경고표지",
+        "표지판", "접근금지", "위험구역", "안내표지",
+    ],
+    LIGHTING_VISIBILITY_INTENT: [
+        "조명", "어두움", "어두워", "시야", "조도", "램프", "헤드랜턴",
+        "작업환경", "가시거리",
+    ],
+    GAS_DETECTOR_INTENT: [
+        "가스측정기", "측정기", "검지기", "센서", "교정", "보정",
+        "알람", "경보", "측정값", "검교정",
+    ],
+    VENTILATION_EQUIPMENT_INTENT: [
+        "환기팬", "팬", "통풍", "환기설비", "환기 불량", "풍량",
+        "송풍", "배기", "정전", "팬 정지",
+    ],
+    FLOOD_DRAINAGE_INTENT: [
+        "침수", "물", "배수", "양수기", "누수", "유입수", "물 고임",
+        "갱내수", "수해", "펌프",
+    ],
+    WALKWAY_HOUSEKEEPING_INTENT: [
+        "정리정돈", "미끄럼", "넘어짐", "걸림", "바닥", "적치물",
+        "장애물", "통행로",
+    ],
+    BACKING_SIGNAL_INTENT: [
+        "후진", "신호수", "경광등", "경보음", "사각지대", "유도자", "장비 접근",
+    ],
+    CONVEYOR_ROTATING_INTENT: [
+        "컨베이어", "벨트", "회전체", "풀리", "롤러", "방호덮개", "가드",
+    ],
+    HOT_WORK_INTENT: [
+        "용접", "절단", "그라인더", "불꽃", "화기작업", "스파크", "산소절단", "핫워크",
+    ],
+    HEIGHT_WORK_INTENT: [
+        "고소작업", "사다리", "발판", "작업대", "추락", "난간", "개구부",
+    ],
+    LIFTING_HEAVY_INTENT: [
+        "중량물", "인양", "크레인", "호이스트", "와이어로프", "슬링",
+        "체인", "낙하", "매달림",
+    ],
+    FATIGUE_WORKER_INTENT: [
+        "피로", "피곤", "졸림", "무리", "컨디션", "휴식", "장시간 작업", "야간작업", "집중력",
+    ],
+    CONTRACTOR_PERMIT_INTENT: [
+        "협력업체", "외주", "작업허가", "허가서", "사전교육", "출입관리", "도급", "작업계획",
+    ],
+    NEW_WORKER_TRAINING_INTENT: [
+        "신규", "초보", "훈련", "작업자 교육", "안전교육", "숙련도", "작업 절차",
+    ],
+    INSPECTION_RECORD_INTENT: [
+        "순찰", "일지", "체크리스트", "개선조치", "이행확인",
+    ],
+    ERGONOMICS_MANUAL_INTENT: [
+        "허리", "무릎", "반복작업", "수작업", "들기", "작업자세", "근골격계",
+    ],
+    NOISE_VIBRATION_INTENT: [
+        "소음", "진동", "착암기", "파쇄기", "청력", "소음성 난청",
+    ],
+    CHEMICAL_FUEL_INTENT: [
+        "화학물질", "유류", "기름", "연료", "가연물", "msds", "누출", "보관", "취급",
+    ],
+    DOCUMENT_EVIDENCE_INTENT: [
+        "증빙자료", "어떤 기록", "무슨 서류", "사진", "보고서", "보관", "기록해야",
+    ],
+}
+
+MINING_SAFETY_CONTEXT_KEYWORDS = [
+    "광산", "갱내", "갱도", "채굴", "굴진", "작업장", "작업자", "근로자",
+    "현장", "안전", "보건", "위험", "점검", "관리자", "작업", "설비",
+    "기계", "보호", "교육", "기록", "대피", "출입통제", "통로", "조명",
+    "화재", "소화기", "침수", "배수", "컨베이어", "용접", "사다리", "협력업체",
+]
+
+OUT_OF_SCOPE_HINTS = [
+    "점심", "저녁", "아침", "메뉴", "맛집", "영화", "음악", "주식", "코인",
+    "연애", "상담", "게임", "여행", "날씨", "축구", "야구", "로또", "복권",
+]
+
+INTENT_SEARCH_EXPANSIONS: dict[str, list[str]] = {
+    PPE_GENERAL_INTENT: ["보호구", "착용 기준", "지급", "착용상태 확인", "작업 전 점검", "안전관리자 확인"],
+    VENTILATION_GAS_INTENT: ["메탄가스", "산소농도", "유해가스 측정", "환기설비", "작업중지", "대피", "재측정"],
+    BLASTING_MISFIRE_INTENT: ["불발공", "발파 후 점검", "출입통제", "대피", "폭약", "뇌관", "발파작업 안전"],
+    ROOF_FALL_INTENT: ["천반 점검", "지보", "부석 제거", "균열 확인", "출입통제", "작업중지"],
+    DUST_RESPIRATORY_INTENT: ["호흡보호구", "분진", "굴진", "천공", "파쇄", "살수", "집진", "작업환경측정"],
+    ELECTRICAL_SAFETY_INTENT: ["감전 예방", "전원 차단", "잠금표지", "접지", "누전차단기", "케이블 점검"],
+    EQUIPMENT_TRANSPORT_INTENT: ["협착", "충돌", "후진 경보", "신호수", "운반로", "장비 점검", "사각지대"],
+    PREWORK_TBM_INTENT: ["작업 전 안전회의", "위험요인 공유", "작업허가", "점검표", "교육기록"],
+    ACCIDENT_EMERGENCY_INTENT: ["응급조치", "사고보고", "작업중지", "현장보존", "재해자 구조", "기록"],
+    KRAS_INTENT: ["가능성", "중대성", "위험도", "감소대책", "제거", "대체", "공학적 대책", "관리적 대책", "보호구"],
+    LAW_INTENT: ["안전보건관리체계", "경영책임자 의무", "유해위험요인 확인", "개선조치", "이행점검"],
+    FIRE_EMERGENCY_INTENT: ["소화기", "화재 예방", "가연물 제거", "비상대응", "대피", "소방설비", "점검기록"],
+    EVACUATION_ACCESS_SIGN_INTENT: ["비상구", "대피로 확보", "출입통제", "안전표지", "경고표지", "통로 확보"],
+    LIGHTING_VISIBILITY_INTENT: ["작업 조명", "조도", "시야 확보", "헤드랜턴", "갱내 조명", "어두운 작업장"],
+    GAS_DETECTOR_INTENT: ["검지기", "측정기 교정", "보정", "알람 확인", "측정 기록", "가스 농도 측정"],
+    VENTILATION_EQUIPMENT_INTENT: ["환기팬", "풍량", "송풍", "배기", "환기설비 점검", "팬 정지", "환기 불량"],
+    FLOOD_DRAINAGE_INTENT: ["배수", "양수기", "누수", "물 유입", "갱내수", "침수 위험", "펌프 점검"],
+    WALKWAY_HOUSEKEEPING_INTENT: ["통로 확보", "미끄럼 방지", "장애물 제거", "정리정돈", "넘어짐 예방"],
+    BACKING_SIGNAL_INTENT: ["신호수", "후진 경보", "사각지대", "충돌 예방", "장비 접근통제"],
+    CONVEYOR_ROTATING_INTENT: ["방호덮개", "가드", "회전체 접근금지", "끼임 예방", "정비 전 전원 차단"],
+    HOT_WORK_INTENT: ["화기작업 허가", "불꽃 비산", "가연물 제거", "소화기 비치", "화재감시"],
+    HEIGHT_WORK_INTENT: ["추락 방지", "안전대", "난간", "사다리 점검", "작업발판", "개구부 덮개"],
+    LIFTING_HEAVY_INTENT: ["인양작업", "낙하물", "슬링 점검", "와이어로프", "작업반경 출입통제"],
+    FATIGUE_WORKER_INTENT: ["작업자 건강상태", "휴식", "장시간 작업", "야간작업", "집중력 저하"],
+    CONTRACTOR_PERMIT_INTENT: ["작업허가서", "사전교육", "출입관리", "위험요인 공유", "도급 작업 안전"],
+    NEW_WORKER_TRAINING_INTENT: ["안전교육", "작업절차 교육", "신규 작업자", "보호구 착용 교육", "TBM"],
+    INSPECTION_RECORD_INTENT: ["점검표", "작업일지", "개선조치", "이행확인", "사진 기록", "증빙자료"],
+    ERGONOMICS_MANUAL_INTENT: ["중량물 취급", "작업자세", "반복작업", "허리 부상", "수작업 위험"],
+    NOISE_VIBRATION_INTENT: ["청력보호구", "소음 측정", "귀마개", "귀덮개", "착암", "파쇄"],
+    CHEMICAL_FUEL_INTENT: ["MSDS", "누출 대응", "보관", "취급", "가연물", "유류 화재"],
+    DOCUMENT_EVIDENCE_INTENT: ["점검기록", "교육기록", "작업허가서", "작업중지 기록", "개선조치 사진", "TBM 기록"],
+    GENERAL_MINE_SAFETY_INTENT: ["광산 안전", "작업 전 점검", "안전교육", "위험요인", "관리감독", "기록"],
+}
+
+PPE_ITEM_EXPANSIONS: dict[str, list[str]] = {
+    "안전화": ["발 보호", "낙하물", "찔림", "미끄러짐", "끼임", "작업화", "장비 작업", "운반 작업"],
+    "안전모": ["머리 보호", "낙하물", "낙반", "비래물", "충돌", "갱내 작업", "굴진 작업"],
+    "방진마스크": ["호흡보호구", "분진", "굴진", "천공", "파쇄", "살수", "집진", "작업환경측정"],
+    "마스크": ["호흡보호구", "분진", "굴진", "천공", "파쇄", "살수", "집진", "작업환경측정"],
+    "보안경": ["눈 보호", "비래물", "파편", "분진", "절단", "연마", "천공"],
+    "귀마개": ["청력 보호", "소음", "착암", "파쇄", "장비 작업"],
+    "귀덮개": ["청력 보호", "소음", "착암", "파쇄", "장비 작업"],
+    "안전대": ["추락 위험", "고소작업", "사다리", "작업발판", "개구부", "훅 체결"],
+    "장갑": ["손 보호", "베임", "찔림", "마찰", "화상", "화학물질"],
+    "보호장갑": ["손 보호", "베임", "찔림", "마찰", "화상", "화학물질"],
+}
+
+PPE_BASIC_KNOWLEDGE: dict[str, dict[str, list[str] | str]] = {
+    "안전화": {
+        "why": "발을 보호하기 위해 착용합니다. 낙하물, 찔림, 미끄러짐, 끼임, 장비 이동 중 발 부상 위험을 줄입니다.",
+        "when": ["갱내 작업", "운반 작업", "장비 주변 작업", "굴진·파쇄 작업"],
+        "checks": ["밑창 마모·미끄럼 방지 상태", "앞코와 발등 보호 상태", "찢김·구멍·젖음 여부"],
+    },
+    "안전모": {
+        "why": "머리 부상을 막기 위해 착용합니다. 낙반, 낙하물, 비래물, 충돌, 낮은 천장이나 구조물 접촉 위험을 줄입니다.",
+        "when": ["갱내 작업", "굴진 작업", "발파 후 점검", "운반·장비 작업 구역"],
+        "checks": ["균열·파손 여부", "턱끈 체결 상태", "내피와 완충재 상태"],
+    },
+    "방진마스크": {
+        "why": "분진 흡입을 줄이기 위해 착용합니다. 굴진·천공·파쇄·적재·운반 중 발생하는 먼지가 호흡기로 들어가는 것을 줄입니다.",
+        "when": ["굴진", "천공", "파쇄", "적재", "운반 등 분진 발생 작업"],
+        "checks": ["얼굴 밀착 상태", "필터 오염·교체 상태", "코편·끈 손상 여부"],
+    },
+    "보안경": {
+        "why": "눈을 보호하기 위해 착용합니다. 파편, 비래물, 분진, 절단·연마·천공 중 튀는 물질로 인한 눈 손상을 줄입니다.",
+        "when": ["절단", "연마", "천공", "파편·비래물·분진 발생 작업"],
+        "checks": ["렌즈 손상·오염 여부", "김서림으로 시야가 가려지는지", "얼굴 밀착 상태"],
+    },
+    "귀마개/귀덮개": {
+        "why": "소음으로부터 청력을 보호하기 위해 착용합니다. 착암, 파쇄, 장비 운전 등 고소음 작업의 청력 손상 위험을 줄입니다.",
+        "when": ["착암", "파쇄", "장비 운전", "고소음 작업"],
+        "checks": ["착용 밀착 상태", "오염·손상 여부", "작업 소음에 맞는 보호구인지"],
+    },
+    "안전대": {
+        "why": "추락 위험이 있는 작업에서 몸을 지지해 추락 재해를 줄이기 위해 착용합니다.",
+        "when": ["고소작업", "사다리 작업", "작업발판", "개구부 주변 작업"],
+        "checks": ["걸이설비 상태", "훅 체결 상태", "벨트·죔줄 손상 여부"],
+    },
+    "장갑": {
+        "why": "베임, 찔림, 마찰, 화상, 화학물질 접촉 등 손 위험을 줄이기 위해 착용합니다.",
+        "when": ["자재 취급", "정비", "절단·연마", "거친 표면 취급", "화학물질 접촉 가능 작업"],
+        "checks": ["작업 종류에 맞는 장갑인지", "찢김·마모·오염 여부", "회전체 말림 위험과의 충돌 여부"],
+    },
+}
+
+
+RISK_SIGN_INTENTS = {
+    VENTILATION_GAS_INTENT,
+    BLASTING_MISFIRE_INTENT,
+    ROOF_FALL_INTENT,
+    ELECTRICAL_SAFETY_INTENT,
+    EQUIPMENT_TRANSPORT_INTENT,
+    ACCIDENT_EMERGENCY_INTENT,
+    FIRE_EMERGENCY_INTENT,
+    VENTILATION_EQUIPMENT_INTENT,
+    FLOOD_DRAINAGE_INTENT,
+    BACKING_SIGNAL_INTENT,
+    CONVEYOR_ROTATING_INTENT,
+    HOT_WORK_INTENT,
+    HEIGHT_WORK_INTENT,
+    LIFTING_HEAVY_INTENT,
+    CHEMICAL_FUEL_INTENT,
+}
+
+MANAGEMENT_RECORD_INTENTS = {
+    LAW_INTENT,
+    DOCUMENT_EVIDENCE_INTENT,
+    CONTRACTOR_PERMIT_INTENT,
+    INSPECTION_RECORD_INTENT,
+}
+
+GENERAL_EXPLANATION_INTENTS = {
+    PREWORK_TBM_INTENT,
+    GENERAL_MINE_SAFETY_INTENT,
+    DUST_RESPIRATORY_INTENT,
+    EVACUATION_ACCESS_SIGN_INTENT,
+    LIGHTING_VISIBILITY_INTENT,
+    GAS_DETECTOR_INTENT,
+    WALKWAY_HOUSEKEEPING_INTENT,
+    FATIGUE_WORKER_INTENT,
+    NEW_WORKER_TRAINING_INTENT,
+    ERGONOMICS_MANUAL_INTENT,
+    NOISE_VIBRATION_INTENT,
+}
+
+def detect_question_intent(question: str) -> str:
+    text = clean_text(question).lower()
+    if not text:
+        return GENERAL_MINE_SAFETY_INTENT
+
+    if any(keyword in text for keyword in OUT_OF_SCOPE_HINTS) and not any(
+        keyword in text for keyword in MINING_SAFETY_CONTEXT_KEYWORDS
+    ):
+        return OUT_OF_SCOPE_INTENT
+
+    ordered_intents = [
+        PPE_GENERAL_INTENT,
+        VENTILATION_EQUIPMENT_INTENT,
+        GAS_DETECTOR_INTENT,
+        VENTILATION_GAS_INTENT,
+        BLASTING_MISFIRE_INTENT,
+        ROOF_FALL_INTENT,
+        DUST_RESPIRATORY_INTENT,
+        ELECTRICAL_SAFETY_INTENT,
+        CONVEYOR_ROTATING_INTENT,
+        BACKING_SIGNAL_INTENT,
+        EQUIPMENT_TRANSPORT_INTENT,
+        HOT_WORK_INTENT,
+        FIRE_EMERGENCY_INTENT,
+        CHEMICAL_FUEL_INTENT,
+        HEIGHT_WORK_INTENT,
+        LIFTING_HEAVY_INTENT,
+        FLOOD_DRAINAGE_INTENT,
+        EVACUATION_ACCESS_SIGN_INTENT,
+        WALKWAY_HOUSEKEEPING_INTENT,
+        LIGHTING_VISIBILITY_INTENT,
+        FATIGUE_WORKER_INTENT,
+        CONTRACTOR_PERMIT_INTENT,
+        NEW_WORKER_TRAINING_INTENT,
+        INSPECTION_RECORD_INTENT,
+        ERGONOMICS_MANUAL_INTENT,
+        NOISE_VIBRATION_INTENT,
+        DOCUMENT_EVIDENCE_INTENT,
+        KRAS_INTENT,
+        LAW_INTENT,
+        PREWORK_TBM_INTENT,
+        ACCIDENT_EMERGENCY_INTENT,
+    ]
+    for intent in ordered_intents:
+        if any(keyword in text for keyword in QUESTION_INTENT_KEYWORDS[intent]):
+            return intent
+
+    if any(keyword in text for keyword in MINING_SAFETY_CONTEXT_KEYWORDS):
+        return GENERAL_MINE_SAFETY_INTENT
+    return OUT_OF_SCOPE_INTENT
+
+
+def detect_ppe_item(question: str) -> str:
+    text = clean_text(question).lower()
+    if "안전화" in text or "작업화" in text:
+        return "안전화"
+    if "안전모" in text:
+        return "안전모"
+    if "방진마스크" in text or "호흡보호구" in text:
+        return "방진마스크"
+    if "마스크" in text:
+        return "방진마스크"
+    if "보안경" in text:
+        return "보안경"
+    if "귀마개" in text or "귀덮개" in text:
+        return "귀마개/귀덮개"
+    if "안전대" in text:
+        return "안전대"
+    if "장갑" in text:
+        return "장갑"
+    return "보호구"
+
+
+def expand_search_query(question: str, intent: str | None = None) -> str:
+    intent = intent or detect_question_intent(question)
+    if intent == OUT_OF_SCOPE_INTENT:
+        return question
+
+    expansions = list(INTENT_SEARCH_EXPANSIONS.get(intent, []))
+    ppe_item = detect_ppe_item(question)
+    if ppe_item in PPE_ITEM_EXPANSIONS:
+        expansions.extend(PPE_ITEM_EXPANSIONS[ppe_item])
+    unique_terms = list(dict.fromkeys(term for term in expansions if term))
+    if not unique_terms:
+        return question
+    return " ".join([question, *unique_terms])
+
+
+def map_intent_to_situation_type(intent: str, question: str = "") -> str:
+    mapping = {
+        PPE_GENERAL_INTENT: PPE_GENERAL_INTENT,
+        VENTILATION_GAS_INTENT: "환기/유해가스",
+        BLASTING_MISFIRE_INTENT: BLASTING_QUESTION_TYPE,
+        ROOF_FALL_INTENT: "낙반/붕락",
+        DUST_RESPIRATORY_INTENT: PPE_DUST_QUESTION_TYPE,
+        ELECTRICAL_SAFETY_INTENT: ELECTRICAL_QUESTION_TYPE,
+        EQUIPMENT_TRANSPORT_INTENT: "장비/운반",
+        PREWORK_TBM_INTENT: TBM_QUESTION_TYPE,
+        ACCIDENT_EMERGENCY_INTENT: ACCIDENT_RESPONSE_QUESTION_TYPE,
+        KRAS_INTENT: RISK_ASSESSMENT_QUESTION_TYPE,
+        LAW_INTENT: "중대재해처벌법",
+        GENERAL_MINE_SAFETY_INTENT: "일반 광산 안전",
+        FIRE_EMERGENCY_INTENT: "화재/폭발",
+        EVACUATION_ACCESS_SIGN_INTENT: PASSAGE_SAFETY_QUESTION_TYPE,
+        LIGHTING_VISIBILITY_INTENT: PASSAGE_SAFETY_QUESTION_TYPE,
+        GAS_DETECTOR_INTENT: "환기/유해가스",
+        VENTILATION_EQUIPMENT_INTENT: "환기/유해가스",
+        FLOOD_DRAINAGE_INTENT: "일반 광산 안전",
+        WALKWAY_HOUSEKEEPING_INTENT: PASSAGE_SAFETY_QUESTION_TYPE,
+        BACKING_SIGNAL_INTENT: "장비/운반",
+        CONVEYOR_ROTATING_INTENT: "장비/운반",
+        HOT_WORK_INTENT: "화재/폭발",
+        HEIGHT_WORK_INTENT: "일반 광산 안전",
+        LIFTING_HEAVY_INTENT: "장비/운반",
+        FATIGUE_WORKER_INTENT: "일반 광산 안전",
+        CONTRACTOR_PERMIT_INTENT: TBM_QUESTION_TYPE,
+        NEW_WORKER_TRAINING_INTENT: TBM_QUESTION_TYPE,
+        INSPECTION_RECORD_INTENT: DAILY_INSPECTION_QUESTION_TYPE,
+        ERGONOMICS_MANUAL_INTENT: "일반 광산 안전",
+        NOISE_VIBRATION_INTENT: PPE_DUST_QUESTION_TYPE,
+        CHEMICAL_FUEL_INTENT: "화재/폭발",
+        DOCUMENT_EVIDENCE_INTENT: "중대재해처벌법",
+        OUT_OF_SCOPE_INTENT: OUT_OF_SCOPE_INTENT,
+    }
+    return mapping.get(intent, "일반 광산 안전")
+
+
+def evidence_is_limited(results: list[dict[str, Any]]) -> bool:
+    if not results:
+        return True
+    if len(results) < 2:
+        return True
+    first_distance = results[0].get("distance")
+    return isinstance(first_distance, (int, float)) and first_distance > 1.05
+
+
+def evidence_limitation_notice(results: list[dict[str, Any]]) -> str:
+    if evidence_is_limited(results):
+        return "검색된 문서 근거가 제한적이므로, 구체적인 현장 기준은 사업장 안전보건관리규정과 담당 안전관리자 확인이 필요합니다."
+    return ""
+
+
+def gemini_intent_guidance(intent: str) -> str:
+    if intent == PPE_GENERAL_INTENT:
+        return "보호구 질문입니다. 작업중지부터 말하지 말고 착용 이유, 필요한 작업·상황, 착용 전 점검사항, 현장관리자 확인사항을 자연스럽게 설명하세요."
+    if intent in RISK_SIGN_INTENTS:
+        return "위험 징후 대응형 질문입니다. 즉시 판단, 작업중지 또는 출입통제, 대피, 점검·재측정, 재개 전 확인, 기록·보고를 빠뜨리지 마세요."
+    if intent in MANAGEMENT_RECORD_INTENTS:
+        return "관리·기록형 질문입니다. 필요한 기록, 현장 확인사항, 책임자 확인, 보관 증빙자료, 법령 단정 금지 안내를 중심으로 답하세요."
+    if intent in GENERAL_EXPLANATION_INTENTS:
+        return "일반 안전교육형 질문입니다. 왜 필요한지, 언제 적용하는지, 작업 전 확인사항과 교육·기록 사항을 설명하세요."
+    if intent == KRAS_INTENT:
+        return "위험성평가 질문입니다. 위험요인, 현재 위험성, 감소대책, 확인 기록과 KRAS 초안 연결을 중심으로 답하세요."
+    if intent == LAW_INTENT:
+        return "법령 설명 질문입니다. 법령 조항 번호·처벌 수위는 검색 근거 없이 만들지 말고, 현장관리자 조치와 증빙자료를 중심으로 설명하세요."
+    return "광산 안전관리 범위의 질문으로 보고 검색 근거에 맞춰 답하세요."
+
+
 def is_blasting_preferred_source(source: str) -> bool:
     normalized = clean_text(source).lower()
     return any(
@@ -2326,6 +2796,7 @@ def rerank_search_results(
     top_k: int,
 ) -> list[dict[str, Any]]:
     question_type = classify_question_type(question)
+    question_intent = detect_question_intent(question)
     config = RERANK_TYPE_CONFIGS.get(question_type)
     reranking_applied = config is not None
     question_text = clean_text(question).lower()
@@ -2425,6 +2896,7 @@ def rerank_search_results(
 
         result["rerank_score"] = score
         result["question_type"] = question_type
+        result["question_intent"] = question_intent
         result["reranking_applied"] = reranking_applied
         result["reranking_label"] = reranking_label
 
@@ -2474,14 +2946,19 @@ def search_vector_db(question: str, top_k: int = 5):
     if error:
         return [], error
 
+    intent = detect_question_intent(question)
+    expanded_question = expand_search_query(question, intent)
+    if intent != OUT_OF_SCOPE_INTENT:
+        top_k = max(top_k, 5)
+
     model = load_embedding_model()
     query_embedding = model.encode(
-        [question],
+        [expanded_question],
         normalize_embeddings=True,
         show_progress_bar=False,
     ).tolist()
 
-    question_type = classify_question_type(question)
+    question_type = classify_question_type(expanded_question)
     rerank_config = RERANK_TYPE_CONFIGS.get(question_type)
     internal_count = top_k
     if rerank_config:
@@ -2528,11 +3005,15 @@ def search_vector_db(question: str, top_k: int = 5):
             rerank_config["preferred_files"],
         )
 
-    return rerank_search_results(
-        question,
+    selected = rerank_search_results(
+        expanded_question,
         search_candidates,
         top_k,
-    ), None
+    )
+    for result in selected:
+        result["question_intent"] = intent
+        result["expanded_search_query"] = expanded_question
+    return selected, None
 
 
 def build_context(results: list[dict[str, Any]]) -> str:
@@ -2545,6 +3026,7 @@ def build_context(results: list[dict[str, Any]]) -> str:
         block = (
             f"[근거 {r['rank']}]\n"
             f"출처: {r['source']}\n"
+            f"chunk_id: {r.get('chunk_id', '정보 없음')}\n"
             f"거리값: {format_distance(r['distance'])}\n"
             f"내용:\n{evidence_text}\n"
         )
@@ -2552,18 +3034,53 @@ def build_context(results: list[dict[str, Any]]) -> str:
     return "\n".join(context_blocks)
 
 
-def build_prompt(question: str, results: list[dict[str, Any]]) -> str:
+
+def build_prompt(
+    question: str,
+    results: list[dict[str, Any]],
+    intent: str | None = None,
+    reference_cases: list[dict[str, Any]] | None = None,
+    live_news_cases: list[dict[str, Any]] | None = None,
+) -> str:
     context = build_context(results)
+    intent = intent or detect_question_intent(question)
+    intent_guidance = gemini_intent_guidance(intent)
+    reference_case_context = format_reference_cases_for_prompt(intent, reference_cases or [])
+    live_news_context = format_live_news_cases_for_prompt(live_news_cases or [])
     return f"""
 당신은 광산 안전 지침과 중대재해처벌법 대응을 돕는 안전관리자용 AI입니다.
 
-반드시 아래 [검색된 근거 문서]의 내용만 근거로 답변하세요.
-근거 문서에 없는 내용은 추측하지 말고 "제공된 근거 문서만으로는 확인하기 어렵습니다"라고 말하세요.
-검색된 근거 외의 법령명, 조문 번호, 수치, 처벌 수위 또는 의무를 생성하지 마세요.
-조문 번호가 검색 근거에 명확하지 않으면 "검색 근거 기준" 또는 "관련 문서 확인 필요"라고 표시하세요.
-답변은 현장 관리자가 바로 확인할 수 있도록 체크리스트와 실행 순서 중심으로 작성하세요.
-법령 해석이나 실제 현장 조치가 필요한 경우에는 최종 판단을 해당 안전관리자, 관계 기관, 전문가에게 확인해야 한다고 안내하세요.
-답변 마지막에는 사용한 근거 문서명을 정리하세요.
+아래 [검색된 근거 문서]는 사용자의 질문에 대해 Vector DB / ChromaDB에서 검색된 RAG 근거입니다.
+반드시 검색된 근거를 바탕으로 답변하고, 근거 없는 법령 조항 번호·수치·출처를 만들지 마세요.
+검색 근거만으로 단정하기 어려운 내용은 "검색된 근거만으로는 단정하기 어렵습니다"라고 표시하세요.
+
+[질문 유형]
+{intent}
+{intent_guidance}
+
+[Gemini 모드 답변 지침]
+- 안정성 모드처럼 딱딱한 체크리스트만 만들지 말고 문단형 설명 중심으로 작성하세요.
+- 질문 유형에 맞게 필요한 이유와 배경을 설명하세요. 위험상황 질문에서는 작업중지, 대피, 출입통제, 점검, 재측정, 기록을 빠뜨리지 마세요.
+- 현장관리자나 비전문가도 이해할 수 있도록 자연스럽게 풀어 설명하세요.
+- 허위 출처를 만들지 말고, 검색된 문서명과 chunk_id만 근거로 언급하세요.
+- 마지막에는 "현장 조치 요약"을 짧은 bullet로 정리하세요.
+- 법령 해석이나 실제 작업재개 판단은 안전관리자, 관계기관, 전문가 확인이 필요하다고 안내하세요.
+
+[사례 기반 주의 포인트 사용 제한]
+- 아래 [사례 기반 주의 포인트]는 공식 법령 근거가 아니라 유사 위험을 이해하기 위한 참고 예시입니다.
+- 공식 판단 근거는 검색된 RAG 근거 문서와 chunk_id이며, 주의 포인트를 법령 근거처럼 말하지 마세요.
+- 중대재해처벌법 위반 여부, 처벌 여부, 법령 조항을 주의 포인트만으로 단정하지 마세요.
+
+[사례 기반 주의 포인트]
+{reference_case_context}
+
+[뉴스 검색 참고자료 사용 제한]
+- 아래 [실시간 사례 검색 참고]는 네이버 뉴스 검색 기반 참고자료이며 공식 법령 판단 근거가 아닙니다.
+- 공식 판단 근거는 검색된 RAG 근거 문서와 chunk_id입니다.
+- 뉴스 제목과 요약에 없는 내용을 만들지 말고, 뉴스만으로 법령 위반 여부나 처벌 여부를 단정하지 마세요.
+
+[실시간 사례 검색 참고]
+{live_news_context}
 
 [사용자 질문]
 {question}
@@ -2571,42 +3088,96 @@ def build_prompt(question: str, results: list[dict[str, Any]]) -> str:
 [검색된 근거 문서]
 {context}
 
-[답변 형식]
-## 1. 핵심 답변
-질문에 대한 핵심 답변을 3~5문장으로 작성합니다.
+[출력 제목]
+### 자연어 설명 답변
 
-## 2. KRAS식 위험성평가 기록 초안
-반드시 markdown 표로 아래 항목을 작성합니다.
-- 세부 작업 내용
-- 잠재위험요인
-- 위험발생 상황 및 결과
-- 관련 근거 / 법적 기준
-- 현재 위험성: 가능성, 중대성, 위험등급
-- 위험성 감소대책: 제거 → 대체 → 공학적 대책 → 관리적 대책 → 보호구/PPE 순서
-- 조치 후 잔여위험성
-- 기록·보고 사항
-- KRAS 양식 기입용 요약표
-관련 근거 / 법적 기준에는 검색된 문서명과 chunk_id만 사용하고, 확인되지 않은 조문은 만들지 않습니다.
-위험성 등급은 현장 확인 전 정성 초안임을 명시합니다.
-
-## 3. 현장 안전 체크리스트
-- 작업 전 확인사항
-- 작업 중 확인사항
-- 이상 상황 발생 시 조치사항
-
-## 4. 관련 법령 및 지침
-검색된 근거 문서에서 확인 가능한 법령, 지침, 기준을 정리합니다.
-
-## 5. 현장 관리자 조치사항
-현장 관리자가 해야 할 일을 실행 순서로 정리합니다.
-
-## 6. 추가 확인 필요사항
-근거가 부족하거나 현장 조건에 따라 추가 확인이 필요한 사항을 적습니다.
-
-## 7. 근거 문서
-답변에 사용한 근거 문서명을 bullet 형태로 정리합니다.
+[권장 답변 구조]
+1. 질문 유형에 맞는 핵심 설명
+2. 왜 필요한지 또는 왜 위험한지
+3. 현장에서 적용할 조치와 확인사항
+4. 기록·보고·교육자료로 남길 사항
+5. 현장 조치 요약
 """.strip()
 
+
+def build_hybrid_prompt(
+    question: str,
+    results: list[dict[str, Any]],
+    stable_draft: str,
+    intent: str | None = None,
+    reference_cases: list[dict[str, Any]] | None = None,
+    live_news_cases: list[dict[str, Any]] | None = None,
+) -> str:
+    context = build_context(results)
+    intent = intent or detect_question_intent(question)
+    intent_guidance = gemini_intent_guidance(intent)
+    reference_case_context = format_reference_cases_for_prompt(intent, reference_cases or [])
+    live_news_context = format_live_news_cases_for_prompt(live_news_cases or [])
+    return f"""
+당신은 광산 안전관리자를 돕는 MineSafe AI의 하이브리드 답변 보완 역할입니다.
+
+아래 [안정형 조치 초안]은 외부 LLM 없이 RAG 검색 근거로 만든 공식 문서 기반 체크리스트형 답변입니다.
+아래 [검색된 근거 문서]는 같은 질문에 대해 Vector DB / ChromaDB에서 검색된 근거입니다.
+
+[질문 유형]
+{intent}
+{intent_guidance}
+
+[하이브리드 모드 답변 지침]
+- 안정형 조치 초안의 핵심 안전조치 구조는 유지하세요.
+- 각 조치마다 "이유"와 "현장 적용"을 자연어로 보완하세요.
+- Gemini 모드처럼 긴 문단만 쓰지 말고, 항목 구조를 분명히 유지하세요.
+- 근거 없는 법령 조항 번호·수치·출처를 만들지 마세요.
+- 검색 근거만으로 단정하기 어려운 내용은 "검색된 근거만으로는 단정하기 어렵습니다"라고 표시하세요.
+- 법령 해석이나 실제 작업재개 판단은 안전관리자, 관계기관, 전문가 확인이 필요하다고 안내하세요.
+
+[사례 기반 주의 포인트 사용 제한]
+- 아래 [사례 기반 주의 포인트]는 공식 법령 근거가 아니라 유사 위험을 이해하기 위한 참고 예시입니다.
+- 안정형 핵심 조치 구조는 RAG 근거와 초안을 기준으로 유지하고, 주의 포인트는 이유 설명 보완에만 사용하세요.
+- 중대재해처벌법 위반 여부, 처벌 여부, 법령 조항을 주의 포인트만으로 단정하지 마세요.
+
+[사례 기반 주의 포인트]
+{reference_case_context}
+
+[뉴스 검색 참고자료 사용 제한]
+- 아래 [실시간 사례 검색 참고]는 네이버 뉴스 검색 기반 참고자료이며 공식 법령 판단 근거가 아닙니다.
+- 안정형 핵심 조치 구조는 RAG 근거와 초안을 기준으로 유지하고, 뉴스는 이유 설명 보완에만 사용하세요.
+- 뉴스 제목과 요약에 없는 내용을 만들지 말고, 뉴스만으로 법령 위반 여부나 처벌 여부를 단정하지 마세요.
+
+[실시간 사례 검색 참고]
+{live_news_context}
+
+[사용자 질문]
+{question}
+
+[안정형 조치 초안]
+{stable_draft}
+
+[검색된 근거 문서]
+{context}
+
+[출력 제목]
+### 하이브리드 답변
+
+[반드시 아래 구조로 출력]
+## 핵심 판단
+
+## 조치별 설명
+1. 작업중지
+   - 이유:
+   - 현장 적용:
+2. 대피 또는 출입통제
+   - 이유:
+   - 현장 적용:
+3. 점검 및 재측정
+   - 이유:
+   - 현장 적용:
+4. 기록 및 증빙자료
+   - 이유:
+   - 현장 적용:
+
+## 관련 근거 요약
+""".strip()
 
 def make_preview(text: str, limit: int = 320) -> str:
     if len(text) <= limit:
@@ -2643,6 +3214,13 @@ def calculate_judgment(total_score: int) -> str:
 
 
 def classify_safety_situation(question: str) -> str:
+    intent = detect_question_intent(question)
+    if intent == OUT_OF_SCOPE_INTENT:
+        return OUT_OF_SCOPE_INTENT
+    mapped_intent = map_intent_to_situation_type(intent, question)
+    if mapped_intent != "일반 광산 안전":
+        return mapped_intent
+
     question_type = classify_question_type(question)
     if question_type != "일반":
         return question_type
@@ -2679,7 +3257,7 @@ def build_immediate_judgment(situation_type: str) -> str:
         "낙반/붕락": "낙반/붕락 위험이 의심되므로 작업을 계속하지 말고 즉시 작업중지 여부를 검토해야 합니다. 위험 구역 출입통제, 근로자 대피, 천반·부석·지보공 상태 확인 후 안전관리자 또는 책임자가 작업 재개 여부를 판단해야 합니다.",
         BLASTING_QUESTION_TYPE: "불발이 의심되면 작업자의 임의 접근을 금지하고 위험구역 출입통제와 대피를 유지해야 합니다. 발파 책임자 또는 안전관리자가 불발 여부와 현장 안전을 확인하기 전에는 굴진·정리 작업과 재출입을 허용하지 않아야 합니다.",
         "환기/유해가스": "유해가스, 산소부족, 환기 이상이 의심되면 작업을 계속하지 말고 가스 측정, 환기, 대피를 우선해야 합니다.",
-        "화재/폭발": "화재, 폭발, 연기가 의심되면 작업중지, 대피, 신고, 가능한 범위의 초기 대응을 우선해야 합니다.",
+        "화재/폭발": "화재, 폭발, 연기가 의심되면 작업중지, 대피, 신고, 출입통제를 우선하고, 안전이 확보되는 범위에서만 소화기 등 초기 대응을 검토해야 합니다.",
         "장비/운반": "장비 운전·정비 또는 운반 위험이 의심되면 전원 차단, 에너지 격리, 임의가동 방지, 접근 통제를 우선해야 합니다.",
         "중대재해처벌법": "사망 또는 중대재해 가능성이 있는 상황에서는 작업중지, 인명 구조와 보고, 원인조사, 재발방지대책, 안전보건관리체계 이행 여부 점검이 필요합니다.",
     }
@@ -2826,9 +3404,9 @@ def build_priority_actions(situation_type: str) -> list[str]:
             "경영책임자의 안전보건 확보의무와 안전보건관리체계 이행 여부를 점검합니다.",
         ]
     return [
-        "검색 근거와 현장 상황을 대조합니다.",
+        "질문과 관련된 작업 장소, 설비, 작업자 상태와 주변 위험요인을 확인합니다.",
         "급박한 위험이 있으면 작업중지, 출입통제, 대피를 먼저 검토합니다.",
-        "책임자 확인 후 작업 재개 여부를 판단합니다.",
+        "작업 전 확인사항과 조치 결과를 기록하고 책임자 확인 후 작업 재개 여부를 판단합니다.",
     ]
 
 
@@ -2917,7 +3495,8 @@ def build_check_items(situation_type: str) -> list[str]:
     return [
         "검색된 근거 문서가 현재 작업 유형과 직접 관련되는지",
         "작업중지, 대피, 보고, 보호구, 장비 점검 기준이 명시되어 있는지",
-        "현장 조건상 추가 확인이 필요한 위험요인이 있는지",
+        "통로, 조명, 환기, 설비, 작업자 상태 등 현장 조건상 추가 확인이 필요한 위험요인이 있는지",
+        "점검표, 사진, 교육기록, 작업허가서 등 남겨야 할 증빙자료가 무엇인지",
         "최신 법령·지침 또는 내부 안전관리 기준 확인이 필요한지",
     ]
 
@@ -3176,12 +3755,42 @@ def build_kras_risk_assessment_section(
 
 def short_answer_mode(answer_mode: str) -> str:
     if answer_mode == STABLE_MODE:
-        return "안정 모드"
+        return "안정성 모드"
     if answer_mode == GEMINI_MODE:
-        return "Gemini 모드"
+        return "자연어 설명 모드"
     if answer_mode == HYBRID_MODE:
         return "하이브리드 모드"
     return answer_mode
+
+
+def answer_mode_description(mode_name: str) -> str:
+    if mode_name == "안정성 모드":
+        return "공식 문서 근거를 바탕으로 체크리스트형 답변을 제공합니다."
+    if mode_name == "자연어 설명 모드":
+        return "검색된 근거를 바탕으로 더 자연스러운 설명형 답변을 제공합니다."
+    if mode_name == "하이브리드 모드":
+        return "핵심 조치는 유지하고, 각 조치의 이유를 함께 설명합니다."
+    return "검색 근거를 바탕으로 안전 답변을 제공합니다."
+
+
+def public_answer_mode_label(answer_status: dict[str, Any], mode_name: str) -> str:
+    fallback_used = bool(
+        answer_status.get(
+            "used_fallback",
+            answer_status.get("fallback_used", False),
+        )
+    )
+    if fallback_used:
+        return "안정성 모드"
+    mode = str(answer_status.get("mode", "")).lower()
+    prompt_kind = str(answer_status.get("prompt_kind", "")).lower()
+    if mode == "stable":
+        return "안정성 모드"
+    if mode == "hybrid" or prompt_kind == "hybrid":
+        return "하이브리드 모드"
+    if prompt_kind == "gemini" or mode == "gemini":
+        return "자연어 설명 모드"
+    return mode_name
 
 
 def classify_gemini_status(answer_status: dict[str, Any]) -> str:
@@ -3899,81 +4508,281 @@ def update_evaluation_result(
         return False, str(e)
 
 
+
+def format_evidence_lines(results: list[dict[str, Any]], limit: int = 5) -> list[str]:
+    lines = []
+    for r in results[:limit]:
+        lines.append(
+            f"- 근거 {r.get('rank', '-')} | {r.get('source', '출처 정보 없음')} | "
+            f"chunk_id {r.get('chunk_id', '정보 없음')} | 거리값 {format_distance(r.get('distance'))}\n"
+            f"  - {make_preview(str(r.get('text', '')), 220)}"
+        )
+    if not lines:
+        lines.append("- 검색된 문서 근거가 없습니다. 일반 안전 원칙 수준으로만 안내합니다.")
+    return lines
+
+
+def format_source_lines(results: list[dict[str, Any]], limit: int = 8) -> list[str]:
+    unique_sources = []
+    for r in results:
+        source_label = f"{r.get('source', '출처 정보 없음')} (chunk_id: {r.get('chunk_id', '정보 없음')})"
+        if source_label not in unique_sources:
+            unique_sources.append(source_label)
+    return [f"- {source}" for source in unique_sources[:limit]] or ["- 검색 근거 문서 없음"]
+
+
+def with_evidence_notice(lines: list[str], results: list[dict[str, Any]]) -> list[str]:
+    notice = evidence_limitation_notice(results)
+    if notice:
+        return [*lines, "", f"> {notice}"]
+    return lines
+
+
+def build_ppe_general_answer(question: str, results: list[dict[str, Any]], intent: str) -> str:
+    ppe_item = detect_ppe_item(question)
+    knowledge = PPE_BASIC_KNOWLEDGE.get(ppe_item)
+    if knowledge is None and ppe_item == "보호구":
+        knowledge = {
+            "why": "보호구는 작업 중 몸에 직접 닿는 위험을 줄이는 마지막 방어수단입니다. 위험 제거·격리·환기 같은 조치를 먼저 하고, 남는 위험에 맞는 보호구를 착용해야 합니다.",
+            "when": ["갱내 작업", "장비 주변 작업", "굴진·천공·파쇄 작업", "분진·소음·비래물·추락 위험이 있는 작업"],
+            "checks": ["작업 위험에 맞는 보호구인지", "손상·오염·유효 상태", "몸에 맞고 올바르게 착용되었는지"],
+        }
+    evidence_lines = format_evidence_lines(results)
+    source_lines = format_source_lines(results)
+    return "\n".join(
+        with_evidence_notice(
+            [
+                "## 핵심 답변",
+                f"- {ppe_item}는 작업 중 다치기 쉬운 신체 부위를 보호하기 위해 착용합니다.",
+                "- 보호구는 위험을 없애는 조치를 대신하지는 못하지만, 남아 있는 위험으로부터 작업자를 보호하는 중요한 장치입니다.",
+                "",
+                "## 착용해야 하는 이유",
+                f"- {knowledge['why']}",
+                "- 보호구를 착용하지 않은 상태로 위험작업을 하려는 경우에는 작업 투입 전 착용 상태를 먼저 확인해야 합니다.",
+                "",
+                "## 착용이 필요한 작업/상황",
+                *[f"- {item}" for item in knowledge["when"]],
+                "",
+                "## 착용 전 확인사항",
+                *[f"- {item}" for item in knowledge["checks"]],
+                "",
+                "## 현장관리자 확인사항",
+                "- 작업 위험에 맞는 보호구가 지급되었는지 확인합니다.",
+                "- 착용 방법을 작업자가 이해했는지 확인합니다.",
+                "- 손상되거나 오염된 보호구는 교체하도록 조치합니다.",
+                "- 보호구 지급, 착용 점검, 교육 내용을 기록으로 남깁니다.",
+                "",
+                "## 관련 근거 요약",
+                *evidence_lines,
+                "",
+                "## 관련 근거 문서",
+                *source_lines,
+            ],
+            results,
+        )
+    )
+
+
+def build_risk_response_answer(question: str, results: list[dict[str, Any]], situation_type: str) -> str:
+    immediate_judgment = build_immediate_judgment(situation_type)
+    priority_actions = [f"{idx}. {item}" for idx, item in enumerate(build_priority_actions(situation_type), start=1)]
+    check_items = [f"{idx}. {item}" for idx, item in enumerate(build_check_items(situation_type), start=1)]
+    evidence_lines = format_evidence_lines(results)
+    source_lines = format_source_lines(results)
+    kras_section = build_kras_risk_assessment_section(question, results, situation_type)
+    return "\n".join(
+        with_evidence_notice(
+            [
+                "## 즉시 판단",
+                f"- 상황 유형: {situation_type}",
+                f"- {immediate_judgment}",
+                "",
+                "## 우선 조치",
+                *priority_actions,
+                "",
+                "## 작업중지/대피 필요 여부",
+                "- 급박한 위험이 있으면 작업을 먼저 중지합니다.",
+                "- 유해가스, 불발, 낙반, 전기 이상, 장비 충돌 위험 등 즉시 위험이 있으면 대피 또는 출입통제를 우선합니다.",
+                "- 작업재개는 점검, 재측정, 보강, 승인, 기록이 끝난 뒤 검토합니다.",
+                "",
+                "## 현장 점검사항",
+                *check_items,
+                "",
+                "## 기록 및 증빙자료",
+                "- 작업중지 지시와 전파 내용을 기록합니다.",
+                "- 측정값, 점검표, 사진, TBM 회의록, 교육·보호구 지급 기록을 남깁니다.",
+                "- 조치 완료 후 작업재개 승인 근거를 보관합니다.",
+                "",
+                "## 관련 근거 요약",
+                *evidence_lines,
+                "",
+                "## 관련 근거 문서",
+                *source_lines,
+                "",
+                kras_section,
+            ],
+            results,
+        )
+    )
+
+
+def build_general_education_answer(question: str, results: list[dict[str, Any]], intent: str, situation_type: str) -> str:
+    evidence_lines = format_evidence_lines(results)
+    source_lines = format_source_lines(results)
+    if intent == PREWORK_TBM_INTENT:
+        lead = "작업 전 TBM은 당일 작업의 위험요인과 조치방법을 작업자와 관리자가 함께 확인하는 절차입니다."
+        why = [
+            "작업자가 오늘 해야 할 일과 위험요인을 같은 기준으로 이해하게 합니다.",
+            "보호구, 장비, 신호, 대피 절차를 작업 시작 전에 확인할 수 있습니다.",
+            "전날 지적사항이나 변경된 작업 조건을 빠뜨리지 않게 합니다.",
+        ]
+        when = ["매일 작업 시작 전", "작업 위치·방법·장비가 바뀐 때", "신규 작업자나 협력업체가 투입될 때"]
+    else:
+        lead = "광산 안전관리는 작은 이상 징후를 작업 전에 확인하고 기록해 사고로 이어지지 않게 하는 활동입니다."
+        why = [
+            "갱내 환경은 환기, 조명, 통로, 장비 상태가 조금만 달라져도 위험이 커질 수 있습니다.",
+            "작업 전 확인과 교육은 작업자별 역할과 대피 기준을 분명히 합니다.",
+            "기록은 조치 이행 여부와 재발방지 근거가 됩니다.",
+        ]
+        when = ["작업 시작 전", "작업 조건이 바뀐 때", "이상 징후가 발견된 때"]
+    return "\n".join(
+        with_evidence_notice(
+            [
+                "## 핵심 설명",
+                f"- {lead}",
+                "",
+                "## 왜 필요한지",
+                *[f"- {item}" for item in why],
+                "",
+                "## 현장에서 언제 적용하는지",
+                *[f"- {item}" for item in when],
+                "",
+                "## 작업 전 확인사항",
+                *[f"- {item}" for item in build_check_items(situation_type)[:6]],
+                "",
+                "## 기록 또는 교육자료로 남길 사항",
+                "- 참석자, 일시, 작업명, 공유한 위험요인과 조치사항",
+                "- 보호구 착용 확인, 장비·환기·조명·통로 점검 결과",
+                "- 작업자가 제기한 의견과 개선 조치",
+                "",
+                "## 관련 근거 요약",
+                *evidence_lines,
+                "",
+                "## 관련 근거 문서",
+                *source_lines,
+            ],
+            results,
+        )
+    )
+
+
+def build_kras_intent_answer(question: str, results: list[dict[str, Any]], situation_type: str) -> str:
+    evidence_lines = format_evidence_lines(results)
+    source_lines = format_source_lines(results)
+    kras_section = build_kras_risk_assessment_section(question, results, situation_type)
+    return "\n".join(
+        with_evidence_notice(
+            [
+                "## 위험요인",
+                "- 작업 장소, 장비, 작업방법, 작업자 상태에서 유해·위험요인을 먼저 찾습니다.",
+                "- 갱내 작업에서는 낙반, 환기·유해가스, 분진, 전기, 장비 운반 위험을 함께 확인합니다.",
+                "",
+                "## 현재 위험성",
+                "- 가능성과 중대성을 함께 보아 위험 수준을 정합니다.",
+                "- 검색 근거만으로 수치화하기 어려운 경우 현장 기준에 따라 재평가해야 합니다.",
+                "",
+                "## 감소대책",
+                "- 제거, 대체, 공학적 대책, 관리적 대책, 보호구 순서로 검토합니다.",
+                "- 대책은 담당자, 완료 시점, 확인 방법까지 정해야 합니다.",
+                "",
+                "## 확인해야 할 기록",
+                "- 위험성평가표, 감소대책 이행 기록, TBM 기록, 점검표, 사진, 교육자료",
+                "",
+                "## KRAS 초안 연결 안내",
+                "- 아래 KRAS식 위험성평가 기록 초안을 현장 조건에 맞게 보완해 사용할 수 있습니다.",
+                "",
+                "## 관련 근거 요약",
+                *evidence_lines,
+                "",
+                "## 관련 근거 문서",
+                *source_lines,
+                "",
+                kras_section,
+            ],
+            results,
+        )
+    )
+
+
+def build_law_explanation_answer(question: str, results: list[dict[str, Any]], situation_type: str) -> str:
+    evidence_lines = format_evidence_lines(results)
+    source_lines = format_source_lines(results)
+    return "\n".join(
+        with_evidence_notice(
+            [
+                "## 쉬운 설명",
+                "- 중대재해처벌법과 관련 법령 대응은 사고가 난 뒤 설명하는 것이 아니라, 평소 안전보건관리체계가 실제로 작동했다는 점을 자료로 남기는 일입니다.",
+                "- 조항 번호, 처벌 여부, 법적 책임은 검색 근거가 명확하지 않으면 단정하지 않습니다.",
+                "",
+                "## 현장관리자가 해야 할 일",
+                "- 작업 전 위험요인을 확인하고 필요한 개선조치를 요청·이행합니다.",
+                "- TBM, 보호구 착용, 작업허가, 점검, 작업중지·재개 승인 절차를 운영합니다.",
+                "- 위험 상황이나 사고 발생 시 보고, 현장 통제, 원인조사, 재발방지대책 수립을 지원합니다.",
+                "",
+                "## 증빙자료로 남겨야 할 것",
+                "- 점검표, TBM 참석자 명부, 교육자료, 보호구 지급·착용 점검 기록",
+                "- 위험성평가와 감소대책 이행 기록, 개선조치 완료 사진",
+                "- 사고·아차사고 보고서, 원인조사, 재발방지대책과 이행 확인 자료",
+                "",
+                "## 단정 금지",
+                "- 법령 해석, 위반 여부, 처벌 수위는 현장 사실관계와 최신 법령 확인이 필요합니다.",
+                "- 필요한 경우 안전관리자, 법무 담당자, 관계기관 또는 전문가 확인을 받아야 합니다.",
+                "",
+                "## 관련 근거 요약",
+                *evidence_lines,
+                "",
+                "## 관련 근거 문서",
+                *source_lines,
+            ],
+            results,
+        )
+    )
+
+
+def build_out_of_scope_answer(question: str) -> str:
+    return "\n".join(
+        [
+            "## 답변 범위 안내",
+            "- MineSafe AI는 광산 안전관리, 산업안전, 작업장 안전, 관련 법령·지침 기반 답변에 특화되어 있습니다.",
+            "- 현재 질문은 광산 안전관리 범위와 직접 관련이 적어 안전 답변으로 억지로 연결하지 않겠습니다.",
+            "",
+            "## 다시 질문하는 방법",
+            "- 광산 현장 작업, 보호구, 환기, 발파, 낙반, 전기, 장비, TBM, 위험성평가, 사고보고, 중대재해처벌법과 연결해 질문해 주세요.",
+            "- 예: '갱내 작업 전 안전화 착용을 어떻게 확인해야 해?'",
+        ]
+    )
+
+
 def generate_local_fallback_answer(
     question: str,
     results: list[dict[str, Any]],
     reason: str = "",
+    intent: str | None = None,
 ) -> str:
-    situation_type = classify_safety_situation(question)
-    immediate_judgment = build_immediate_judgment(situation_type)
-    priority_actions = [f"- {item}" for item in build_priority_actions(situation_type)]
-    check_items = [f"- {item}" for item in build_check_items(situation_type)]
+    intent = intent or detect_question_intent(question)
+    if intent == OUT_OF_SCOPE_INTENT:
+        return build_out_of_scope_answer(question)
 
-    unique_sources = []
-    for r in results:
-        source_label = f"{r['source']} (chunk_id: {r.get('chunk_id', '정보 없음')})"
-        if source_label not in unique_sources:
-            unique_sources.append(source_label)
-
-    evidence_lines = []
-    for r in results[:5]:
-        evidence_lines.append(
-            f"- 근거 {r['rank']} | {r['source']} | chunk_id {r.get('chunk_id', '정보 없음')} | 거리값 {format_distance(r['distance'])}\n"
-            f"  - {make_preview(r['text'])}"
-        )
-
-    source_lines = [f"- {source}" for source in unique_sources[:8]]
-    reason_text = reason.strip() or "안정 모드: Gemini API 호출 안 함"
-    kras_section = build_kras_risk_assessment_section(
-        question,
-        results,
-        situation_type,
-    )
-
-    return "\n".join(
-        [
-            "## 검색 근거 기반 안전 답변",
-            "",
-            "외부 LLM API 호출 없이, 검색된 법령·지침 근거를 바탕으로 안전 답변을 제공합니다.",
-            "아래 내용은 검색 결과 기반 요약이며, 실제 현장 조치와 법령 해석은 담당 안전관리자, 관계 기관, 전문가 확인이 필요합니다.",
-            "",
-            "## 질문",
-            question,
-            "",
-            "## 즉시 판단",
-            f"- 상황 유형: {situation_type}",
-            f"- {immediate_judgment}",
-            "",
-            "## 우선 조치",
-            *priority_actions,
-            "",
-            "## 확인해야 할 사항",
-            *check_items,
-            "",
-            "## 관련 근거 문서",
-            *source_lines,
-            "",
-            "### 검색된 주요 근거 요약",
-            *evidence_lines,
-            "",
-            kras_section,
-            "",
-            "## 현장 조치 체크리스트",
-            "- 현장 위험이 제거되기 전에는 작업 재개를 서두르지 않습니다.",
-            "- 위험 구역, 작업자 위치, 대피 경로, 비상 연락 체계를 확인합니다.",
-            "- 검색된 근거 문서의 점검 기준, 작업중지 기준, 보고 절차를 대조합니다.",
-            "- 조치 결과와 확인 내용을 기록하고 필요 시 안전관리자 또는 책임자에게 보고합니다.",
-            "- 근거가 부족한 부분은 내부 안전관리 기준, 관계 기관, 전문가 확인 절차로 넘깁니다.",
-            "",
-            "## 주의사항",
-            "- 이 답변은 검색된 Vector DB 근거를 바탕으로 한 발표/평가용 안전 답변입니다.",
-            "- 문서에 없는 세부 법령 해석, 처벌 수위, 현장별 최종 조치는 단정하지 않습니다.",
-            "- 실제 조치 전 최신 법령과 현장 조건을 반드시 확인하세요.",
-            "",
-            "---",
-            f"생성 상태: {reason_text}",
-        ]
-    )
+    situation_type = map_intent_to_situation_type(intent, question)
+    if intent == PPE_GENERAL_INTENT:
+        return build_ppe_general_answer(question, results, intent)
+    if intent in RISK_SIGN_INTENTS:
+        return build_risk_response_answer(question, results, situation_type)
+    if intent == KRAS_INTENT:
+        return build_kras_intent_answer(question, results, situation_type)
+    if intent in MANAGEMENT_RECORD_INTENTS:
+        return build_law_explanation_answer(question, results, situation_type)
+    return build_general_education_answer(question, results, intent, situation_type)
 
 
 def call_gemini_with_timeout(
@@ -4123,16 +4932,31 @@ def build_legacy_gemini_status(
     }
 
 
+
 def generate_gemini_answer(
     question: str,
     results: list[dict[str, Any]],
     model_name: str = GEMINI_MODEL_NAME,
+    *,
+    prompt_kind: str = "gemini",
+    stable_draft: str = "",
+    reference_cases: list[dict[str, Any]] | None = None,
+    live_news_cases: list[dict[str, Any]] | None = None,
 ):
-    prompt = build_prompt(question, results)
+    intent = detect_question_intent(question)
+    if prompt_kind == "hybrid":
+        prompt = build_hybrid_prompt(question, results, stable_draft, intent, reference_cases or [], live_news_cases or [])
+    else:
+        prompt = build_prompt(question, results, intent, reference_cases or [], live_news_cases or [])
+
     result = execute_gemini_request(prompt, model_name)
 
     if result.get("success"):
-        answer = str(result.get("answer", ""))
+        answer = str(result.get("answer", "")).strip()
+        if prompt_kind == "gemini" and "자연어 설명 답변" not in answer:
+            answer = "\n\n".join(["### 자연어 설명 답변", answer])
+        if prompt_kind == "hybrid" and "하이브리드 답변" not in answer:
+            answer = "\n\n".join(["### 하이브리드 답변", answer])
         if "KRAS식 위험성평가 기록 초안" not in answer:
             answer = "\n\n".join(
                 [
@@ -4141,16 +4965,18 @@ def generate_gemini_answer(
                 ]
             )
         status = build_legacy_gemini_status(result, fallback_used=False)
+        status["prompt_kind"] = prompt_kind
         return answer, status
 
     fallback_answer = generate_local_fallback_answer(
         question,
         results,
         str(result.get("message") or result.get("error") or "Gemini 호출 실패"),
+        detect_question_intent(question),
     )
     status = build_legacy_gemini_status(result, fallback_used=True)
+    status["prompt_kind"] = prompt_kind
     return fallback_answer, status
-
 
 # ==============================
 # 법령 체크리스트·증빙자료·위험성평가·대화이력 기능
@@ -4313,6 +5139,458 @@ def render_recommended_evidence_records(records: list[str]) -> None:
         st.info("AI 답변만으로 법적 책임이 면제되는 것은 아니며, 실제 점검표·사진·교육기록·작업중지기록 등 현장 이행자료와 함께 관리해야 합니다.")
 
 
+
+def load_latest_reference_cases() -> list[dict[str, Any]]:
+    try:
+        if not LATEST_REFERENCE_CASES_PATH.exists():
+            return []
+        data = json.loads(LATEST_REFERENCE_CASES_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    if not isinstance(data, list):
+        return []
+    valid_cases: list[dict[str, Any]] = []
+    for item in data:
+        if isinstance(item, dict):
+            valid_cases.append(item)
+    return valid_cases
+
+
+def reference_case_categories_for_intent(intent: str) -> list[str]:
+    mapping = {
+        PPE_GENERAL_INTENT: ["보호구/PPE"],
+        VENTILATION_GAS_INTENT: ["환기/유해가스"],
+        VENTILATION_EQUIPMENT_INTENT: ["환기/유해가스"],
+        GAS_DETECTOR_INTENT: ["환기/유해가스"],
+        BLASTING_MISFIRE_INTENT: ["발파/불발"],
+        ROOF_FALL_INTENT: ["낙반/붕락"],
+        DUST_RESPIRATORY_INTENT: ["분진/호흡보호"],
+        ELECTRICAL_SAFETY_INTENT: ["전기안전"],
+        EQUIPMENT_TRANSPORT_INTENT: ["장비/운반/차량"],
+        BACKING_SIGNAL_INTENT: ["장비/운반/차량"],
+        FIRE_EMERGENCY_INTENT: ["화재/소화"],
+        HOT_WORK_INTENT: ["화재/소화"],
+        EVACUATION_ACCESS_SIGN_INTENT: ["대피로/표지"],
+        FLOOD_DRAINAGE_INTENT: ["침수/배수"],
+        WALKWAY_HOUSEKEEPING_INTENT: ["대피로/표지", "침수/배수"],
+        CONVEYOR_ROTATING_INTENT: ["컨베이어/끼임"],
+        LAW_INTENT: ["중대재해처벌법/증빙자료"],
+        DOCUMENT_EVIDENCE_INTENT: ["중대재해처벌법/증빙자료"],
+        KRAS_INTENT: ["중대재해처벌법/증빙자료"],
+    }
+    return mapping.get(intent, [intent])
+
+
+def match_reference_cases(question: str, intent: str, max_cases: int = 2) -> list[dict[str, Any]]:
+    if intent == OUT_OF_SCOPE_INTENT:
+        return []
+    question_text = clean_text(question).lower()
+    target_categories = reference_case_categories_for_intent(intent)
+    scored: list[tuple[int, dict[str, Any]]] = []
+    for case in load_latest_reference_cases():
+        score = 0
+        category = str(case.get("category", ""))
+        category_matched = False
+        if category in target_categories:
+            score += 8
+            category_matched = True
+        elif any(category in target or target in category for target in target_categories):
+            score += 5
+            category_matched = True
+        keywords = case.get("keywords", [])
+        if not isinstance(keywords, list):
+            keywords = []
+        keyword_hits = 0
+        for keyword in keywords:
+            key = str(keyword).strip().lower()
+            if key and key in question_text:
+                keyword_hits += 1
+        score += keyword_hits * 3
+        if category_matched or keyword_hits:
+            source_type = str(case.get("source_type", "")).lower()
+            if source_type == "official":
+                score += 3
+            elif source_type == "public_agency":
+                score += 2
+            elif source_type in {"manual", "sample"}:
+                score += 1
+        if score > 0:
+            enriched = dict(case)
+            enriched["match_score"] = score
+            scored.append((score, enriched))
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return [case for _, case in scored[:max_cases]]
+
+
+def case_warning_points_for_intent(intent: str, reference_cases: list[dict[str, Any]] | None = None) -> list[str]:
+    point_map = {
+        PPE_GENERAL_INTENT: [
+            "보호구 미착용 상태에서 위험작업을 진행하면 사고 발생 시 보호구 지급·착용 확인 여부가 쟁점이 될 수 있습니다.",
+            "안전모, 안전화, 방진마스크 등 보호구의 상태와 착용 기록을 남기는 것이 중요합니다.",
+            "반복 미착용을 방치하면 관리감독 미흡으로 지적될 수 있습니다.",
+        ],
+        VENTILATION_GAS_INTENT: [
+            "유해가스 또는 산소결핍 위험이 있는데 작업을 계속하면 작업중지·대피 조치 여부가 쟁점이 될 수 있습니다.",
+            "가스 측정 기록, 환기설비 점검 기록, 재측정 기록이 중요합니다.",
+            "경보 발생 후 조치가 지연되면 관리상 미흡으로 볼 수 있습니다.",
+        ],
+        VENTILATION_EQUIPMENT_INTENT: [
+            "환기팬 정지나 풍량 이상을 알고도 작업을 계속하면 작업중지·대피 판단이 쟁점이 될 수 있습니다.",
+            "환기설비 점검 기록, 가스 재측정 기록, 작업재개 승인 기록이 중요합니다.",
+            "경보나 설비 이상 후 조치가 지연되면 관리상 미흡으로 지적될 수 있습니다.",
+        ],
+        GAS_DETECTOR_INTENT: [
+            "가스측정기 경보나 측정값 이상을 확인하고도 작업을 계속하면 현장 통제 여부가 쟁점이 될 수 있습니다.",
+            "검교정, 알람 확인, 측정자와 측정값 기록이 중요합니다.",
+            "측정장비 이상을 방치하면 관리상 미흡으로 볼 수 있습니다.",
+        ],
+        BLASTING_MISFIRE_INTENT: [
+            "불발공 의심 상황에서 출입통제 없이 작업을 계속하면 중대한 위험으로 이어질 수 있습니다.",
+            "발파 후 점검 기록, 통제 기록, 담당자 확인 기록이 중요합니다.",
+            "미확인 상태에서 재작업하면 작업절차 미준수로 지적될 수 있습니다.",
+        ],
+        ROOF_FALL_INTENT: [
+            "천반 균열, 부석, 지보 이상을 확인하고도 작업을 계속하면 작업중지 판단이 쟁점이 될 수 있습니다.",
+            "지보 점검, 출입통제, 보강조치 기록이 중요합니다.",
+            "반복되는 낙반 징후를 방치하면 위험성평가와 개선조치 미흡으로 지적될 수 있습니다.",
+        ],
+        ELECTRICAL_SAFETY_INTENT: [
+            "전원 차단, 잠금표지, 접지 확인 없이 전기작업을 하면 감전 사고 시 관리상 미흡이 문제될 수 있습니다.",
+            "전기설비 점검 기록과 작업허가 기록이 중요합니다.",
+            "임시배선이나 손상 케이블을 방치하면 사고 예방조치 미흡으로 볼 수 있습니다.",
+        ],
+        EQUIPMENT_TRANSPORT_INTENT: [
+            "후진, 협착, 충돌 위험 작업에서 신호수나 출입통제가 없으면 안전조치 미흡이 쟁점이 될 수 있습니다.",
+            "장비 점검표, 작업반경 통제, 신호수 배치 기록이 중요합니다.",
+            "사각지대 위험을 알면서도 개선하지 않으면 관리 미흡으로 지적될 수 있습니다.",
+        ],
+        BACKING_SIGNAL_INTENT: [
+            "후진, 협착, 충돌 위험 작업에서 신호수나 출입통제가 없으면 안전조치 미흡이 쟁점이 될 수 있습니다.",
+            "장비 점검표, 작업반경 통제, 신호수 배치 기록이 중요합니다.",
+            "사각지대 위험을 알면서도 개선하지 않으면 관리 미흡으로 지적될 수 있습니다.",
+        ],
+        CONVEYOR_ROTATING_INTENT: [
+            "회전체·컨베이어 주변에서 방호덮개나 접근통제가 없으면 끼임 사고 위험이 커질 수 있습니다.",
+            "정비 전 전원 차단과 잠금표지 기록이 중요합니다.",
+            "가동 중 청소·점검을 허용하면 절차 미흡으로 지적될 수 있습니다.",
+        ],
+        FIRE_EMERGENCY_INTENT: [
+            "화기작업 전 가연물 제거, 소화기 비치, 화재감시가 없으면 화재 발생 시 예방조치가 쟁점이 될 수 있습니다.",
+            "소화기 점검 기록과 화기작업 허가 기록이 중요합니다.",
+            "불꽃 비산 위험을 방치하면 관리상 미흡으로 지적될 수 있습니다.",
+        ],
+        HOT_WORK_INTENT: [
+            "화기작업 전 가연물 제거, 소화기 비치, 화재감시가 없으면 화재 발생 시 예방조치가 쟁점이 될 수 있습니다.",
+            "소화기 점검 기록과 화기작업 허가 기록이 중요합니다.",
+            "불꽃 비산 위험을 방치하면 관리상 미흡으로 지적될 수 있습니다.",
+        ],
+        PREWORK_TBM_INTENT: [
+            "작업 전 위험요인을 공유하지 않으면 사고 발생 시 교육·위험성 전달 여부가 쟁점이 될 수 있습니다.",
+            "TBM 기록, 참석자 서명, 위험요인 공유 내용이 중요합니다.",
+            "신규 작업자나 협력업체 작업자는 별도 교육 기록을 남기는 것이 좋습니다.",
+        ],
+        NEW_WORKER_TRAINING_INTENT: [
+            "작업 전 위험요인을 공유하지 않으면 사고 발생 시 교육·위험성 전달 여부가 쟁점이 될 수 있습니다.",
+            "교육 기록, 참석자 서명, 작업절차 안내 내용이 중요합니다.",
+            "신규 작업자나 협력업체 작업자는 별도 교육 기록을 남기는 것이 좋습니다.",
+        ],
+        CONTRACTOR_PERMIT_INTENT: [
+            "협력업체 작업 전 위험요인을 공유하지 않으면 사고 발생 시 도급 작업 관리 여부가 쟁점이 될 수 있습니다.",
+            "작업허가서, 사전교육, 출입관리, 위험요인 공유 기록이 중요합니다.",
+            "작업 범위와 책임자를 불명확하게 두면 관리상 미흡으로 지적될 수 있습니다.",
+        ],
+        LAW_INTENT: [
+            "실제 조치를 했더라도 기록이 없으면 이행 여부를 입증하기 어려울 수 있습니다.",
+            "위험성평가, 작업중지 기록, 개선조치 사진, 교육기록, 점검표를 함께 관리해야 합니다.",
+            "AI 답변이나 체크리스트만으로 법적 책임이 면제되는 것은 아닙니다.",
+        ],
+        DOCUMENT_EVIDENCE_INTENT: [
+            "실제 조치를 했더라도 기록이 없으면 이행 여부를 입증하기 어려울 수 있습니다.",
+            "위험성평가, 작업중지 기록, 개선조치 사진, 교육기록, 점검표를 함께 관리해야 합니다.",
+            "AI 답변이나 체크리스트만으로 법적 책임이 면제되는 것은 아닙니다.",
+        ],
+        KRAS_INTENT: [
+            "위험성평가를 형식적으로 작성하고 개선조치를 하지 않은 경우, 중대재해 발생 시 관리상 미흡으로 지적될 수 있습니다.",
+            "감소대책 이행 여부와 개선조치 완료 사진, 담당자 확인 기록이 중요합니다.",
+            "AI가 만든 초안만으로 위험성평가 이행이 완료되는 것은 아닙니다.",
+        ],
+    }
+    if intent in point_map:
+        return point_map[intent][:3]
+
+    categories = {
+        str(case.get("category", ""))
+        for case in (reference_cases or [])
+        if isinstance(case, dict)
+    }
+    if "침수/배수" in categories:
+        return [
+            "통로 물 고임이나 침수를 방치하면 미끄럼, 감전, 장비 이동 위험 관리 여부가 쟁점이 될 수 있습니다.",
+            "배수 조치, 통행 제한, 전기설비 접촉 위험 확인 기록이 중요합니다.",
+            "반복적인 누수나 배수 불량을 방치하면 개선조치 미흡으로 지적될 수 있습니다.",
+        ]
+    if "대피로/표지" in categories:
+        return [
+            "대피로, 비상구, 경고표지가 확보되지 않으면 비상 시 현장 통제 여부가 쟁점이 될 수 있습니다.",
+            "통로 확보, 출입통제, 표지 점검 기록이 중요합니다.",
+            "위험구역 표시가 불명확하면 관리상 미흡으로 지적될 수 있습니다.",
+        ]
+    return [
+        "위험요인을 알고도 필요한 통제조치를 하지 않으면 사고 발생 시 관리상 미흡으로 지적될 수 있습니다.",
+        "점검, 교육, 작업중지, 개선조치 기록을 함께 남기는 것이 중요합니다.",
+        "중대재해처벌법 위반 여부는 사고 경위와 사업장 조치, 법령 해석에 따라 달라질 수 있습니다.",
+    ]
+
+
+def format_reference_cases_for_prompt(intent: str, reference_cases: list[dict[str, Any]]) -> str:
+    if not reference_cases:
+        return "관련 주의 포인트 없음."
+    points = case_warning_points_for_intent(intent, reference_cases)
+    source_labels = []
+    for case in reference_cases[:2]:
+        case_id = str(case.get("case_id", "CASE"))
+        label = str(case.get("reliability_label", "참고자료"))
+        source_labels.append(f"{case_id}({label})")
+    lines = [
+        "아래 내용은 공식 법령 판단 근거가 아니라 유사 위험을 이해하기 위한 참고 예시입니다.",
+        f"참고 사례 데이터: {', '.join(source_labels)}",
+    ]
+    lines.extend(f"- {point}" for point in points[:3])
+    lines.append("주의: 실제 위반 여부는 사고 경위, 사업장 조치, 법령 해석에 따라 달라질 수 있습니다.")
+    return "\n".join(lines)
+
+def summarize_reference_cases_for_history(reference_cases: list[dict[str, Any]]) -> list[str]:
+    summaries = []
+    for case in reference_cases:
+        title = str(case.get("title", "제목 없음"))
+        case_id = str(case.get("case_id", "CASE"))
+        label = str(case.get("reliability_label", "참고자료"))
+        summaries.append(f"참고 사례: {case_id} / {title} / {label}")
+    return summaries
+
+
+def render_latest_reference_cases(reference_cases: list[dict[str, Any]], intent: str | None = None) -> None:
+    if not reference_cases:
+        return
+    points = case_warning_points_for_intent(intent or GENERAL_MINE_SAFETY_INTENT, reference_cases)
+    if not points:
+        return
+    list_html = "".join(f"<li>{escape(point)}</li>" for point in points[:3])
+    source_labels = []
+    for case in reference_cases[:2]:
+        case_id = escape(str(case.get("case_id", "CASE")))
+        label = escape(str(case.get("reliability_label", "참고자료")))
+        source_labels.append(f"{case_id} · {label}")
+    source_text = " / ".join(source_labels)
+    with st.container(border=True):
+        st.markdown(
+            f"""
+            <div style="padding:2px 0;">
+                <div style="font-weight:800;color:#17324d;font-size:1.02rem;margin-bottom:3px;">사례 기반 주의 포인트</div>
+                <div style="color:#64748b;font-size:0.86rem;margin-bottom:8px;">
+                    공식 법령 판단 근거가 아니라, 유사 위험을 이해하기 위한 참고 예시입니다.
+                    {f" 참고 데이터: {source_text}" if source_text else ""}
+                </div>
+                <ul style="margin:0 0 8px 18px;padding:0;color:#334155;line-height:1.65;font-size:0.94rem;">
+                    {list_html}
+                </ul>
+                <div style="border-left:3px solid #f59e0b;background:#fffbeb;color:#92400e;padding:8px 10px;font-size:0.86rem;line-height:1.55;">
+                    ※ 위 내용은 공식 법령 판단이 아니라 유사 사례를 바탕으로 한 주의 포인트입니다.
+                    실제 위반 여부는 사고 경위, 사업장 조치, 법령 해석에 따라 달라질 수 있습니다.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+
+def clean_html_text(text: str) -> str:
+    try:
+        import re
+        from html import unescape
+
+        cleaned = re.sub(r"<[^>]+>", " ", str(text or ""))
+        return clean_text(unescape(cleaned))
+    except Exception:
+        return clean_text(str(text or ""))
+
+
+def live_case_search_configured() -> bool:
+    enabled = os.getenv("ENABLE_LIVE_CASE_SEARCH", "").strip().lower() == "true"
+    provider = os.getenv("LIVE_CASE_SEARCH_PROVIDER", "naver").strip().lower()
+    client_id = os.getenv("NAVER_CLIENT_ID", "").strip()
+    client_secret = os.getenv("NAVER_CLIENT_SECRET", "").strip()
+    return enabled and provider == "naver" and bool(client_id) and bool(client_secret)
+
+
+def build_live_case_search_query(question: str, intent: str) -> str:
+    query_map = {
+        PPE_GENERAL_INTENT: "안전모 안전화 보호구 산업재해 사고 사례",
+        VENTILATION_GAS_INTENT: "메탄가스 질식 폭발 환기 산업재해 사고 사례",
+        VENTILATION_EQUIPMENT_INTENT: "환기팬 환기설비 질식 산업재해 사고 사례",
+        GAS_DETECTOR_INTENT: "가스측정기 경보 질식 폭발 산업재해 사고 사례",
+        BLASTING_MISFIRE_INTENT: "발파 불발공 폭약 사고 사례 광산",
+        ROOF_FALL_INTENT: "광산 낙반 붕락 천반 사고 사례",
+        DUST_RESPIRATORY_INTENT: "분진 호흡보호 방진마스크 산업재해 사례",
+        ELECTRICAL_SAFETY_INTENT: "감전 누전 전기작업 산업재해 사고 사례",
+        EQUIPMENT_TRANSPORT_INTENT: "장비 후진 협착 충돌 산업재해 사고 사례",
+        BACKING_SIGNAL_INTENT: "장비 후진 신호수 협착 충돌 산업재해 사고 사례",
+        FIRE_EMERGENCY_INTENT: "화재 소화기 화기작업 산업재해 사고 사례",
+        HOT_WORK_INTENT: "용접 화기작업 화재 산업재해 사고 사례",
+        CONVEYOR_ROTATING_INTENT: "컨베이어 끼임 협착 산업재해 사고 사례",
+        HEIGHT_WORK_INTENT: "고소작업 추락 산업재해 사고 사례",
+        FLOOD_DRAINAGE_INTENT: "침수 배수 갱내수 광산 사고 사례",
+        LAW_INTENT: "중대재해처벌법 사고 사례 안전보건관리체계 증빙자료",
+        DOCUMENT_EVIDENCE_INTENT: "중대재해처벌법 사고 사례 안전보건관리체계 증빙자료",
+        KRAS_INTENT: "위험성평가 개선조치 산업재해 사고 사례",
+    }
+    if intent in query_map:
+        return query_map[intent]
+    question_terms = " ".join(clean_text(question).split()[:5])
+    return clean_text(f"{question_terms} 산업재해 사고 사례")
+
+
+def live_news_relevance_label(title: str, description: str) -> str:
+    include_keywords = [
+        "사고", "재해", "중대재해", "산업재해", "안전", "작업장", "광산",
+        "협착", "추락", "감전", "질식", "화재", "폭발", "낙반", "컨베이어",
+        "끼임", "장비", "환기",
+    ]
+    combined = f"{title} {description}"
+    if any(keyword in combined for keyword in include_keywords):
+        return "뉴스검색 참고"
+    return "관련성이 낮을 수 있음"
+
+
+def normalize_naver_news_item(item: dict[str, Any]) -> dict[str, Any] | None:
+    title = clean_html_text(item.get("title", ""))
+    description = clean_html_text(item.get("description", ""))
+    combined = f"{title} {description}"
+    exclude_keywords = ["광고", "채용", "주식", "연예", "맛집", "부동산", "쇼핑"]
+    if not title or any(keyword in combined for keyword in exclude_keywords):
+        return None
+    return {
+        "title": title,
+        "summary": description,
+        "pub_date": clean_html_text(item.get("pubDate", "")),
+        "link": str(item.get("originallink") or item.get("link") or ""),
+        "reliability_label": live_news_relevance_label(title, description),
+        "source_name": "네이버 뉴스 검색",
+    }
+
+
+@st.cache_data(ttl=LIVE_CASE_SEARCH_TTL_SECONDS, show_spinner=False)
+def search_naver_news_cases(query: str, display: int = 5, sort: str = "date") -> list[dict[str, Any]]:
+    if not live_case_search_configured():
+        return []
+
+    client_id = os.getenv("NAVER_CLIENT_ID", "").strip()
+    client_secret = os.getenv("NAVER_CLIENT_SECRET", "").strip()
+    params = {"query": query, "display": int(display), "sort": sort}
+    headers = {
+        "X-Naver-Client-Id": client_id,
+        "X-Naver-Client-Secret": client_secret,
+    }
+    try:
+        try:
+            import requests
+
+            response = requests.get(
+                NAVER_NEWS_API_URL,
+                params=params,
+                headers=headers,
+                timeout=4,
+            )
+            response.raise_for_status()
+            payload = response.json()
+        except ImportError:
+            from urllib import parse, request
+
+            query_string = parse.urlencode(params)
+            req = request.Request(
+                f"{NAVER_NEWS_API_URL}?{query_string}",
+                headers=headers,
+                method="GET",
+            )
+            with request.urlopen(req, timeout=4) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return []
+
+    items = payload.get("items", []) if isinstance(payload, dict) else []
+    cases = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        normalized = normalize_naver_news_item(item)
+        if normalized:
+            cases.append(normalized)
+    cases.sort(key=lambda case: case.get("reliability_label") != "뉴스검색 참고")
+    return cases[: int(display)]
+
+
+def get_live_reference_cases(question: str, intent: str, max_cases: int = 3) -> list[dict[str, Any]]:
+    if intent == OUT_OF_SCOPE_INTENT or not live_case_search_configured():
+        return []
+    query = build_live_case_search_query(question, intent)
+    return search_naver_news_cases(query, display=max(max_cases, 5), sort="date")[:max_cases]
+
+
+def format_live_news_cases_for_prompt(live_news_cases: list[dict[str, Any]]) -> str:
+    if not live_news_cases:
+        return "관련 뉴스 검색 결과 없음."
+    blocks = []
+    for idx, case in enumerate(live_news_cases[:3], start=1):
+        blocks.append(
+            "\n".join(
+                [
+                    f"[뉴스 참고 {idx}] {case.get('title', '제목 없음')}",
+                    f"- 게시일: {case.get('pub_date', '정보 없음')}",
+                    f"- 요약: {case.get('summary', '')}",
+                    f"- 링크: {case.get('link', '')}",
+                    "- 주의: 네이버 뉴스 검색 기반 참고자료이며 공식 법령 판단 근거가 아닙니다.",
+                ]
+            )
+        )
+    return "\n\n".join(blocks)
+
+
+def render_live_news_reference_cases(live_news_cases: list[dict[str, Any]]) -> None:
+    if not live_news_cases:
+        return
+    with st.container(border=True):
+        st.markdown("#### 실시간 사례 검색 참고")
+        st.caption("네이버 뉴스 검색 기반 참고자료이며, 공식 법령 판단 근거가 아닙니다.")
+        for case in live_news_cases[:3]:
+            title = escape(str(case.get("title", "제목 없음")))
+            pub_date = escape(str(case.get("pub_date", "정보 없음")))
+            summary = escape(str(case.get("summary", "")))
+            label = escape(str(case.get("reliability_label", "뉴스검색 참고")))
+            link = str(case.get("link", "") or "")
+            link_html = (
+                f'<a href="{escape(link)}" target="_blank" rel="noopener noreferrer">기사 보기</a>'
+                if link
+                else "링크 없음"
+            )
+            st.markdown(
+                f"""
+                <div style="border:1px solid #dbe4ef;border-radius:10px;padding:12px 14px;margin:8px 0;background:#ffffff;">
+                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px;">
+                        <strong style="color:#17324d;">{title}</strong>
+                        <span style="background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700;">{label}</span>
+                    </div>
+                    <div style="color:#64748b;font-size:13px;margin-bottom:7px;">게시일: {pub_date} · 출처: {link_html}</div>
+                    <div style="color:#334155;line-height:1.6;font-size:0.94rem;">{summary}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        st.warning(
+            "※ 이 결과는 네이버 뉴스 검색 기반 참고자료이며, 공식 법령 판단 근거가 아닙니다. "
+            "공식 답변 근거는 RAG 근거 문서와 chunk_id를 기준으로 확인해야 합니다."
+        )
+
 def source_chunk_labels(results: list[dict[str, Any]]) -> list[str]:
     labels: list[str] = []
     for item in results:
@@ -4385,6 +5663,7 @@ def normalize_conversation_history_rows(rows: list[dict[str, Any]]) -> list[dict
                 "evidence_documents": " | ".join(row.get("evidence_documents", [])),
                 "source_chunks": " | ".join(row.get("source_chunks", [])),
                 "recommended_evidence_records": " | ".join(row.get("recommended_evidence_records", [])),
+                "reference_cases": " | ".join(row.get("reference_cases", [])),
                 "user_action_status": row.get("user_action_status", ""),
                 "manager": row.get("manager", ""),
                 "action_due_date": row.get("action_due_date", ""),
@@ -4454,7 +5733,7 @@ def render_history_report_field(title: str, content: str) -> None:
     )
 
 
-def render_history_report_card(selected: dict[str, Any], evidence_documents: list[str], recommended_records: list[str]) -> None:
+def render_history_report_card(selected: dict[str, Any], evidence_documents: list[str], recommended_records: list[str], reference_case_records: list[str] | None = None) -> None:
     st.subheader("증빙자료 보고서용 보기")
     render_history_report_field("질문", str(selected.get("question", "")))
     c1, c2 = st.columns(2)
@@ -4464,6 +5743,7 @@ def render_history_report_card(selected: dict[str, Any], evidence_documents: lis
         render_history_report_field("위험도", str(selected.get("risk_level", "검토 필요") or "검토 필요"))
     render_history_report_field("근거 문서", ", ".join(evidence_documents) if evidence_documents else "기록 없음")
     render_history_report_field("필요 증빙자료", ", ".join(recommended_records) if recommended_records else "기록 없음")
+    render_history_report_field("참고 사례", ", ".join(reference_case_records or []) if reference_case_records else "기록 없음")
     render_history_report_field("조치 상태", str(selected.get("user_action_status", "미조치") or "미조치"))
 
 
@@ -4703,6 +5983,7 @@ def auto_save_conversation_history(
     results: list[dict[str, Any]],
     recommended_records: list[str],
     result_key: str,
+    reference_cases: list[dict[str, Any]] | None = None,
 ) -> str | None:
     if not question.strip() or not answer.strip():
         return None
@@ -4720,6 +6001,7 @@ def auto_save_conversation_history(
             "evidence_documents": list(dict.fromkeys(str(item.get("source", "출처 정보 없음")) for item in results)),
             "source_chunks": source_chunk_labels(results),
             "recommended_evidence_records": recommended_records,
+            "reference_cases": summarize_reference_cases_for_history(reference_cases or []),
             "user_action_status": "미조치",
             "manager": "",
             "action_due_date": "",
@@ -4895,6 +6177,7 @@ def render_conversation_history_page() -> None:
 
     evidence_documents = normalize_history_display_list(selected.get("evidence_documents", []))
     recommended_records = normalize_history_display_list(selected.get("recommended_evidence_records", []))
+    reference_case_records = normalize_history_display_list(selected.get("reference_cases", []))
 
     with st.container(border=True):
         st.subheader("질문/답변")
@@ -4911,13 +6194,15 @@ def render_conversation_history_page() -> None:
         with st.expander("당시 답변 보기", expanded=True):
             st.markdown(selected.get("answer", ""))
 
-    col_docs, col_records = st.columns(2)
+    col_docs, col_records, col_cases = st.columns(3)
     with col_docs:
         render_history_list_card("근거 문서", evidence_documents, "저장된 근거 문서가 없습니다.")
     with col_records:
         render_history_list_card("추천 증빙자료", recommended_records, "저장된 추천 증빙자료가 없습니다.")
+    with col_cases:
+        render_history_list_card("참고 사례", reference_case_records, "저장된 참고 사례가 없습니다.")
 
-    render_history_report_card(selected, evidence_documents, recommended_records)
+    render_history_report_card(selected, evidence_documents, recommended_records, reference_case_records)
 
     with st.form(f"history_update_{selected.get('history_id')}"):
         c1, c2, c3 = st.columns(3)
@@ -5115,9 +6400,9 @@ if is_admin_mode:
     )
 
     if answer_mode == STABLE_MODE:
-        st.sidebar.info("안정 모드 · 외부 LLM 미호출")
+        st.sidebar.info("안정성 모드 · 공식 문서 기반 체크리스트형")
     elif answer_mode == GEMINI_MODE:
-        st.sidebar.warning("Gemini 모드 · 실패 시 근거 답변 전환")
+        st.sidebar.warning("자연어 설명 모드 · 실패 시 안정형 답변 전환")
     else:
         st.sidebar.info(
             "하이브리드 모드\n\n"
@@ -5230,7 +6515,7 @@ with status_col3:
     render_status_card(
         "답변 모드",
         short_answer_mode(answer_mode),
-        f"{selected_gemini_model} · Gemini API: {gemini_status_text}",
+        answer_mode_description(short_answer_mode(answer_mode)),
         "#64748b",
     )
 with status_col4:
@@ -5264,106 +6549,167 @@ if feature_page == "Excel 내보내기 또는 보고서":
 # ==============================
 # 질문 입력 + 테스트 모드
 # ==============================
+
 def run_rag_flow(
     question_text: str,
     top_k_value: int,
     answer_mode: str,
     selected_model: str = GEMINI_MODEL_NAME,
 ):
+    intent = detect_question_intent(question_text)
+    if intent == OUT_OF_SCOPE_INTENT:
+        stable_answer = generate_local_fallback_answer(
+            question_text,
+            [],
+            "범위 밖 질문",
+            intent,
+        )
+        out_status = {
+            "selected_answer_mode": short_answer_mode(answer_mode),
+            "answer_mode": short_answer_mode(answer_mode),
+            "rag_used": False,
+            "retrieved_chunk_count": 0,
+            "selected_model": selected_model,
+            "model": selected_model,
+            "called": False,
+            "success": False,
+            "status": "out_of_scope",
+            "message": "광산 안전관리 범위 밖 질문입니다.",
+            "answer": "",
+            "used_fallback": False,
+            "mode": "stable",
+            "gemini_status": "호출 안 함",
+            "reason": "범위 밖 질문",
+            "attempts": 0,
+            "elapsed": 0.0,
+            "gemini_called": False,
+            "gemini_call_success": False,
+            "fallback_used": False,
+            "actual_execution": "범위 밖 질문 안내",
+            "mode_output_title": "답변 범위 안내",
+            "question_intent": intent,
+            "reference_cases": [],
+            "live_news_cases": [],
+        }
+        return [], stable_answer, out_status, None
+
     with st.spinner("1단계: Vector DB에서 관련 근거 문서를 검색 중입니다..."):
         rag_results, search_error = search_vector_db(question_text, top_k=top_k_value)
 
     if search_error:
-        return [], "", {}, search_error
-    if not rag_results:
-        return [], "", {}, "검색 결과가 없습니다."
-
-    fallback_answer = generate_local_fallback_answer(
+        rag_results = []
+    stable_answer = generate_local_fallback_answer(
         question_text,
         rag_results,
-        "안정 모드: Gemini API 호출 안 함",
+        search_error or "안정 모드: Gemini API 호출 안 함",
+        intent,
     )
+    reference_cases = match_reference_cases(question_text, intent, max_cases=2)
+    live_news_cases = get_live_reference_cases(question_text, intent, max_cases=3)
+
+    base_status = {
+        "selected_answer_mode": short_answer_mode(answer_mode),
+        "answer_mode": short_answer_mode(answer_mode),
+        "rag_used": True,
+        "retrieved_chunk_count": len(rag_results),
+        "selected_model": selected_model,
+        "model": selected_model,
+        "question_intent": intent,
+        "expanded_search_query": expand_search_query(question_text, intent),
+        "reference_cases": reference_cases,
+        "live_news_cases": live_news_cases,
+    }
 
     if answer_mode == STABLE_MODE:
         rag_status = {
+            **base_status,
             "called": False,
             "success": False,
             "status": "not_called",
             "message": "안정 모드에서는 Gemini API를 호출하지 않습니다.",
             "answer": "",
-            "model": selected_model,
             "used_fallback": False,
             "mode": "stable",
-            "answer_mode": short_answer_mode(answer_mode),
             "gemini_status": "호출 안 함",
             "reason": "안정 모드에서는 Gemini API를 호출하지 않습니다.",
             "attempts": 0,
             "elapsed": 0.0,
-            "selected_model": selected_model,
             "gemini_called": False,
+            "gemini_call_success": False,
             "fallback_used": False,
+            "actual_execution": "안정성 모드 - 공식 문서 기반 체크리스트형",
+            "mode_output_title": "안정성 모드",
         }
-        return rag_results, fallback_answer, rag_status, None
+        return rag_results, stable_answer, rag_status, None
 
     if answer_mode == HYBRID_MODE:
         with st.spinner(
-            f"하이브리드 모드: 검색 근거 기반 답변을 우선 사용하고, Gemini 추가 답변을 최대 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초 동안 시도합니다..."
+            f"하이브리드 모드: 안정형 조치 초안과 RAG 근거를 Gemini에 전달해 자연어 보완을 시도합니다. 최대 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초..."
         ):
-            gemini_answer, gemini_status = generate_gemini_answer(
+            hybrid_answer, gemini_status = generate_gemini_answer(
                 question_text,
                 rag_results,
                 selected_model,
+                prompt_kind="hybrid",
+                stable_draft=stable_answer,
+                reference_cases=reference_cases,
+                live_news_cases=live_news_cases,
             )
 
         gemini_state = classify_gemini_status(gemini_status)
-        if gemini_status.get("mode") == "gemini":
-            combined_answer = "\n\n".join(
-                [
-                    fallback_answer,
-                    "---",
-                    "## Gemini 추가 답변",
-                    gemini_answer,
-                ]
-            )
+        success = gemini_state == "성공"
+        if success:
+            final_answer = hybrid_answer
+            actual_execution = "Gemini API 호출 성공 - 안정형 조치에 이유/현장 적용 보완"
         else:
-            combined_answer = "\n\n".join(
-                [
-                    fallback_answer,
-                    "---",
-                    "## Gemini 응답 실패",
-                    "Gemini 응답 실패: 검색 근거 기반 답변을 사용합니다.",
-                ]
-            )
+            final_answer = stable_answer
+            actual_execution = "Gemini API 호출 실패 → 안정형 fallback"
 
         gemini_status.update(
             {
+                **base_status,
                 "mode": "hybrid",
                 "answer_mode": short_answer_mode(answer_mode),
                 "gemini_status": gemini_state,
-                "fallback_used": gemini_state != "성공",
-                "used_fallback": gemini_state != "성공",
+                "gemini_called": bool(gemini_status.get("called", True)),
+                "gemini_call_success": success,
+                "fallback_used": not success,
+                "used_fallback": not success,
+                "actual_execution": actual_execution,
+                "mode_output_title": "하이브리드 답변" if success else "안정성 모드",
             }
         )
-        return rag_results, combined_answer, gemini_status, None
+        return rag_results, final_answer, gemini_status, None
 
     with st.spinner(
-        f"Gemini 모드: Gemini 답변 생성 중입니다. {GEMINI_RESPONSE_TIMEOUT_SECONDS}초 내 응답이 없으면 검색 근거 기반 답변으로 전환합니다..."
+        f"자연어 설명 모드: 검색 근거를 바탕으로 설명형 답변을 생성합니다. 최대 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초..."
     ):
         rag_answer, rag_status = generate_gemini_answer(
             question_text,
             rag_results,
             selected_model,
+            prompt_kind="gemini",
+            reference_cases=reference_cases,
+            live_news_cases=live_news_cases,
         )
 
+    gemini_state = classify_gemini_status(rag_status)
+    success = gemini_state == "성공"
     rag_status.update(
         {
+            **base_status,
             "answer_mode": short_answer_mode(answer_mode),
-            "gemini_status": classify_gemini_status(rag_status),
+            "gemini_status": gemini_state,
+            "gemini_called": bool(rag_status.get("called", True)),
+            "gemini_call_success": success,
+            "fallback_used": not success,
+            "used_fallback": not success,
+            "actual_execution": "Gemini API 호출 성공 - RAG 근거 기반 자연어 설명형" if success else "Gemini API 호출 실패 → 안정형 fallback",
+            "mode_output_title": "자연어 설명 답변" if success else "안정성 모드",
         }
     )
 
     return rag_results, rag_answer, rag_status, None
-
 
 def render_evidence_card(result: dict[str, Any]) -> None:
     distance_text = format_distance(result["distance"])
@@ -5686,6 +7032,7 @@ def render_checklist_table(situation_type: str) -> None:
     )
 
 
+
 def render_gemini_runtime_status(
     answer_status: dict[str, Any],
     selected_model: str,
@@ -5704,44 +7051,60 @@ def render_gemini_runtime_status(
             answer_status.get("fallback_used", False),
         )
     )
-    display_gemini_state = format_gemini_status(gemini_state)
+    gemini_success = bool(answer_status.get("gemini_call_success", gemini_state == "성공"))
+    actual_execution = str(answer_status.get("actual_execution", "실행 정보 없음"))
+    chunk_count = int(answer_status.get("retrieved_chunk_count", 0) or 0)
+    public_mode = public_answer_mode_label(answer_status, mode_name)
 
-    with st.expander("답변 생성 상태 및 외부 LLM 호출 정보"):
-        status_col1, status_col2, status_col3, status_col4, status_col5 = st.columns(5)
-        status_col1.metric("모드", mode_name)
-        status_col2.metric("모델", selected_model)
-        status_col3.metric("호출 여부", "호출함" if gemini_called else "호출 안 함")
-        status_col4.metric("상태", display_gemini_state)
-        status_col5.metric("Fallback", "사용함" if fallback_used else "사용 안 함")
+    st.markdown(
+        (
+            '<div class="answer-runtime-summary">'
+            f'<span>답변 모드: <strong>{escape(public_mode)}</strong></span>'
+            f'<span>검색 근거: <strong>{chunk_count}건</strong></span>'
+            + (
+                f'<span>질문 유형: <strong>{escape(str(answer_status.get("question_intent")))}</strong></span>'
+                if answer_status.get("question_intent")
+                else ""
+            )
+            + "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
-        if answer_status.get("mode") == "stable":
-            st.info(
-                "안정 모드입니다. 외부 LLM을 호출하지 않고 Vector DB 검색 근거로 답변했습니다."
-            )
-        elif gemini_state == "성공":
-            st.success(
-                f"Gemini 답변 생성 완료 · {answer_status.get('attempts', 0)}회 시도 · "
-                f"{answer_status.get('elapsed', 0.0):.1f}초"
-            )
-        else:
-            st.warning(
-                answer_status.get("message")
-                or get_gemini_failure_message(
-                    gemini_state,
-                    str(answer_status.get("reason", "")),
-                )
-            )
-            st.info(
-                "Gemini 응답 생성은 실패했지만 검색 근거 기반 안정형 답변으로 "
-                "전환되었습니다. 근거 문서 검색과 안정형 답변 생성 기능은 정상 작동 중입니다."
-            )
-            st.caption(
-                f"시도 횟수: {answer_status.get('attempts', 0)} · "
-                f"소요 시간: {answer_status.get('elapsed', 0.0):.1f}초"
-            )
-            if answer_status.get("reason"):
-                st.caption(f"오류 정보: {answer_status.get('reason')}")
+    if fallback_used:
+        st.warning("외부 LLM 호출이 원활하지 않아 안정형 답변으로 전환되었습니다.")
 
+    if not is_admin_mode:
+        return
+
+    with st.expander("개발자용 실행 정보", expanded=False):
+        detail_rows = [
+            ("선택한 답변 모드", mode_name),
+            ("실제 실행된 답변 생성 방식", actual_execution),
+            ("RAG 검색 사용 여부", "사용"),
+            ("검색된 근거 chunk 수", str(chunk_count)),
+            ("Gemini API 호출 여부", "예" if gemini_called else "아니오"),
+            ("Gemini API 호출 성공 여부", "예" if gemini_success else "아니오"),
+            ("fallback 사용 여부", "예" if fallback_used else "아니오"),
+            ("사용 모델명", selected_model),
+            ("질문 유형", str(answer_status.get("question_intent", ""))),
+            ("확장 검색어", str(answer_status.get("expanded_search_query", ""))),
+        ]
+        detail_html = "".join(
+            "<tr><th>{}</th><td>{}</td></tr>".format(escape(label), escape(value))
+            for label, value in detail_rows
+        )
+        st.markdown(
+            (
+                '<div class="portal-table-wrap"><table class="portal-table">'
+                "<tbody>"
+                f"{detail_html}"
+                "</tbody></table></div>"
+            ),
+            unsafe_allow_html=True,
+        )
+        if answer_status.get("reason"):
+            st.caption(f"오류 정보: {answer_status.get('reason')}")
 
 def render_rag_result(
     answer: str,
@@ -5779,14 +7142,34 @@ def render_rag_result(
     core_answer, kras_answer, supplement_answer = split_answer_for_dashboard(answer)
     effective_question = question_text.strip() or extract_markdown_section(answer, "질문") or "질문 정보 없음"
     recommended_records = recommend_evidence_records(effective_question, answer)
+    reference_cases = answer_status.get("reference_cases", [])
+    if not isinstance(reference_cases, list):
+        reference_cases = []
+    live_news_cases = answer_status.get("live_news_cases", [])
+    if not isinstance(live_news_cases, list):
+        live_news_cases = []
 
+    if answer_status.get("question_intent") == OUT_OF_SCOPE_INTENT:
+        render_gemini_runtime_status(answer_status, selected_model, mode_name)
+        with st.container(border=True):
+            st.markdown(
+                '<div class="card-title-row">'
+                '<span class="card-title-icon card-title-icon-navy">i</span>'
+                '<div class="portal-card-title">답변 범위 안내</div></div>'
+                '<div class="portal-card-subtitle">광산 안전관리와 관련된 질문으로 다시 입력해 주세요.</div>',
+                unsafe_allow_html=True,
+            )
+            st.markdown(answer)
+        return
+
+    public_mode = public_answer_mode_label(answer_status, mode_name)
     info_cols = st.columns(5)
     info_cards = [
         ("답변 신뢰도", confidence, f"근거 {len(results)}개 확보", "✓", "success"),
         ("위험 등급", risk_level, situation_type, "!", "warning"),
         ("관련 법령", f"{len(unique_sources)}개 문서", "Vector DB 검색 기준", "§", "navy"),
-        ("답변 생성 시간", generation_time, mode_name, "⏱", "teal"),
-        ("모델 정보", selected_model, "선택된 답변 모델", "M", "blue"),
+        ("답변 생성 시간", generation_time, "답변 준비 완료", "⏱", "teal"),
+        ("답변 모드", public_mode, answer_mode_description(public_mode), "M", "blue"),
     ]
     for info_col, (title, value, description, icon, tone) in zip(info_cols, info_cards):
         with info_col:
@@ -5850,6 +7233,17 @@ def render_rag_result(
             render_evidence_table(results)
 
     with st.container(border=True):
+        mode_output_title = answer_status.get("mode_output_title", mode_name)
+        st.markdown(
+            '<div class="card-title-row">'
+            '<span class="card-title-icon card-title-icon-teal">M</span>'
+            f'<div class="portal-card-title">{escape(str(mode_output_title))}</div></div>'
+            '<div class="portal-card-subtitle">검색 근거를 바탕으로 정리한 답변입니다.</div>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(core_answer or answer)
+
+    with st.container(border=True):
         st.markdown(
             '<div class="card-title-row">'
             '<span class="card-title-icon card-title-icon-warning">✓</span>'
@@ -5888,6 +7282,8 @@ def render_rag_result(
     render_major_accident_law_evidence_panel()
 
     render_recommended_evidence_records(recommended_records)
+    render_live_news_reference_cases(live_news_cases)
+    render_latest_reference_cases(reference_cases, answer_status.get("question_intent"))
     if auto_save_history:
         saved_history_id = auto_save_conversation_history(
             effective_question,
@@ -5897,6 +7293,7 @@ def render_rag_result(
             results,
             recommended_records,
             result_key,
+            reference_cases=reference_cases,
         )
         if saved_history_id:
             st.caption(f"대화 이력 자동 저장 완료: {saved_history_id}")
@@ -5994,8 +7391,8 @@ with direct_tab:
         search_button = st.button("RAG 답변 생성", type="primary")
     with col2:
         st.caption(
-            "Vector DB에서 근거 문서를 찾고 Gemini 답변을 시도합니다. "
-            "Gemini가 지연되면 검색 근거 기반 fallback 답변을 바로 표시합니다."
+            "Vector DB에서 근거 문서를 찾고 답변을 생성합니다. "
+            "외부 호출이 원활하지 않을 때도 안정형 답변을 제공합니다."
         )
 
     if search_button:
@@ -6014,7 +7411,10 @@ with direct_tab:
             if error:
                 st.error(error)
             else:
-                st.success(f"Vector DB 검색 완료: 관련 근거 {len(results)}개")
+                if answer_status.get("question_intent") == OUT_OF_SCOPE_INTENT:
+                    st.info("답변 범위 안내를 생성했습니다.")
+                else:
+                    st.success(f"Vector DB 검색 완료: 관련 근거 {len(results)}개")
                 render_rag_result(
                     answer,
                     answer_status,

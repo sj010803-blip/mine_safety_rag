@@ -1,0 +1,46 @@
+GitHub 안전 커밋·Push 결과 보고서
+========================================================================
+실행 시간: 2026-07-06 20:47:38 대한민국 표준시
+프로젝트 경로: C:\Users\USER\Desktop\mine_safety_rag
+Git 실행 파일 경로: C:\Users\USER\AppData\Local\GitHubDesktop\app-3.6.2\resources\app\git\cmd\git.exe
+현재 branch: main
+remote origin: https://github.com/sj010803-blip/mine_safety_rag.git
+stage된 파일 수: 17개
+commit 성공 여부: 예
+commit 상태: 완료
+push 성공 여부: 예
+push 상태: 완료
+금지 파일 stage 여부: 아니오
+whitelist 외 stage 여부: 아니오
+
+[stage된 파일 목록]
+- .gitignore
+- 02_질문시나리오/question_scenarios_110.tsv
+- 09_answer_tests/auto_eval_110_full_summary.tsv
+- 09_answer_tests/auto_eval_110_teacher_view.xlsx
+- 09_answer_tests/auto_eval_Q001_Q110.tsv
+- 10_vector_db/48e9b40a-f9f0-448b-943a-2ac2faf73f7f/data_level0.bin
+- 10_vector_db/48e9b40a-f9f0-448b-943a-2ac2faf73f7f/length.bin
+- 10_vector_db/chroma.sqlite3
+- 12_compare_experiment/github_share_check_report.txt
+- 12_compare_experiment/llm_rag_comparison_result_final.xlsx
+- 12_compare_experiment/llm_rag_comparison_result_polished.xlsx
+- README.md
+- _llm_rag_workbook_bridge.mjs
+- app.py
+- check_github_share_ready.py
+- make_llm_comparison_template.py
+- run_llm_rag_comparison_analysis.py
+
+[존재하지 않아 제외된 whitelist 파일]
+- 없음
+
+[금지 stage 파일]
+- 없음
+
+[whitelist 외 stage 파일]
+- 없음
+
+최종 판단: 안전한 whitelist 커밋 및 push 완료
+
+주의: API Key 값은 검사·출력·보고서에 포함하지 않았습니다.

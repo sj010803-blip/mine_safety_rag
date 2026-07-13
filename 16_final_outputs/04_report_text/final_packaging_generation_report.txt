@@ -1,0 +1,7 @@
+MineSafe AI final packaging generation report
+final_excel=C:\Users\USER\Desktop\mine_safety_rag\16_final_outputs\01_final_excel\MineSafe_AI_최종평가_통합보고서.xlsx
+final_pptx=C:\Users\USER\Desktop\mine_safety_rag\16_final_outputs\03_presentation\MineSafe_AI_주간발표자료.pptx
+question_count=50
+raw_score_count=450
+missing_score_count=0
+README backup path=README_backup_before_final_packaging.md

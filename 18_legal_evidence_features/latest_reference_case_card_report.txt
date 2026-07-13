@@ -1,0 +1,75 @@
+MineSafe AI 최신 유사사례 참고 카드 기능 보고서
+
+생성 시간: 2026-07-11 18:46:14
+수정한 파일: C:\Users\USER\Desktop\mine_safety_rag\app.py
+백업 파일 경로: C:\Users\USER\Desktop\mine_safety_rag\app_backup_before_latest_reference_cases_20260711_183849.py
+생성한 사례 데이터 파일 경로: C:\Users\USER\Desktop\mine_safety_rag\18_legal_evidence_features\latest_reference_cases.json
+
+사례 데이터 필드 구조:
+- case_id
+- title
+- case_date
+- category
+- keywords
+- source_type
+- source_name
+- source_url
+- reliability_label
+- summary
+- lesson
+- recommended_action
+- caution_note
+
+생성한 샘플 사례 수:
+- 12개
+- 모든 기본 샘플은 실제 사고로 단정하지 않도록 source_type=sample, reliability_label=예시자료로 표시했습니다.
+
+사례 매칭 방식:
+- load_latest_reference_cases(): latest_reference_cases.json을 로드하며 파일 없음 또는 JSON 오류 시 빈 리스트를 반환합니다.
+- match_reference_cases(question, intent, max_cases=2): 질문 intent/category 일치, 질문-사례 keyword 겹침, source_type 우선순위를 점수화해 최대 2개를 반환합니다.
+- 범위 밖 질문(OUT_OF_SCOPE_INTENT)은 항상 빈 리스트를 반환합니다.
+- official/public_agency는 우선 점수를 받을 수 있지만, 카테고리 또는 키워드가 맞을 때만 점수화되도록 보정했습니다.
+
+UI 표시 방식:
+- 답변 하단의 추천 증빙자료 아래에 별도 '최근 유사사례 참고' 섹션을 추가했습니다.
+- 카드에는 사례 제목, 유형, 사례일/게시일, 출처명, 신뢰도 라벨, 요약, 시사점, 권장 조치, 주의 문구를 표시합니다.
+- 주의 문구: 공식 법령 판단 근거가 아니라 이해를 돕기 위한 참고 사례이며 실제 판단은 담당 안전관리자 및 관계기관 확인이 필요하다고 표시합니다.
+
+Gemini/하이브리드 반영 내용:
+- Gemini 프롬프트에 관련 사례를 [최신 유사사례 참고]로만 전달합니다.
+- 사례는 공식 법령 근거가 아니며 RAG 근거 문서처럼 단정하지 말라는 지침을 추가했습니다.
+- 하이브리드 모드는 안정형 핵심 조치 구조를 유지하고, 사례는 이유 설명 보완에만 사용하도록 지시했습니다.
+
+공식 RAG 근거와 참고 사례 분리 여부:
+- RAG 근거 문서 섹션은 Vector DB 검색 결과만 표시합니다.
+- 최신 유사사례는 별도 JSON 기반 카드 섹션에만 표시합니다.
+- 대화이력/Excel 저장용 데이터에는 reference_cases 필드를 별도로 추가해 추천 증빙자료와 섞지 않도록 했습니다.
+
+테스트 질문 결과 요약:
+1. 안전모는 언제 써야 해? -> 보호구/PPE 일반 설명 / 참고 사례: CASE-001 / 범위 내, 참고 사례 카드 표시 대상
+2. 갱내 메탄가스 농도가 높게 나오면 어떻게 해야 해? -> 환기/유해가스 / 참고 사례: CASE-002 / 범위 내, 참고 사례 카드 표시 대상
+3. 발파 작업 후 불발공이 의심되면 어떤 조치를 해야 해? -> 발파/불발 / 참고 사례: CASE-003 / 범위 내, 참고 사례 카드 표시 대상
+4. 천반에 균열이 보이면 어떻게 해야 해? -> 낙반/붕락/지보 / 참고 사례: CASE-004 / 범위 내, 참고 사례 카드 표시 대상
+5. 장비가 후진할 때 신호수는 왜 필요해? -> 장비 후진/신호수/충돌 방지 / 참고 사례: CASE-007 / 범위 내, 참고 사례 카드 표시 대상
+6. 컨베이어 근처에서 작업할 때 뭘 조심해야 해? -> 컨베이어/회전체/끼임 / 참고 사례: CASE-011 / 범위 내, 참고 사례 카드 표시 대상
+7. 소화기는 어디에 둬야 해? -> 화재/소화/비상대응 / 참고 사례: CASE-008 / 범위 내, 참고 사례 카드 표시 대상
+8. 통로에 물이 고여 있으면 어떻게 해야 해? -> 침수/배수/수해 / 참고 사례: CASE-010, CASE-009 / 범위 내, 참고 사례 카드 2개 표시 대상
+9. 중대재해처벌법 대응 증빙자료는 뭐가 필요해? -> 문서/증빙자료 추천 / 참고 사례: CASE-012 / 범위 내, 참고 사례 카드 표시 대상
+10. 오늘 점심 뭐 먹을까? -> 범위 밖 질문 / 참고 사례: 없음 / 범위 밖, 참고 사례/RAG/KRAS/증빙자료 패널 미표시
+
+안정화 확인:
+- python -m py_compile app.py: 통과
+- python -m streamlit run app.py --server.headless true --server.port 8524: 실행 확인
+- http://localhost:8524 HTTP 200 확인
+
+범위 밖 질문 처리 여부:
+- 오늘 점심 뭐 먹을까? -> 범위 밖 질문으로 분류, 참고 사례 0개.
+- 기존 범위 밖 분기에서 RAG/KRAS/증빙자료 패널을 표시하지 않는 흐름을 유지했습니다.
+
+오류 여부:
+- 문법 오류 없음.
+- JSON 로드 오류 없음.
+- Streamlit 기동 오류 없음.
+
+Git commit/push 하지 않았는지 여부:
+- Git commit/push 수행하지 않음.

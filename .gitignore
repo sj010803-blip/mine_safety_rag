@@ -21,3 +21,12 @@ evaluation_template_backup_*.tsv
 *.bak
 *.bak_*
 app copy.py
+
+# Generated runtime / dependency folders
+.artifact_runtime/
+**/.artifact_runtime/
+node_modules/
+**/node_modules/
+
+# Temporary office files
+~$*

@@ -120,6 +120,24 @@ EVIDENCE_INSUFFICIENT_GUIDANCE = (
 STABLE_MODE = "안정성 모드: 검색 근거 기반 체크리스트형 답변"
 GEMINI_MODE = "자연어 설명 모드: 검색 근거 기반 설명형 답변"
 HYBRID_MODE = "하이브리드 모드: 검색 근거 답변을 먼저 표시하고 Gemini 답변도 추가 시도"
+WORKER_EASY_MODE_LABEL = "근로자 쉬운 설명 모드"
+STABLE_MODE_HELP = "공식 문서 기반의 핵심 안전조치를 일정한 체크리스트 형식으로 제공합니다."
+WORKER_EASY_MODE_HELP = (
+    "신규 근로자와 비전문 작업자가 이해하기 쉽도록 전문용어를 줄이고, "
+    "지금 해야 할 행동과 위험한 이유를 짧게 설명합니다."
+)
+HYBRID_MODE_HELP = "현장 대응 체크리스트와 함께 조치 이유, 관리상 주의사항을 종합적으로 설명합니다."
+WORKER_EASY_TERM_EXPLANATIONS = (
+    "격리조치 → 다른 사람이 가까이 가지 못하게 막기",
+    "에너지 차단 → 전원과 움직이는 힘을 완전히 끊기",
+    "재가동 방지 → 다른 사람이 기계를 다시 켜지 못하게 하기",
+    "산소결핍 → 숨 쉴 산소가 부족한 상태",
+    "유해가스 → 마시면 몸에 해로운 가스",
+    "비산분진 → 공기 중에 날리는 미세한 먼지",
+    "불발공 → 폭약이 터지지 않고 남아 있을 수 있는 구멍",
+    "지보 상태 → 천장과 벽을 받치는 시설의 상태",
+    "작업 재개 승인 → 관리자가 안전을 확인한 뒤 다시 일하도록 허용하는 것",
+)
 
 DATA_DIR = ROOT_DIR / "data"
 FEATURE_OUTPUT_DIR = ROOT_DIR / "18_legal_evidence_features"
@@ -2760,6 +2778,8 @@ def build_evidence_guardrail_prompt_guidance(
 def enforce_rag_evidence_answer_guardrail(
     answer: str,
     assessment: dict[str, Any] | None,
+    *,
+    worker_easy: bool = False,
 ) -> str:
     """공식 근거 상태에 맞게 최종 사용자 답변의 단정 표현을 제한합니다."""
     guarded_answer = str(answer or "").strip()
@@ -2786,6 +2806,24 @@ def enforce_rag_evidence_answer_guardrail(
             EVIDENCE_STATUS_REASONS[EVIDENCE_STATUS_INSUFFICIENT],
         )
     )
+    if worker_easy:
+        return "\n".join(
+            [
+                "### 지금 바로 해야 할 일",
+                "- 작업을 멈추세요.",
+                "- 위험한 곳에 다른 사람이 가까이 가지 못하게 막으세요.",
+                "- 작업자는 안전한 곳으로 이동하세요.",
+                "- 담당 안전관리자에게 바로 알리세요.",
+                "",
+                "### 왜 위험한가요?",
+                f"{reason} 정확한 수치나 시간은 지금 확인된 근거만으로 말할 수 없습니다.",
+                "",
+                "### 작업을 다시 시작하기 전에",
+                "- 가스, 환기와 설비 상태를 다시 확인하세요.",
+                "- 위험요인이 없어졌는지 확인하세요.",
+                "- 관리자가 안전을 확인하고 다시 작업해도 된다고 할 때까지 기다리세요.",
+            ]
+        )
     return "\n".join(
         [
             "### 공식 근거 검색 상태",
@@ -2820,6 +2858,43 @@ def gemini_intent_guidance(intent: str) -> str:
     if intent == LAW_INTENT:
         return "법령 설명 질문입니다. 법령 조항 번호·처벌 수위는 검색 근거 없이 만들지 말고, 현장관리자 조치와 증빙자료를 중심으로 설명하세요."
     return "광산 안전관리 범위의 질문으로 보고 검색 근거에 맞춰 답하세요."
+
+
+def worker_easy_intent_guidance(intent: str) -> str:
+    """질문 유형별 핵심 위험을 신규 근로자가 이해하기 쉬운 말로 안내합니다."""
+    if intent == CONVEYOR_ROTATING_INTENT:
+        return "손, 옷이나 장갑이 기계에 끌려 들어갈 수 있음을 설명하고, 정지 전 접근 금지와 전원 차단·재가동 방지를 먼저 안내하세요."
+    if intent in {EQUIPMENT_TRANSPORT_INTENT, BACKING_SIGNAL_INTENT}:
+        return "운전자의 사각지대 때문에 사람이 보이지 않을 수 있음을 설명하고, 후진 전 신호수와 작업자가 신호를 확인하도록 안내하세요."
+    if intent in {VENTILATION_GAS_INTENT, VENTILATION_EQUIPMENT_INTENT}:
+        return "가스 때문에 불이 붙거나 숨쉬기 어려울 수 있음을 설명하고, 불꽃을 만들지 말고 작업중지·대피·환기·재측정을 우선 안내하세요."
+    if intent == BLASTING_MISFIRE_INTENT:
+        return "불발공은 폭약이 터지지 않고 남아 있을 수 있는 구멍이라고 설명하고, 접근·접촉·재천공을 금지하며 발파책임자에게 알리도록 안내하세요."
+    if intent in {DUST_RESPIRATORY_INTENT, PPE_GENERAL_INTENT}:
+        return "눈에 잘 보이지 않는 먼지도 폐로 들어갈 수 있음을 설명하고, 살수·집진 상태와 방진마스크 밀착을 확인하도록 안내하세요."
+    if intent == ROOF_FALL_INTENT:
+        return "천장이나 벽에서 돌이 떨어질 수 있음을 설명하고, 위험구역 접근 금지와 균열·지보 상태 확인을 안내하세요."
+    if intent == ELECTRICAL_SAFETY_INTENT:
+        return "전원이 꺼져 보이더라도 전기가 남아 있을 수 있음을 설명하고, 차단·잠금·표지와 젖은 장소의 감전 위험을 안내하세요."
+    if intent in MANAGEMENT_RECORD_INTENTS:
+        return "처벌 설명은 길게 하지 말고, 작업자를 보호하려면 보고와 기록이 왜 필요한지 쉬운 말로 설명하세요. 실제 위반 여부는 단정하지 마세요."
+    return "가장 중요한 행동을 먼저 말하고, 작업자가 다칠 수 있는 이유를 쉬운 결과 중심으로 설명하세요."
+
+
+def build_worker_easy_evidence_guidance(
+    assessment: dict[str, Any] | None,
+) -> str:
+    """이미 계산된 공식 근거 검색 상태를 근로자용 쉬운 문장으로 바꿉니다."""
+    status = (
+        str(assessment.get("status", EVIDENCE_STATUS_NEEDS_REVIEW))
+        if isinstance(assessment, dict)
+        else EVIDENCE_STATUS_NEEDS_REVIEW
+    )
+    if status == EVIDENCE_STATUS_SUFFICIENT:
+        return "검색된 공식 문서가 주요 안전조치를 뒷받침합니다. 아래 행동을 먼저 지키세요."
+    if status == EVIDENCE_STATUS_INSUFFICIENT:
+        return "검색된 공식 문서만으로 정확한 수치나 시간을 확인하기 어렵습니다. 먼저 작업을 멈추고 안전관리자에게 확인하세요."
+    return "관련 공식 문서는 찾았지만 세부 수치나 시간은 더 확인해야 합니다. 안전관리자에게 확인한 뒤 작업하세요."
 
 
 def is_blasting_preferred_source(source: str) -> bool:
@@ -3264,16 +3339,19 @@ def build_prompt(
 ) -> str:
     context = build_context(results)
     intent = intent or detect_question_intent(question)
-    intent_guidance = gemini_intent_guidance(intent)
+    intent_guidance = worker_easy_intent_guidance(intent)
     reference_case_context = format_reference_cases_for_prompt(intent, reference_cases or [])
     live_news_context = format_live_news_cases_for_prompt(live_news_cases or [])
     evidence_guardrail = build_evidence_guardrail_prompt_guidance(evidence_assessment)
+    easy_evidence_guidance = build_worker_easy_evidence_guidance(evidence_assessment)
+    easy_terms = "\n".join(f"- {item}" for item in WORKER_EASY_TERM_EXPLANATIONS)
     return f"""
-당신은 광산 안전 지침과 중대재해처벌법 대응을 돕는 안전관리자용 AI입니다.
+당신은 신규 광산 근로자와 비전문 작업자에게 설명하는 성인 안전교육 보조자입니다.
+초등학생에게 말하듯 지나치게 유치하게 쓰지 말고, 성인 신규 근로자가 바로 이해할 수 있는 쉬운 한국어를 사용하세요.
 
 아래 [검색된 근거 문서]는 사용자의 질문에 대해 Vector DB / ChromaDB에서 검색된 RAG 근거입니다.
-반드시 검색된 근거를 바탕으로 답변하고, 근거 없는 법령 조항 번호·수치·출처를 만들지 마세요.
-검색 근거만으로 단정하기 어려운 내용은 "검색된 근거만으로는 단정하기 어렵습니다"라고 표시하세요.
+제공된 RAG 근거 밖의 사실을 추가하지 마세요. 확인되지 않은 수치, 시간, 농도, 법령 조문을 만들지 마세요.
+공식 근거가 부족하면 모른다고 분명하게 말하고 담당 안전관리자, 관계기관 또는 전문가의 확인을 안내하세요.
 
 [질문 유형]
 {intent}
@@ -3281,26 +3359,35 @@ def build_prompt(
 
 {evidence_guardrail}
 
-[Gemini 모드 답변 지침]
-- 안정성 모드처럼 딱딱한 체크리스트만 만들지 말고 문단형 설명 중심으로 작성하세요.
-- 질문 유형에 맞게 필요한 이유와 배경을 설명하세요. 위험상황 질문에서는 작업중지, 대피, 출입통제, 점검, 재측정, 기록을 빠뜨리지 마세요.
-- 현장관리자나 비전문가도 이해할 수 있도록 자연스럽게 풀어 설명하세요.
-- 허위 출처를 만들지 말고, 검색된 문서명과 chunk_id만 근거로 언급하세요.
-- 마지막에는 "현장 조치 요약"을 짧은 bullet로 정리하세요.
-- 법령 해석이나 실제 작업재개 판단은 안전관리자, 관계기관, 전문가 확인이 필요하다고 안내하세요.
+[공식 근거 검색 상태의 쉬운 안내]
+{easy_evidence_guidance}
+
+[근로자 쉬운 설명 모드 지침]
+- 가장 중요한 현장 행동부터 설명하세요. 작업중지, 접근통제, 대피, 보고의 우선순위를 유지하세요.
+- "왜 위험한가요?"를 반드시 포함하고, 끼임·질식·폭발·낙하·감전·충돌처럼 작업자가 이해할 수 있는 결과로 설명하세요.
+- 한 문장은 짧게 쓰고 한 문장에 여러 조치를 길게 연결하지 마세요.
+- 전문용어는 가능한 한 쉬운 말로 바꾸고, 꼭 써야 하면 바로 뒤에 쉬운 설명을 붙이세요.
+- 핵심 본문은 250~600자를 우선하고, 복잡한 질문도 불필요하게 1,000자를 넘기지 마세요. 필수 안전조치는 길이 때문에 빼지 마세요.
+- bullet은 기본 3~7개로 제한하고, 한 문단은 2~4문장을 넘기지 마세요.
+- 이해를 돕는 가상 예시는 1개만 우선하고 필요한 경우 최대 2개만 사용하세요. 실제 공식 사고사례처럼 표현하지 마세요.
+- 법령명, 조문 번호와 행정 표현을 반복하지 마세요. 긴 법령·판례·처벌 설명은 본문에 쓰지 마세요.
+- 근로자를 겁주거나 처벌을 강조하지 마세요. 중대재해처벌법 위반을 확정적으로 단정하지 마세요.
+- 마크다운 표를 사용하지 말고 너무 긴 서론과 결론을 쓰지 마세요.
+
+[전문용어를 쉬운 말로 설명하는 방향]
+{easy_terms}
 
 [사례 기반 주의 포인트 사용 제한]
 - 아래 [사례 기반 주의 포인트]는 공식 법령 근거가 아니라 유사 위험을 이해하기 위한 참고 예시입니다.
-- 공식 판단 근거는 검색된 RAG 근거 문서와 chunk_id이며, 주의 포인트를 법령 근거처럼 말하지 마세요.
-- 중대재해처벌법 위반 여부, 처벌 여부, 법령 조항을 주의 포인트만으로 단정하지 마세요.
+- 공식 판단 근거는 검색된 RAG 근거 문서와 chunk_id이며, 사례 내용을 공식 사고사례나 법령 근거처럼 출력하지 마세요.
+- 출력 예시는 사례를 그대로 옮기지 말고 "이해를 돕는 가상 예시"로 일반화하세요.
 
 [사례 기반 주의 포인트]
 {reference_case_context}
 
 [뉴스 검색 참고자료 사용 제한]
 - 아래 [실시간 사례 검색 참고]는 네이버 뉴스 검색 기반 참고자료이며 공식 법령 판단 근거가 아닙니다.
-- 공식 판단 근거는 검색된 RAG 근거 문서와 chunk_id입니다.
-- 뉴스 제목과 요약에 없는 내용을 만들지 말고, 뉴스만으로 법령 위반 여부나 처벌 여부를 단정하지 마세요.
+- 뉴스는 공식 근거가 아니므로 사용자 답변의 법적 판단이나 가상 예시에 사용하지 마세요.
 
 [실시간 사례 검색 참고]
 {live_news_context}
@@ -3312,14 +3399,20 @@ def build_prompt(
 {context}
 
 [출력 제목]
-### 자연어 설명 답변
+### 근로자 쉬운 설명
 
-[권장 답변 구조]
-1. 질문 유형에 맞는 핵심 설명
-2. 왜 필요한지 또는 왜 위험한지
-3. 현장에서 적용할 조치와 확인사항
-4. 기록·보고·교육자료로 남길 사항
-5. 현장 조치 요약
+[가능한 한 아래 구조로 짧게 출력]
+### 지금 바로 해야 할 일
+- 가장 중요한 행동 2~4개
+
+### 왜 위험한가요?
+- 위험한 이유를 쉬운 문장 2~4개
+
+### 쉬운 현장 예시
+- "이해를 돕는 가상 예시"라고 표시한 예시 1개, 필요한 경우 최대 2개
+
+### 작업을 다시 시작하기 전에
+- 위험요인 제거, 설비·환경 재점검, 관리자 확인과 작업 재개 승인 확인
 """.strip()
 
 
@@ -3351,9 +3444,11 @@ def build_hybrid_prompt(
 {evidence_guardrail}
 
 [하이브리드 모드 답변 지침]
+- 대상은 현장관리자와 안전관리자입니다. 근로자 쉬운 설명 모드보다 더 전문적이고 상세하게 작성하세요.
 - 안정형 조치 초안의 핵심 안전조치 구조는 유지하세요.
 - 각 조치마다 "이유"와 "현장 적용"을 자연어로 보완하세요.
-- Gemini 모드처럼 긴 문단만 쓰지 말고, 항목 구조를 분명히 유지하세요.
+- 점검·통제·보고·기록관리와 법적·관리적 맥락을 함께 설명하세요.
+- 근로자 쉬운 설명 모드처럼 단순한 예시 중심으로 축약하지 말고, 항목 구조를 분명히 유지하세요.
 - 근거 없는 법령 조항 번호·수치·출처를 만들지 마세요.
 - 검색 근거만으로 단정하기 어려운 내용은 "검색된 근거만으로는 단정하기 어렵습니다"라고 표시하세요.
 - 법령 해석이나 실제 작업재개 판단은 안전관리자, 관계기관, 전문가 확인이 필요하다고 안내하세요.
@@ -3980,23 +4075,40 @@ def build_kras_risk_assessment_section(
     )
 
 
+def normalize_answer_mode_label(mode_name: Any) -> str:
+    """과거 모드 값을 삭제하지 않고 현재 사용자 표시 이름으로 변환합니다."""
+    text = str(mode_name or "").strip()
+    lowered = text.lower()
+    if text in {GEMINI_MODE, "자연어 설명 모드", "Gemini 모드", WORKER_EASY_MODE_LABEL}:
+        return WORKER_EASY_MODE_LABEL
+    if lowered in {"natural", "gemini"}:
+        return WORKER_EASY_MODE_LABEL
+    return text
+
+
+def answer_mode_option_label(answer_mode: str) -> str:
+    """selectbox 내부 값은 유지하고 사용자에게 짧은 새 이름만 표시합니다."""
+    return short_answer_mode(answer_mode)
+
+
 def short_answer_mode(answer_mode: str) -> str:
     if answer_mode == STABLE_MODE:
         return "안정성 모드"
     if answer_mode == GEMINI_MODE:
-        return "자연어 설명 모드"
+        return WORKER_EASY_MODE_LABEL
     if answer_mode == HYBRID_MODE:
         return "하이브리드 모드"
-    return answer_mode
+    return normalize_answer_mode_label(answer_mode)
 
 
 def answer_mode_description(mode_name: str) -> str:
+    mode_name = normalize_answer_mode_label(mode_name)
     if mode_name == "안정성 모드":
-        return "공식 문서 근거를 바탕으로 체크리스트형 답변을 제공합니다."
-    if mode_name == "자연어 설명 모드":
-        return "검색된 근거를 바탕으로 더 자연스러운 설명형 답변을 제공합니다."
+        return STABLE_MODE_HELP
+    if mode_name == WORKER_EASY_MODE_LABEL:
+        return WORKER_EASY_MODE_HELP
     if mode_name == "하이브리드 모드":
-        return "핵심 조치는 유지하고, 각 조치의 이유를 함께 설명합니다."
+        return HYBRID_MODE_HELP
     return "검색 근거를 바탕으로 안전 답변을 제공합니다."
 
 
@@ -4016,8 +4128,8 @@ def public_answer_mode_label(answer_status: dict[str, Any], mode_name: str) -> s
     if mode == "hybrid" or prompt_kind == "hybrid":
         return "하이브리드 모드"
     if prompt_kind == "gemini" or mode == "gemini":
-        return "자연어 설명 모드"
-    return mode_name
+        return WORKER_EASY_MODE_LABEL
+    return normalize_answer_mode_label(mode_name)
 
 
 def classify_gemini_status(answer_status: dict[str, Any]) -> str:
@@ -5246,8 +5358,8 @@ def generate_gemini_answer(
 
     if result.get("success"):
         answer = str(result.get("answer", "")).strip()
-        if prompt_kind == "gemini" and "자연어 설명 답변" not in answer:
-            answer = "\n\n".join(["### 자연어 설명 답변", answer])
+        if prompt_kind == "gemini" and "근로자 쉬운 설명" not in answer:
+            answer = "\n\n".join(["### 근로자 쉬운 설명", answer])
         if prompt_kind == "hybrid" and "하이브리드 답변" not in answer:
             answer = "\n\n".join(["### 하이브리드 답변", answer])
         if "KRAS식 위험성평가 기록 초안" not in answer:
@@ -5954,6 +6066,7 @@ def normalize_conversation_history_rows(rows: list[dict[str, Any]]) -> list[dict
                 "answer": row.get("answer", ""),
                 "situation_type": row.get("situation_type", ""),
                 "risk_level": row.get("risk_level", ""),
+                "답변 모드": normalize_answer_mode_label(row.get("answer_mode", "")),
                 "공식 근거 검색 상태": row.get("evidence_label", ""),
                 "공식 근거 판정 사유": row.get("evidence_reason", ""),
                 "evidence_documents": " | ".join(row.get("evidence_documents", [])),
@@ -6037,6 +6150,10 @@ def render_history_report_card(selected: dict[str, Any], evidence_documents: lis
         render_history_report_field("상황 유형", str(selected.get("situation_type", "상황 미분류") or "상황 미분류"))
     with c2:
         render_history_report_field("위험도", str(selected.get("risk_level", "검토 필요") or "검토 필요"))
+    render_history_report_field(
+        "답변 모드",
+        normalize_answer_mode_label(selected.get("answer_mode", "기록 없음")) or "기록 없음",
+    )
     render_history_report_field(
         "공식 근거 검색 상태",
         str(selected.get("evidence_label", "기록 없음") or "기록 없음"),
@@ -6289,6 +6406,7 @@ def auto_save_conversation_history(
     result_key: str,
     reference_cases: list[dict[str, Any]] | None = None,
     evidence_assessment: dict[str, Any] | None = None,
+    answer_mode: str = "",
 ) -> str | None:
     if not question.strip() or not answer.strip():
         return None
@@ -6308,6 +6426,7 @@ def auto_save_conversation_history(
             "answer": answer,
             "situation_type": situation_type,
             "risk_level": risk_level,
+            "answer_mode": normalize_answer_mode_label(answer_mode),
             "evidence_status": str(evidence_assessment.get("status", "")),
             "evidence_label": str(evidence_assessment.get("label", "")),
             "evidence_reason": str(evidence_assessment.get("reason", "")),
@@ -6710,15 +6829,20 @@ if is_admin_mode:
         "답변 생성 방식",
         [STABLE_MODE, GEMINI_MODE, HYBRID_MODE],
         index=0,
+        format_func=answer_mode_option_label,
     )
 
     if answer_mode == STABLE_MODE:
-        st.sidebar.info("안정성 모드 · 공식 문서 기반 체크리스트형")
+        st.sidebar.info(f"안정성 모드\n\n{STABLE_MODE_HELP}")
     elif answer_mode == GEMINI_MODE:
-        st.sidebar.warning("자연어 설명 모드 · 실패 시 안정형 답변 전환")
+        st.sidebar.info(
+            f"{WORKER_EASY_MODE_LABEL}\n\n{WORKER_EASY_MODE_HELP}\n\n"
+            "쉬운 설명 생성에 실패하면 공식 문서 기반 안정형 답변으로 전환합니다."
+        )
     else:
         st.sidebar.info(
             "하이브리드 모드\n\n"
+            f"{HYBRID_MODE_HELP}\n\n"
             "- 1차: 검색 근거 기반 안정형 답변\n"
             "- 2차: Gemini 기반 보조 답변\n"
             "- Gemini 실패 시에도 1차 답변 유지"
@@ -7013,7 +7137,7 @@ def run_rag_flow(
         return rag_results, final_answer, gemini_status, None
 
     with st.spinner(
-        f"자연어 설명 모드: 검색 근거를 바탕으로 설명형 답변을 생성합니다. 최대 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초..."
+        f"{WORKER_EASY_MODE_LABEL}: 검색 근거를 짧고 쉬운 안전교육 문장으로 바꿉니다. 최대 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초..."
     ):
         rag_answer, rag_status = generate_gemini_answer(
             question_text,
@@ -7028,7 +7152,11 @@ def run_rag_flow(
     gemini_state = classify_gemini_status(rag_status)
     success = gemini_state == "성공"
     final_answer = (
-        enforce_rag_evidence_answer_guardrail(rag_answer, evidence_assessment)
+        enforce_rag_evidence_answer_guardrail(
+            rag_answer,
+            evidence_assessment,
+            worker_easy=True,
+        )
         if success
         else stable_answer
     )
@@ -7041,8 +7169,13 @@ def run_rag_flow(
             "gemini_call_success": success,
             "fallback_used": not success,
             "used_fallback": not success,
-            "actual_execution": "Gemini API 호출 성공 - RAG 근거 기반 자연어 설명형" if success else "Gemini API 호출 실패 → 안정형 fallback",
-            "mode_output_title": "자연어 설명 답변" if success else "안정성 모드",
+            "actual_execution": "Gemini API 호출 성공 - 신규 근로자용 쉬운 설명" if success else "Gemini API 호출 실패 → 안정형 fallback",
+            "mode_output_title": WORKER_EASY_MODE_LABEL if success else "안정성 모드",
+            "fallback_notice": (
+                ""
+                if success
+                else "쉬운 설명을 생성하지 못해 공식 문서 기반 핵심조치로 대신 안내합니다."
+            ),
         }
     )
 
@@ -7409,7 +7542,13 @@ def render_gemini_runtime_status(
     )
 
     if fallback_used:
-        st.warning("외부 LLM 호출이 원활하지 않아 안정형 답변으로 전환되었습니다.")
+        fallback_notice = str(
+            answer_status.get(
+                "fallback_notice",
+                "외부 LLM 호출이 원활하지 않아 안정형 답변으로 전환되었습니다.",
+            )
+        ).strip()
+        st.warning(fallback_notice)
 
     if not is_admin_mode:
         return
@@ -7719,6 +7858,7 @@ def render_rag_result(
             result_key,
             reference_cases=reference_cases,
             evidence_assessment=evidence_assessment,
+            answer_mode=str(answer_status.get("selected_answer_mode", mode_name)),
         )
         if saved_history_id:
             st.caption(f"대화 이력 자동 저장 완료: {saved_history_id}")

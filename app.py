@@ -91,6 +91,32 @@ GEMINI_MAX_OUTPUT_TOKENS = 800
 GEMINI_CONTEXT_TOP_K = 3
 CONTEXT_CHUNK_CHAR_LIMIT = 800
 
+# 공식 RAG 근거의 구조적 충분성만 보수적으로 확인합니다.
+# ChromaDB distance의 의미는 collection 설정에 따라 달라질 수 있어 판정에 사용하지 않습니다.
+EVIDENCE_MIN_OFFICIAL_CHUNKS = 3
+EVIDENCE_MIN_UNIQUE_DOCUMENTS = 2
+EVIDENCE_MIN_NON_EMPTY_CHUNKS = 3
+EVIDENCE_MAX_DUPLICATE_RATIO = 0.0
+EVIDENCE_MAX_SINGLE_DOCUMENT_RATIO = 0.67
+EVIDENCE_STATUS_SUFFICIENT = "sufficient"
+EVIDENCE_STATUS_NEEDS_REVIEW = "needs_review"
+EVIDENCE_STATUS_INSUFFICIENT = "insufficient"
+EVIDENCE_STATUS_LABELS = {
+    EVIDENCE_STATUS_SUFFICIENT: "공식 근거 충분",
+    EVIDENCE_STATUS_NEEDS_REVIEW: "공식 근거 보완 필요",
+    EVIDENCE_STATUS_INSUFFICIENT: "공식 근거 부족",
+}
+EVIDENCE_STATUS_REASONS = {
+    EVIDENCE_STATUS_SUFFICIENT: "검색된 공식 문서가 현재 질문의 주요 안전조치를 뒷받침합니다.",
+    EVIDENCE_STATUS_NEEDS_REVIEW: "관련 공식 문서가 검색되었지만 일부 세부 기준은 추가 확인이 필요합니다.",
+    EVIDENCE_STATUS_INSUFFICIENT: "검색된 공식 문서만으로는 구체적인 법령·수치·작업 재개 조건을 단정하기 어렵습니다.",
+}
+EVIDENCE_INSUFFICIENT_GUIDANCE = (
+    "검색된 공식 문서만으로는 세부 기준을 충분히 확인하기 어렵습니다. "
+    "우선 보수적인 안전조치를 적용하고 담당 안전관리자, 관계기관 또는 전문가를 통해 "
+    "현장 조건과 최신 법령을 추가 확인해야 합니다."
+)
+
 STABLE_MODE = "안정성 모드: 검색 근거 기반 체크리스트형 답변"
 GEMINI_MODE = "자연어 설명 모드: 검색 근거 기반 설명형 답변"
 HYBRID_MODE = "하이브리드 모드: 검색 근거 답변을 먼저 표시하고 Gemini 답변도 추가 시도"
@@ -2572,19 +2598,212 @@ def map_intent_to_situation_type(intent: str, question: str = "") -> str:
     return mapping.get(intent, "일반 광산 안전")
 
 
+def assess_rag_evidence_sufficiency(
+    question: str,
+    results: list[dict[str, Any]],
+    intent: str | None = None,
+) -> dict[str, Any]:
+    """공식 RAG 검색 결과의 구조적 충분성을 보수적으로 분류합니다.
+
+    이 결과는 정확도나 법적 신뢰도 점수가 아닙니다. 현재 collection의 distance
+    의미를 단정하지 않고 문서·chunk 식별자, 비어 있지 않은 본문, 중복과 출처
+    편중만 확인하는 RAG 근거 충분성 휴리스틱입니다.
+    """
+    official_chunk_count = len(results)
+    valid_sources: list[str] = []
+    seen_chunk_ids: set[str] = set()
+    non_empty_chunk_count = 0
+    duplicate_chunk_count = 0
+    missing_source_count = 0
+    missing_chunk_id_count = 0
+    valid_identity_count = 0
+
+    for result in results:
+        source = str(result.get("source", "")).strip()
+        chunk_id = str(result.get("chunk_id", "")).strip()
+        text = str(result.get("text", "")).strip()
+        source_is_valid = source not in {"", "출처 정보 없음", "None"}
+        chunk_id_is_valid = chunk_id not in {"", "정보 없음", "None"}
+
+        if text:
+            non_empty_chunk_count += 1
+        if source_is_valid:
+            valid_sources.append(source)
+        else:
+            missing_source_count += 1
+        if chunk_id_is_valid:
+            if chunk_id in seen_chunk_ids:
+                duplicate_chunk_count += 1
+            else:
+                seen_chunk_ids.add(chunk_id)
+        else:
+            missing_chunk_id_count += 1
+        if source_is_valid and chunk_id_is_valid:
+            valid_identity_count += 1
+
+    unique_document_count = len(set(valid_sources))
+    source_counts = Counter(valid_sources)
+    largest_document_count = max(source_counts.values(), default=0)
+    single_document_ratio = (
+        largest_document_count / len(valid_sources)
+        if valid_sources
+        else 0.0
+    )
+    duplicate_ratio = (
+        duplicate_chunk_count / official_chunk_count
+        if official_chunk_count
+        else 0.0
+    )
+    intent_match_count = sum(
+        not intent
+        or str(result.get("question_intent", "")).strip() in {"", intent}
+        for result in results
+    )
+
+    severe_limitations = [
+        official_chunk_count < 2,
+        non_empty_chunk_count < 2,
+        valid_identity_count < 2,
+        unique_document_count < 1,
+        duplicate_ratio > 0.5,
+    ]
+    sufficient_conditions = [
+        official_chunk_count >= EVIDENCE_MIN_OFFICIAL_CHUNKS,
+        non_empty_chunk_count >= EVIDENCE_MIN_NON_EMPTY_CHUNKS,
+        unique_document_count >= EVIDENCE_MIN_UNIQUE_DOCUMENTS,
+        missing_source_count == 0,
+        missing_chunk_id_count == 0,
+        duplicate_ratio <= EVIDENCE_MAX_DUPLICATE_RATIO,
+        single_document_ratio <= EVIDENCE_MAX_SINGLE_DOCUMENT_RATIO,
+    ]
+
+    if any(severe_limitations):
+        status = EVIDENCE_STATUS_INSUFFICIENT
+    elif all(sufficient_conditions):
+        status = EVIDENCE_STATUS_SUFFICIENT
+    else:
+        status = EVIDENCE_STATUS_NEEDS_REVIEW
+
+    return {
+        "status": status,
+        "label": EVIDENCE_STATUS_LABELS[status],
+        "reason": EVIDENCE_STATUS_REASONS[status],
+        "official_chunk_count": official_chunk_count,
+        "unique_document_count": unique_document_count,
+        "non_empty_chunk_count": non_empty_chunk_count,
+        "duplicate_chunk_count": duplicate_chunk_count,
+        "diagnostic_details": {
+            "valid_identity_count": valid_identity_count,
+            "missing_source_count": missing_source_count,
+            "missing_chunk_id_count": missing_chunk_id_count,
+            "duplicate_ratio": round(duplicate_ratio, 3),
+            "single_document_ratio": round(single_document_ratio, 3),
+            "question_intent": intent or detect_question_intent(question),
+            "intent_match_count": intent_match_count,
+            "thresholds": {
+                "min_official_chunks": EVIDENCE_MIN_OFFICIAL_CHUNKS,
+                "min_unique_documents": EVIDENCE_MIN_UNIQUE_DOCUMENTS,
+                "min_non_empty_chunks": EVIDENCE_MIN_NON_EMPTY_CHUNKS,
+                "max_duplicate_ratio": EVIDENCE_MAX_DUPLICATE_RATIO,
+                "max_single_document_ratio": EVIDENCE_MAX_SINGLE_DOCUMENT_RATIO,
+            },
+            "distance_interpretation": (
+                "ChromaDB distance는 원시 진단값으로만 유지하며 충분성 판정에는 사용하지 않음"
+            ),
+        },
+    }
+
+
 def evidence_is_limited(results: list[dict[str, Any]]) -> bool:
-    if not results:
-        return True
-    if len(results) < 2:
-        return True
-    first_distance = results[0].get("distance")
-    return isinstance(first_distance, (int, float)) and first_distance > 1.05
+    assessment = assess_rag_evidence_sufficiency("", results)
+    return assessment["status"] != EVIDENCE_STATUS_SUFFICIENT
 
 
 def evidence_limitation_notice(results: list[dict[str, Any]]) -> str:
     if evidence_is_limited(results):
         return "검색된 문서 근거가 제한적이므로, 구체적인 현장 기준은 사업장 안전보건관리규정과 담당 안전관리자 확인이 필요합니다."
     return ""
+
+
+def build_evidence_guardrail_prompt_guidance(
+    assessment: dict[str, Any] | None,
+) -> str:
+    assessment = assessment or {
+        "status": EVIDENCE_STATUS_NEEDS_REVIEW,
+        "label": EVIDENCE_STATUS_LABELS[EVIDENCE_STATUS_NEEDS_REVIEW],
+        "reason": EVIDENCE_STATUS_REASONS[EVIDENCE_STATUS_NEEDS_REVIEW],
+    }
+    status = str(assessment.get("status", EVIDENCE_STATUS_NEEDS_REVIEW))
+    label = str(assessment.get("label", EVIDENCE_STATUS_LABELS[EVIDENCE_STATUS_NEEDS_REVIEW]))
+    reason = str(assessment.get("reason", EVIDENCE_STATUS_REASONS[EVIDENCE_STATUS_NEEDS_REVIEW]))
+    lines = [
+        "[공식 근거 검색 상태]",
+        f"- 상태: {label}",
+        f"- 판정 사유: {reason}",
+        "- 이 상태는 정확도나 법적 신뢰도 점수가 아니라 RAG 검색 결과의 구조적 충분성을 보는 보조 휴리스틱입니다.",
+        "- 제공된 RAG 근거에 없는 법령 조항 번호·수치·처벌·작업 재개 조건을 새로 만들지 마세요.",
+        "- 공식 근거는 검색된 RAG 문서명과 chunk_id를 기준으로 하세요.",
+        "- 뉴스는 공식 법령 판단 근거로 사용하지 마세요.",
+        "- 사례 기반 주의 포인트는 공식 법령 판단 근거로 사용하지 마세요.",
+        "- 중대재해처벌법 위반을 확정적으로 단정하지 마세요.",
+    ]
+    if status == EVIDENCE_STATUS_INSUFFICIENT:
+        lines.extend(
+            [
+                f"- {EVIDENCE_INSUFFICIENT_GUIDANCE}",
+                "- 즉시 작업중지, 위험구역 접근통제, 작업자 대피, 담당 안전관리자 보고, 재점검과 승인 전 작업 재개 금지처럼 보수적인 조치만 우선 안내하세요.",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def enforce_rag_evidence_answer_guardrail(
+    answer: str,
+    assessment: dict[str, Any] | None,
+) -> str:
+    """공식 근거 상태에 맞게 최종 사용자 답변의 단정 표현을 제한합니다."""
+    guarded_answer = str(answer or "").strip()
+    cautious_replacements = {
+        "중대재해처벌법 위반 " + "확정": "중대재해처벌법상 쟁점이 될 수 있음",
+        "처벌이 확정됨": "실제 처벌 여부는 사실관계와 법령 해석에 따라 달라질 수 있음",
+        "사업주가 반드시 처벌됨": "사업주의 책임 여부는 사고 경위와 의무 이행 여부에 따라 달라질 수 있음",
+        "해당 사고는 법 위반임": "해당 사고는 법적 검토가 필요한 사안일 수 있음",
+    }
+    for prohibited, cautious in cautious_replacements.items():
+        guarded_answer = guarded_answer.replace(prohibited, cautious)
+
+    status = (
+        str(assessment.get("status", ""))
+        if isinstance(assessment, dict)
+        else ""
+    )
+    if status != EVIDENCE_STATUS_INSUFFICIENT:
+        return guarded_answer
+
+    reason = str(
+        assessment.get(
+            "reason",
+            EVIDENCE_STATUS_REASONS[EVIDENCE_STATUS_INSUFFICIENT],
+        )
+    )
+    return "\n".join(
+        [
+            "### 공식 근거 검색 상태",
+            f"{EVIDENCE_STATUS_LABELS[EVIDENCE_STATUS_INSUFFICIENT]}: {reason}",
+            "",
+            EVIDENCE_INSUFFICIENT_GUIDANCE,
+            "",
+            "### 우선 적용할 보수적 안전조치",
+            "- 즉시 작업중지",
+            "- 위험구역 접근통제와 작업자 대피",
+            "- 담당 안전관리자에게 즉시 보고",
+            "- 가스·환기·설비 상태 재점검",
+            "- 관계기관 또는 전문가를 통한 현장 조건과 최신 법령 확인",
+            "- 개선조치 완료 확인 및 책임자 승인 전 작업 재개 금지",
+            "",
+            "현재 검색 결과에 없는 법령 조항 번호, 수치 기준, 처벌 수준 또는 작업 재개 가능 여부는 단정하지 않습니다.",
+        ]
+    )
 
 
 def gemini_intent_guidance(intent: str) -> str:
@@ -3041,12 +3260,14 @@ def build_prompt(
     intent: str | None = None,
     reference_cases: list[dict[str, Any]] | None = None,
     live_news_cases: list[dict[str, Any]] | None = None,
+    evidence_assessment: dict[str, Any] | None = None,
 ) -> str:
     context = build_context(results)
     intent = intent or detect_question_intent(question)
     intent_guidance = gemini_intent_guidance(intent)
     reference_case_context = format_reference_cases_for_prompt(intent, reference_cases or [])
     live_news_context = format_live_news_cases_for_prompt(live_news_cases or [])
+    evidence_guardrail = build_evidence_guardrail_prompt_guidance(evidence_assessment)
     return f"""
 당신은 광산 안전 지침과 중대재해처벌법 대응을 돕는 안전관리자용 AI입니다.
 
@@ -3057,6 +3278,8 @@ def build_prompt(
 [질문 유형]
 {intent}
 {intent_guidance}
+
+{evidence_guardrail}
 
 [Gemini 모드 답변 지침]
 - 안정성 모드처럼 딱딱한 체크리스트만 만들지 말고 문단형 설명 중심으로 작성하세요.
@@ -3107,12 +3330,14 @@ def build_hybrid_prompt(
     intent: str | None = None,
     reference_cases: list[dict[str, Any]] | None = None,
     live_news_cases: list[dict[str, Any]] | None = None,
+    evidence_assessment: dict[str, Any] | None = None,
 ) -> str:
     context = build_context(results)
     intent = intent or detect_question_intent(question)
     intent_guidance = gemini_intent_guidance(intent)
     reference_case_context = format_reference_cases_for_prompt(intent, reference_cases or [])
     live_news_context = format_live_news_cases_for_prompt(live_news_cases or [])
+    evidence_guardrail = build_evidence_guardrail_prompt_guidance(evidence_assessment)
     return f"""
 당신은 광산 안전관리자를 돕는 MineSafe AI의 하이브리드 답변 보완 역할입니다.
 
@@ -3122,6 +3347,8 @@ def build_hybrid_prompt(
 [질문 유형]
 {intent}
 {intent_guidance}
+
+{evidence_guardrail}
 
 [하이브리드 모드 답변 지침]
 - 안정형 조치 초안의 핵심 안전조치 구조는 유지하세요.
@@ -4531,14 +4758,31 @@ def format_source_lines(results: list[dict[str, Any]], limit: int = 8) -> list[s
     return [f"- {source}" for source in unique_sources[:limit]] or ["- 검색 근거 문서 없음"]
 
 
-def with_evidence_notice(lines: list[str], results: list[dict[str, Any]]) -> list[str]:
-    notice = evidence_limitation_notice(results)
+def with_evidence_notice(
+    lines: list[str],
+    results: list[dict[str, Any]],
+    evidence_assessment: dict[str, Any] | None = None,
+) -> list[str]:
+    if isinstance(evidence_assessment, dict):
+        status = evidence_assessment.get("status")
+        notice = (
+            str(evidence_assessment.get("reason", ""))
+            if status != EVIDENCE_STATUS_SUFFICIENT
+            else ""
+        )
+    else:
+        notice = evidence_limitation_notice(results)
     if notice:
         return [*lines, "", f"> {notice}"]
     return lines
 
 
-def build_ppe_general_answer(question: str, results: list[dict[str, Any]], intent: str) -> str:
+def build_ppe_general_answer(
+    question: str,
+    results: list[dict[str, Any]],
+    intent: str,
+    evidence_assessment: dict[str, Any] | None = None,
+) -> str:
     ppe_item = detect_ppe_item(question)
     knowledge = PPE_BASIC_KNOWLEDGE.get(ppe_item)
     if knowledge is None and ppe_item == "보호구":
@@ -4579,11 +4823,17 @@ def build_ppe_general_answer(question: str, results: list[dict[str, Any]], inten
                 *source_lines,
             ],
             results,
+            evidence_assessment,
         )
     )
 
 
-def build_risk_response_answer(question: str, results: list[dict[str, Any]], situation_type: str) -> str:
+def build_risk_response_answer(
+    question: str,
+    results: list[dict[str, Any]],
+    situation_type: str,
+    evidence_assessment: dict[str, Any] | None = None,
+) -> str:
     immediate_judgment = build_immediate_judgment(situation_type)
     priority_actions = [f"{idx}. {item}" for idx, item in enumerate(build_priority_actions(situation_type), start=1)]
     check_items = [f"{idx}. {item}" for idx, item in enumerate(build_check_items(situation_type), start=1)]
@@ -4622,11 +4872,18 @@ def build_risk_response_answer(question: str, results: list[dict[str, Any]], sit
                 kras_section,
             ],
             results,
+            evidence_assessment,
         )
     )
 
 
-def build_general_education_answer(question: str, results: list[dict[str, Any]], intent: str, situation_type: str) -> str:
+def build_general_education_answer(
+    question: str,
+    results: list[dict[str, Any]],
+    intent: str,
+    situation_type: str,
+    evidence_assessment: dict[str, Any] | None = None,
+) -> str:
     evidence_lines = format_evidence_lines(results)
     source_lines = format_source_lines(results)
     if intent == PREWORK_TBM_INTENT:
@@ -4672,11 +4929,17 @@ def build_general_education_answer(question: str, results: list[dict[str, Any]],
                 *source_lines,
             ],
             results,
+            evidence_assessment,
         )
     )
 
 
-def build_kras_intent_answer(question: str, results: list[dict[str, Any]], situation_type: str) -> str:
+def build_kras_intent_answer(
+    question: str,
+    results: list[dict[str, Any]],
+    situation_type: str,
+    evidence_assessment: dict[str, Any] | None = None,
+) -> str:
     evidence_lines = format_evidence_lines(results)
     source_lines = format_source_lines(results)
     kras_section = build_kras_risk_assessment_section(question, results, situation_type)
@@ -4710,11 +4973,17 @@ def build_kras_intent_answer(question: str, results: list[dict[str, Any]], situa
                 kras_section,
             ],
             results,
+            evidence_assessment,
         )
     )
 
 
-def build_law_explanation_answer(question: str, results: list[dict[str, Any]], situation_type: str) -> str:
+def build_law_explanation_answer(
+    question: str,
+    results: list[dict[str, Any]],
+    situation_type: str,
+    evidence_assessment: dict[str, Any] | None = None,
+) -> str:
     evidence_lines = format_evidence_lines(results)
     source_lines = format_source_lines(results)
     return "\n".join(
@@ -4745,6 +5014,7 @@ def build_law_explanation_answer(question: str, results: list[dict[str, Any]], s
                 *source_lines,
             ],
             results,
+            evidence_assessment,
         )
     )
 
@@ -4768,6 +5038,7 @@ def generate_local_fallback_answer(
     results: list[dict[str, Any]],
     reason: str = "",
     intent: str | None = None,
+    evidence_assessment: dict[str, Any] | None = None,
 ) -> str:
     intent = intent or detect_question_intent(question)
     if intent == OUT_OF_SCOPE_INTENT:
@@ -4775,14 +5046,20 @@ def generate_local_fallback_answer(
 
     situation_type = map_intent_to_situation_type(intent, question)
     if intent == PPE_GENERAL_INTENT:
-        return build_ppe_general_answer(question, results, intent)
+        return build_ppe_general_answer(question, results, intent, evidence_assessment)
     if intent in RISK_SIGN_INTENTS:
-        return build_risk_response_answer(question, results, situation_type)
+        return build_risk_response_answer(question, results, situation_type, evidence_assessment)
     if intent == KRAS_INTENT:
-        return build_kras_intent_answer(question, results, situation_type)
+        return build_kras_intent_answer(question, results, situation_type, evidence_assessment)
     if intent in MANAGEMENT_RECORD_INTENTS:
-        return build_law_explanation_answer(question, results, situation_type)
-    return build_general_education_answer(question, results, intent, situation_type)
+        return build_law_explanation_answer(question, results, situation_type, evidence_assessment)
+    return build_general_education_answer(
+        question,
+        results,
+        intent,
+        situation_type,
+        evidence_assessment,
+    )
 
 
 def call_gemini_with_timeout(
@@ -4942,12 +5219,28 @@ def generate_gemini_answer(
     stable_draft: str = "",
     reference_cases: list[dict[str, Any]] | None = None,
     live_news_cases: list[dict[str, Any]] | None = None,
+    evidence_assessment: dict[str, Any] | None = None,
 ):
     intent = detect_question_intent(question)
     if prompt_kind == "hybrid":
-        prompt = build_hybrid_prompt(question, results, stable_draft, intent, reference_cases or [], live_news_cases or [])
+        prompt = build_hybrid_prompt(
+            question,
+            results,
+            stable_draft,
+            intent,
+            reference_cases or [],
+            live_news_cases or [],
+            evidence_assessment,
+        )
     else:
-        prompt = build_prompt(question, results, intent, reference_cases or [], live_news_cases or [])
+        prompt = build_prompt(
+            question,
+            results,
+            intent,
+            reference_cases or [],
+            live_news_cases or [],
+            evidence_assessment,
+        )
 
     result = execute_gemini_request(prompt, model_name)
 
@@ -4973,6 +5266,7 @@ def generate_gemini_answer(
         results,
         str(result.get("message") or result.get("error") or "Gemini 호출 실패"),
         detect_question_intent(question),
+        evidence_assessment=evidence_assessment,
     )
     status = build_legacy_gemini_status(result, fallback_used=True)
     status["prompt_kind"] = prompt_kind
@@ -5660,6 +5954,8 @@ def normalize_conversation_history_rows(rows: list[dict[str, Any]]) -> list[dict
                 "answer": row.get("answer", ""),
                 "situation_type": row.get("situation_type", ""),
                 "risk_level": row.get("risk_level", ""),
+                "공식 근거 검색 상태": row.get("evidence_label", ""),
+                "공식 근거 판정 사유": row.get("evidence_reason", ""),
                 "evidence_documents": " | ".join(row.get("evidence_documents", [])),
                 "source_chunks": " | ".join(row.get("source_chunks", [])),
                 "recommended_evidence_records": " | ".join(row.get("recommended_evidence_records", [])),
@@ -5741,6 +6037,14 @@ def render_history_report_card(selected: dict[str, Any], evidence_documents: lis
         render_history_report_field("상황 유형", str(selected.get("situation_type", "상황 미분류") or "상황 미분류"))
     with c2:
         render_history_report_field("위험도", str(selected.get("risk_level", "검토 필요") or "검토 필요"))
+    render_history_report_field(
+        "공식 근거 검색 상태",
+        str(selected.get("evidence_label", "기록 없음") or "기록 없음"),
+    )
+    render_history_report_field(
+        "공식 근거 판정 사유",
+        str(selected.get("evidence_reason", "기록 없음") or "기록 없음"),
+    )
     render_history_report_field("근거 문서", ", ".join(evidence_documents) if evidence_documents else "기록 없음")
     render_history_report_field("필요 증빙자료", ", ".join(recommended_records) if recommended_records else "기록 없음")
     render_history_report_field("참고 사례", ", ".join(reference_case_records or []) if reference_case_records else "기록 없음")
@@ -5984,12 +6288,18 @@ def auto_save_conversation_history(
     recommended_records: list[str],
     result_key: str,
     reference_cases: list[dict[str, Any]] | None = None,
+    evidence_assessment: dict[str, Any] | None = None,
 ) -> str | None:
     if not question.strip() or not answer.strip():
         return None
     history_marker = f"history_saved_{result_key}_{abs(hash(question + answer))}"
     if st.session_state.get(history_marker):
         return st.session_state[history_marker]
+    evidence_assessment = (
+        evidence_assessment
+        if isinstance(evidence_assessment, dict)
+        else {}
+    )
     history_id = append_conversation_history(
         {
             "history_id": str(uuid.uuid4()),
@@ -5998,6 +6308,9 @@ def auto_save_conversation_history(
             "answer": answer,
             "situation_type": situation_type,
             "risk_level": risk_level,
+            "evidence_status": str(evidence_assessment.get("status", "")),
+            "evidence_label": str(evidence_assessment.get("label", "")),
+            "evidence_reason": str(evidence_assessment.get("reason", "")),
             "evidence_documents": list(dict.fromkeys(str(item.get("source", "출처 정보 없음")) for item in results)),
             "source_chunks": source_chunk_labels(results),
             "recommended_evidence_records": recommended_records,
@@ -6598,11 +6911,21 @@ def run_rag_flow(
 
     if search_error:
         rag_results = []
+    evidence_assessment = assess_rag_evidence_sufficiency(
+        question_text,
+        rag_results,
+        intent,
+    )
     stable_answer = generate_local_fallback_answer(
         question_text,
         rag_results,
         search_error or "안정 모드: Gemini API 호출 안 함",
         intent,
+        evidence_assessment=evidence_assessment,
+    )
+    stable_answer = enforce_rag_evidence_answer_guardrail(
+        stable_answer,
+        evidence_assessment,
     )
     reference_cases = match_reference_cases(question_text, intent, max_cases=2)
     live_news_cases = get_live_reference_cases(question_text, intent, max_cases=3)
@@ -6618,6 +6941,10 @@ def run_rag_flow(
         "expanded_search_query": expand_search_query(question_text, intent),
         "reference_cases": reference_cases,
         "live_news_cases": live_news_cases,
+        "evidence_assessment": evidence_assessment,
+        "evidence_status": evidence_assessment["status"],
+        "evidence_label": evidence_assessment["label"],
+        "evidence_reason": evidence_assessment["reason"],
     }
 
     if answer_mode == STABLE_MODE:
@@ -6654,12 +6981,16 @@ def run_rag_flow(
                 stable_draft=stable_answer,
                 reference_cases=reference_cases,
                 live_news_cases=live_news_cases,
+                evidence_assessment=evidence_assessment,
             )
 
         gemini_state = classify_gemini_status(gemini_status)
         success = gemini_state == "성공"
         if success:
-            final_answer = hybrid_answer
+            final_answer = enforce_rag_evidence_answer_guardrail(
+                hybrid_answer,
+                evidence_assessment,
+            )
             actual_execution = "Gemini API 호출 성공 - 안정형 조치에 이유/현장 적용 보완"
         else:
             final_answer = stable_answer
@@ -6691,10 +7022,16 @@ def run_rag_flow(
             prompt_kind="gemini",
             reference_cases=reference_cases,
             live_news_cases=live_news_cases,
+            evidence_assessment=evidence_assessment,
         )
 
     gemini_state = classify_gemini_status(rag_status)
     success = gemini_state == "성공"
+    final_answer = (
+        enforce_rag_evidence_answer_guardrail(rag_answer, evidence_assessment)
+        if success
+        else stable_answer
+    )
     rag_status.update(
         {
             **base_status,
@@ -6709,7 +7046,7 @@ def run_rag_flow(
         }
     )
 
-    return rag_results, rag_answer, rag_status, None
+    return rag_results, final_answer, rag_status, None
 
 def render_evidence_card(result: dict[str, Any]) -> None:
     distance_text = format_distance(result["distance"])
@@ -7106,6 +7443,80 @@ def render_gemini_runtime_status(
         if answer_status.get("reason"):
             st.caption(f"오류 정보: {answer_status.get('reason')}")
 
+
+def render_rag_evidence_guardrail(
+    assessment: dict[str, Any] | None,
+) -> None:
+    if not isinstance(assessment, dict) or not assessment:
+        return
+
+    status = str(assessment.get("status", EVIDENCE_STATUS_NEEDS_REVIEW))
+    label = str(assessment.get("label", EVIDENCE_STATUS_LABELS[EVIDENCE_STATUS_NEEDS_REVIEW]))
+    reason = str(assessment.get("reason", EVIDENCE_STATUS_REASONS[EVIDENCE_STATUS_NEEDS_REVIEW]))
+    st.markdown(
+        (
+            '<div class="answer-runtime-summary">'
+            '<span>공식 근거 검색 상태: '
+            f'<strong>{escape(label)}</strong></span>'
+            '<span>RAG 근거 충분성 휴리스틱</span>'
+            '</div>'
+        ),
+        unsafe_allow_html=True,
+    )
+    st.caption(reason)
+    if status == EVIDENCE_STATUS_INSUFFICIENT:
+        st.warning(EVIDENCE_INSUFFICIENT_GUIDANCE)
+
+    if not is_admin_mode:
+        return
+
+    details = assessment.get("diagnostic_details", {})
+    if not isinstance(details, dict):
+        details = {}
+    thresholds = details.get("thresholds", {})
+    if not isinstance(thresholds, dict):
+        thresholds = {}
+    with st.expander("RAG 근거 충분성 휴리스틱 진단", expanded=False):
+        detail_rows = [
+            ("공식 chunk 수", str(assessment.get("official_chunk_count", 0))),
+            ("고유 문서 수", str(assessment.get("unique_document_count", 0))),
+            ("비어 있지 않은 chunk 수", str(assessment.get("non_empty_chunk_count", 0))),
+            ("중복 결과 수", str(assessment.get("duplicate_chunk_count", 0))),
+            ("문서명 누락 수", str(details.get("missing_source_count", 0))),
+            ("chunk_id 누락 수", str(details.get("missing_chunk_id_count", 0))),
+            ("판정 사유", reason),
+            (
+                "검색 점수 해석 방식",
+                str(
+                    details.get(
+                        "distance_interpretation",
+                        "검색 점수는 충분성 판정에 사용하지 않음",
+                    )
+                ),
+            ),
+        ]
+        detail_html = "".join(
+            "<tr><th>{}</th><td>{}</td></tr>".format(escape(name), escape(value))
+            for name, value in detail_rows
+        )
+        st.markdown(
+            (
+                '<div class="portal-table-wrap"><table class="portal-table">'
+                f'<tbody>{detail_html}</tbody></table></div>'
+            ),
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            "**사용된 판정 기준**\n\n"
+            f"- 최소 공식 chunk 수: {thresholds.get('min_official_chunks', EVIDENCE_MIN_OFFICIAL_CHUNKS)}\n"
+            f"- 최소 고유 문서 수: {thresholds.get('min_unique_documents', EVIDENCE_MIN_UNIQUE_DOCUMENTS)}\n"
+            f"- 최소 비어 있지 않은 chunk 수: {thresholds.get('min_non_empty_chunks', EVIDENCE_MIN_NON_EMPTY_CHUNKS)}\n"
+            f"- 허용 중복 비율: {thresholds.get('max_duplicate_ratio', EVIDENCE_MAX_DUPLICATE_RATIO)} 이하\n"
+            f"- 단일 문서 최대 편중 비율: {thresholds.get('max_single_document_ratio', EVIDENCE_MAX_SINGLE_DOCUMENT_RATIO)} 이하"
+        )
+        st.caption("이 진단은 정확도 점수나 법적 신뢰도 점수가 아닙니다.")
+
+
 def render_rag_result(
     answer: str,
     answer_status: dict[str, Any],
@@ -7137,7 +7548,19 @@ def render_rag_result(
     unique_sources = list(
         dict.fromkeys(str(item.get("source", "출처 정보 없음")) for item in results)
     )
-    confidence = "높음" if len(results) >= 3 else "검토 필요"
+    evidence_assessment = answer_status.get("evidence_assessment", {})
+    if not isinstance(evidence_assessment, dict):
+        evidence_assessment = {}
+    evidence_status = str(
+        evidence_assessment.get("status", EVIDENCE_STATUS_NEEDS_REVIEW)
+    )
+    evidence_label = str(
+        evidence_assessment.get(
+            "label",
+            EVIDENCE_STATUS_LABELS[EVIDENCE_STATUS_NEEDS_REVIEW],
+        )
+    )
+    evidence_tone = "success" if evidence_status == EVIDENCE_STATUS_SUFFICIENT else "warning"
     generation_time = f"{elapsed:.1f}초" if elapsed > 0 else "즉시 생성"
     core_answer, kras_answer, supplement_answer = split_answer_for_dashboard(answer)
     effective_question = question_text.strip() or extract_markdown_section(answer, "질문") or "질문 정보 없음"
@@ -7165,7 +7588,7 @@ def render_rag_result(
     public_mode = public_answer_mode_label(answer_status, mode_name)
     info_cols = st.columns(5)
     info_cards = [
-        ("답변 신뢰도", confidence, f"근거 {len(results)}개 확보", "✓", "success"),
+        ("공식 근거 상태", evidence_label, "RAG 근거 충분성 휴리스틱", "✓", evidence_tone),
         ("위험 등급", risk_level, situation_type, "!", "warning"),
         ("관련 법령", f"{len(unique_sources)}개 문서", "Vector DB 검색 기준", "§", "navy"),
         ("답변 생성 시간", generation_time, "답변 준비 완료", "⏱", "teal"),
@@ -7194,6 +7617,7 @@ def render_rag_result(
         st.caption("기본 벡터 유사도 정렬 적용")
 
     render_gemini_runtime_status(answer_status, selected_model, mode_name)
+    render_rag_evidence_guardrail(evidence_assessment)
 
     summary_lead, summary_actions = build_dashboard_summary(
         core_answer,
@@ -7294,6 +7718,7 @@ def render_rag_result(
             recommended_records,
             result_key,
             reference_cases=reference_cases,
+            evidence_assessment=evidence_assessment,
         )
         if saved_history_id:
             st.caption(f"대화 이력 자동 저장 완료: {saved_history_id}")

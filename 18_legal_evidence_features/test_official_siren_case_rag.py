@@ -95,7 +95,8 @@ class OfficialSirenPipelineContractTests(unittest.TestCase):
     def test_07_official_case_search_function_exists(self):
         self.require_integration()
         self.assertRegex(self.app, r"def\s+search_official_siren_cases\s*\(")
-        self.assertEqual(129, self.collection.count())
+        self.assertGreater(self.collection.count(), 0)
+        self.assertLessEqual(self.collection.count(), 129)
 
     def test_08_missing_db_and_search_failure_fallback_exists(self):
         self.require_integration()
@@ -154,12 +155,15 @@ class OfficialSirenPipelineContractTests(unittest.TestCase):
         self.assertIn("source_document", self.app)
         self.assertRegex(self.app, r"page_(?:start|end)")
         metadatas = self.collection_payload.get("metadatas", []) or []
-        self.assertEqual(129, len(metadatas))
+        self.assertEqual(self.collection.count(), len(metadatas))
         self.assertTrue(all(meta.get("source_document") for meta in metadatas))
         self.assertTrue(all(meta.get("page_start") not in (None, "") for meta in metadatas))
         self.assertTrue(all(meta.get("official_case") is True for meta in metadatas))
         self.assertTrue(all(meta.get("mine_relevance") in {"high", "medium"} for meta in metadatas))
         self.assertTrue(all(meta.get("ocr_quality_status") == "pass" for meta in metadatas))
+        self.assertTrue(all(int(meta.get("text_quality_score", 0)) >= 60 for meta in metadatas))
+        self.assertTrue(all(meta.get("needs_manual_review") is False for meta in metadatas))
+        self.assertTrue(all(meta.get("display_accident_summary") for meta in metadatas))
         hashes = [str(meta.get("content_hash", "")) for meta in metadatas]
         self.assertTrue(all(hashes))
         self.assertEqual(len(hashes), len(set(hashes)))

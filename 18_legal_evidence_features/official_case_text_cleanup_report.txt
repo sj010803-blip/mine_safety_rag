@@ -1,0 +1,153 @@
+MineSafe AI 공식 사고사례 OCR 텍스트 정제 및 화면 개선 보고서
+작성일: 2026-07-15
+
+1. 화면 깨짐 원인
+- 기존 사고사례는 페이지 전체 OCR 문자열이 accident_summary에 들어가 머리말, 날짜, 업종, 다른 항목이 함께 표시됐다.
+- UI가 이 긴 필드를 직접 사용해 OCR 잡음과 다른 섹션이 기본 카드에 노출됐다.
+
+2. OCR 읽기 순서 문제
+- 이미지 PDF의 2열·카드형 배치를 페이지 전체 문자열로 읽으면서 열 사이 문장이 섞일 수 있었다.
+- 좌표가 있는 block을 열별 x 좌표와 열 내부 y 좌표 순으로 정렬하는 구조를 추가했다.
+
+3. 기존 422건 품질 진단 결과
+- 422건 중 383건에서 하나 이상의 자동 진단 사유가 발견됐다.
+- 진단 사유 집계: 영문 잡음 336, 다중 날짜 186, HTML·URL 의심 48, 낮은 한글 비율 42, 반복 문자 34, 과도한 길이 15, 한 글자 업종 7, 사고 유형 누락 4였다.
+- 이 값은 법적 정확도가 아니라 OCR·읽기 순서·metadata 구조 품질 진단값이다.
+
+4. 재OCR 대상 페이지 수
+- high·medium 사례 중 needs_reocr 판정 사례와 페이지는 29건·29쪽이었다.
+
+5. 실제 재OCR 페이지 수
+- 29쪽을 선택적으로 재OCR했다. 전체 415쪽을 다시 OCR하지 않았다.
+- 세 후보가 기존 정제본보다 좋아지면서 수동검토 조건까지 해제된 사례는 0건이어서 재OCR 문자열을 강제로 채택하지 않았다.
+
+6. PSM·DPI 선택 방식
+- 400 DPI, grayscale, contrast enhancement를 공통 적용했다.
+- PSM 4, PSM 6, PSM 11의 세 후보만 비교했다. 동일 설정을 반복하지 않았다.
+- 한글 수, 공식 사고 유형 일치, OCR 기본 품질, 구조 점수를 함께 비교했다.
+
+7. 다단·카드 분리 방식
+- order_ocr_blocks가 block의 x0·y0와 페이지 너비를 이용해 왼쪽 열 위→아래, 다음 열 위→아래 순으로 정렬한다.
+- 반복 날짜와 반복 사고 제목을 detect_mixed_case_blocks로 탐지한다.
+
+8. 정규화 규칙
+- 문단 줄바꿈은 보존하고 연속 공백·과도한 빈 줄만 정리한다.
+- 명확히 낱자 단위로 분리된 한글만 결합하며 정상 단어 간 공백은 일괄 삭제하지 않는다.
+- 날짜 내부의 불필요한 공백을 정리하되 불확실한 연도는 임의 확장하지 않는다.
+
+9. 제거한 OCR 잡음 유형
+- Zool, XSF, SCHRHON, PuwBct와 같이 확인된 무의미 OCR 토큰, 비정상 특수문자 연속, 반복 문자, URL·HTML 조각을 제거 대상으로 처리했다.
+- 화면 표시용 요약에서 위 대표 깨진 토큰 잔여 건수는 0건이다.
+
+10. 정상 영문 보존 방법
+- TBM, PPE, CCTV, LOTO, CH4, O2 등 안전·설비 약어 whitelist를 두어 무조건 삭제하지 않는다.
+- 숫자 포함 설비 표기와 정상 대소문자 단어는 보수적으로 유지한다.
+
+11. 사고 경계 재추출 방식
+- 사고 개요, 재해 개요, 발생 원인, 예방대책, 안전수칙 제목을 경계로 필드를 분리했다.
+- 장문에서는 근로자·작업자·사망·부상·끼임·추락 등 실제 사고 서술 위치를 중심으로 범위를 좁혔다.
+- 다른 날짜나 다음 사고 시작 표식이 반복되면 혼합 의심으로 판정한다.
+
+12. 수정 전 사례 수
+- 기존 사례 JSONL: 422건.
+
+13. 수정 후 사례 수
+- 정제 사례 JSONL: 422건. 원문 사례를 삭제하지 않고 full_*와 display_*를 분리했다.
+- 중복 제거는 0건이었다.
+
+14. DB 후보 수
+- 기존 광산 관련 high 5건 + medium 124건 = 129건이었다.
+- 정제 후 엄격한 품질 조건을 만족한 후보는 75건이었다.
+
+15. 최종 DB 저장 수
+- mine_official_accident_cases collection에 75건을 저장했다.
+- high 2건, medium 73건이며 case_id와 content_hash 중복은 각각 0건이다.
+
+16. 품질 미달 제외 수
+- 전체 제외 347건: low 279건, review_required 14건, high·medium 중 수동검토 필요 54건이다.
+
+17. 수동 검토 대상 수
+- 전체 정제 사례 중 needs_manual_review 229건이다.
+- DB 직접 후보 high·medium 중 54건은 혼합·metadata·텍스트 품질 사유로 제외했다.
+
+18. 기존 DB 백업 경로
+- 유효 백업: C:\Users\USER\Desktop\mine_safety_rag\23_official_accident_case_vector_db_backup_20260715_155235
+- 최초 교체 시 기존 Streamlit 프로세스의 파일 잠금으로 빈 진단용 백업 폴더 23_official_accident_case_vector_db_backup_20260715_154926이 남았다. 비파괴 원칙에 따라 삭제하지 않았다.
+
+19. candidate DB 경로
+- 검증에 사용한 경로: C:\Users\USER\Desktop\mine_safety_rag\23_official_accident_case_vector_db_candidate
+- 75건, 중복 0건, 품질 조건 통과를 확인한 뒤 최종 경로로 이동했다.
+
+20. 최종 DB 경로
+- C:\Users\USER\Desktop\mine_safety_rag\23_official_accident_case_vector_db
+- 기존 법령 DB 및 mine_safety_docs collection에는 접근하거나 변경하지 않았다.
+
+21. 대표 질문별 개선 전후 결과
+- 컨베이어 청소 질문: 끼임 사례 3건을 찾을 수 있도록 내부 후보 검색 범위를 최종 DB 75건까지 넓힌 뒤 유형·키워드로 필터링한다.
+- 장비 후진 질문: 충돌 관련 3건 확인.
+- 낙반 질문: 붕괴 관련 3건 확인.
+- 전기 잠금 질문: 감전 관련 2건 확인.
+- 불발공과 갱내 산소부족 질문은 직접 관련 사례가 확인되지 않아 0건을 유지했다.
+
+22. 깨진 영문 토큰 잔여 여부
+- 정제 display 사고 개요 422건과 최종 DB 표시 문자열에서 대표 깨진 영문 토큰 잔여 0건을 확인했다.
+
+23. 화면 요약 길이
+- display_accident_summary는 최대 450자이며 2~4문장을 우선한다.
+- UI 기본 카드는 display_*를 우선 사용하고 긴 full_* 원문은 기본 노출하지 않는다.
+
+24. 원인·예방사항 누락 처리
+- 원문에 명시된 경우에만 cause·prevention을 저장한다.
+- 없으면 각각 “공식 원문에서 별도 원인을 확인하지 못했습니다.”, “공식 원문에서 별도 예방사항을 확인하지 못했습니다.”라고 표시한다.
+
+25. 기존 테스트 결과
+- 작업 전 77/77 통과, 실패·오류·skip 0.
+- 작업 후 기존 77/77 통과, 실패·오류·skip 0.
+
+26. 신규 테스트 결과
+- test_official_case_text_cleanup.py 20/20 통과.
+
+27. 전체 테스트 결과
+- 전체 test_*.py 97/97 통과, 실패 0, 오류 0, skip 0.
+- app.py와 파이프라인 문법 검사도 통과했다.
+
+28. Streamlit HTTP 결과
+- 8506 포트 HTTP 200, 프로세스 정상 생존, Python traceback 없음, 확인 후 프로세스 종료.
+- 브라우저 제어 연결은 환경 경로 오류로 실제 클릭·스크린샷 검증을 완료하지 못했다.
+
+29. app.py 작업 전후 SHA-256
+- 작업 전: 1AE2D838A26070F904DBF22117D5BA26E1ACE4AD1231AEB79D68CA1C06FA0209
+- 작업 후: CC366C0EADD9D790C327E43DB823457CA5292E6389AD5E75A3BE6C10723CDFA3
+
+30. 수정 파일
+- app.py
+- 21_official_accident_case_pipeline/build_official_siren_case_db.py
+- 18_legal_evidence_features/test_official_siren_case_rag.py
+
+31. 생성 파일
+- 18_legal_evidence_features/test_official_case_text_cleanup.py
+- 18_legal_evidence_features/official_case_text_cleanup_report.txt
+- 22_official_accident_case_chunks/official_siren_cases_2025_to_2026_q1_cleaned.jsonl
+- candidate·백업·최종 사례 DB 데이터(모두 Git 제외)
+
+32. Git whitelist
+- app.py
+- 21_official_accident_case_pipeline/build_official_siren_case_db.py
+- 18_legal_evidence_features/test_official_siren_case_rag.py
+- 18_legal_evidence_features/test_official_case_text_cleanup.py
+- 18_legal_evidence_features/official_case_text_cleanup_report.txt
+
+33. Git 제외 파일
+- app 백업, 원본 PDF, 원본 OCR JSONL, 정제 JSONL, candidate·백업·최종 DB, tessdata, 법령 DB, chunks, 평가 파일, 인증정보, 관련 없는 기존 변경 파일.
+
+34. 남은 한계
+- 선택 재OCR 29쪽에서 자동 승인 가능한 개선본이 0건이므로 54개 관련 후보는 계속 수동 검토가 필요하다.
+- 2025 통합본의 업종 미표기 사례가 남아 있으며 원문 근거 없이 채우지 않았다.
+- 실제 브라우저 클릭·스크린샷 점검은 환경 연결 오류로 미완료다.
+
+35. 교수님 설명용 문구
+- 이번 개선은 화면에서 깨진 글자를 숨기는 데 그치지 않고 OCR 원문, 사고 경계, metadata와 화면용 요약을 분리했습니다. 여러 사고가 섞였거나 OCR 품질이 낮은 사례는 자동으로 DB에서 제외하고, 검증된 공식 사례만 출처 문서·페이지·case_id와 함께 검색합니다. 이 품질 점수는 법적 정확도가 아니라 OCR 및 문서 구조 품질을 확인하는 안전장치입니다.
+
+36. commit과 push 결과
+- 커밋 메시지 예정: fix: clean OCR accident case text and improve case cards
+- 실제 commit SHA와 push 결과는 이 보고서 작성 후 whitelist 검증을 거쳐 완료 보고에 기록한다.

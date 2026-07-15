@@ -68,7 +68,7 @@ AUTO_EVAL_BATCH_PATHS = [
 COLLECTION_NAME = "mine_safety_docs"
 OFFICIAL_CASE_COLLECTION_NAME = "mine_official_accident_cases"
 OFFICIAL_CASE_TOP_K = 3
-OFFICIAL_CASE_INTERNAL_SEARCH_COUNT = 12
+OFFICIAL_CASE_INTERNAL_SEARCH_COUNT = 75
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 GEMINI_MODEL_NAME = "gemini-2.5-flash-lite"
 GEMINI_MODEL_OPTIONS = [
@@ -5943,8 +5943,14 @@ def format_official_cases_for_prompt(official_cases: list[dict[str, Any]]) -> st
         return "현재 질문과 직접 관련된 공식 사고사례 검색 결과 없음."
     blocks: list[str] = []
     for case in official_cases[:2]:
-        summary = make_preview(clean_text(str(case.get("accident_summary", ""))), 350)
-        prevention = make_preview(clean_text(str(case.get("prevention_summary", ""))), 220)
+        summary = make_preview(
+            clean_text(str(case.get("display_accident_summary") or case.get("accident_summary", ""))),
+            350,
+        )
+        prevention = make_preview(
+            clean_text(str(case.get("display_prevention_summary") or case.get("prevention_summary", ""))),
+            220,
+        )
         blocks.append(
             "\n".join(
                 [
@@ -5966,8 +5972,12 @@ def official_case_warning_points(
 ) -> list[dict[str, str]]:
     points: list[dict[str, str]] = []
     for case in official_cases:
-        for field in ("prevention_summary", "cause_summary"):
-            value = make_preview(clean_text(str(case.get(field, ""))), 220)
+        for field in ("display_prevention_summary", "display_cause_summary"):
+            fallback_field = field.removeprefix("display_")
+            value = make_preview(
+                clean_text(str(case.get(field) or case.get(fallback_field, ""))),
+                220,
+            )
             if value and all(item["text"] != value for item in points):
                 points.append({"text": value, "source": "공식 사례 기반"})
             if len(points) >= 3:
@@ -6031,14 +6041,30 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
         or "정보 없음"
     )
     industry = str(case.get("industry", "") or "정보 없음")
-    summary = make_preview(clean_text(str(case.get("accident_summary", ""))), 650)
+    summary = make_preview(
+        clean_text(str(case.get("display_accident_summary") or case.get("accident_summary", ""))),
+        450,
+    )
     cause = make_preview(
-        clean_text(str(case.get("cause_summary") or case.get("equipment") or "")),
-        300,
+        clean_text(
+            str(
+                case.get("display_cause_summary")
+                or case.get("cause_summary")
+                or case.get("equipment")
+                or "공식 원문에서 별도 원인을 확인하지 못했습니다."
+            )
+        ),
+        360,
     )
     prevention = make_preview(
-        clean_text(str(case.get("prevention_summary", ""))),
-        300,
+        clean_text(
+            str(
+                case.get("display_prevention_summary")
+                or case.get("prevention_summary")
+                or "공식 원문에서 별도 예방사항을 확인하지 못했습니다."
+            )
+        ),
+        360,
     )
     relevance = "직접 관련" if str(case.get("mine_relevance")) == "high" else "유사 위험"
     source_document = str(case.get("source_document", "") or "출처 정보 없음")
@@ -6051,12 +6077,23 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
         header_cols[1].markdown(f"**발생일·연도**  \n{accident_date}")
         header_cols[2].markdown(f"**업종**  \n{industry}")
         st.markdown(f"**사고 개요**  \n{summary or '원문에서 확인된 사고 개요가 없습니다.'}")
-        st.markdown(f"**주요 위험요인 또는 발생 원인**  \n{cause or '원문에 별도 기록이 없습니다.'}")
-        st.markdown(f"**예방 및 주의사항**  \n{prevention or '원문에 별도 기록이 없습니다.'}")
+        st.markdown(f"**주요 원인**  \n{cause}")
+        st.markdown(f"**예방 및 주의사항**  \n{prevention}")
         st.caption(
             f"광산 관련성: {relevance} · 출처: {source_document} · "
             f"기간: {source_period} · 페이지: {page_start} · case_id: {case_id}"
         )
+        if str(case.get("ocr_quality_status", "")) == "pass":
+            full_text = make_preview(
+                clean_text(
+                    str(case.get("full_accident_summary") or case.get("accident_summary", ""))
+                ),
+                1500,
+            )
+            if full_text:
+                with st.expander("원문 OCR 내용 보기", expanded=False):
+                    st.text(full_text)
+                    st.caption("전체 내용은 출처 PDF에서 확인해 주세요.")
 
 
 def render_official_siren_cases(

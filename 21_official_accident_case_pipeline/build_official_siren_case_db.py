@@ -9,6 +9,7 @@ safe retry produces reproducible text and case identifiers.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import hashlib
 import json
 import re
@@ -38,7 +39,11 @@ CASE_JSONL_PATH = (
     / "official_siren_cases_2025_to_2026_q1.jsonl"
 )
 CASE_VECTOR_DB_DIR = ROOT_DIR / "23_official_accident_case_vector_db"
+CASE_VECTOR_DB_CANDIDATE_DIR = ROOT_DIR / "23_official_accident_case_vector_db_candidate"
 LAW_VECTOR_DB_DIR = ROOT_DIR / "10_vector_db_with_major_accident_docs"
+CLEAN_CASE_JSONL_PATH = CASE_JSONL_PATH.with_name(
+    "official_siren_cases_2025_to_2026_q1_cleaned.jsonl"
+)
 
 # These names remain as compatibility metadata only.  Vector DB construction is
 # explicitly disabled in this OCR-only stage.
@@ -46,6 +51,14 @@ COLLECTION_NAME = "mine_official_accident_cases"
 LAW_COLLECTION_NAME = "mine_safety_docs"
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 CASE_DB_BATCH_SIZE = 32
+CASE_TEXT_QUALITY_MINIMUM = 60
+DISPLAY_SUMMARY_MAX_CHARS = 450
+DISPLAY_DETAIL_MAX_CHARS = 360
+CLEANUP_REOCR_CANDIDATE_CONFIGS = ((400, 4), (400, 6), (400, 11))
+SAFE_ENGLISH_TOKENS = {
+    "TBM", "PPE", "SIF", "CCTV", "LED", "LOTO", "CO", "O2", "CH4", "LPG",
+}
+KNOWN_OCR_NOISE_TOKENS = {"ZOOL", "XSF", "SCHRHON", "PUWBCT"}
 
 ALLOWED_SOURCE_HOSTS = {
     "portal.kosha.or.kr",
@@ -200,9 +213,7 @@ def find_tesseract() -> Path | None:
 
 def find_pdftoppm() -> Path | None:
     discovered = shutil.which("pdftoppm")
-    candidates = [Path(discovered)] if discovered else []
-    candidates.extend(
-        [
+    candidates = [
             Path.home()
             / ".cache"
             / "codex-runtimes"
@@ -215,7 +226,8 @@ def find_pdftoppm() -> Path | None:
             / "pdftoppm.exe",
             Path(r"C:\Program Files\poppler\Library\bin\pdftoppm.exe"),
         ]
-    )
+    if discovered:
+        candidates.append(Path(discovered))
     return next((path.resolve() for path in candidates if path.is_file()), None)
 
 
@@ -316,7 +328,16 @@ def _render_page(
     if enhance:
         command.append("-gray")
     command.extend([str(pdf_path), str(prefix)])
-    subprocess.run(command, check=True, capture_output=True)
+    try:
+        subprocess.run(command, check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        import fitz
+
+        with fitz.open(pdf_path) as document:
+            page = document.load_page(page_number - 1)
+            scale = float(dpi) / 72.0
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+            pixmap.save(output_image)
     if enhance:
         from PIL import Image, ImageEnhance, ImageOps
 
@@ -551,6 +572,70 @@ def normalize_text(text: str) -> str:
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
+
+
+def repair_korean_spacing(text: str) -> str:
+    """Repair only obvious OCR syllable splitting without removing normal word spaces."""
+    isolated_run = re.compile(r"(?<![가-힣])(?:[가-힣]\s+){2,}[가-힣](?![가-힣])")
+    return isolated_run.sub(lambda match: re.sub(r"\s+", "", match.group(0)), text)
+
+
+def remove_ocr_noise(text: str) -> str:
+    """Remove conservative OCR debris while preserving known equipment abbreviations."""
+    text = re.sub(r"(?:[^\w\s가-힣.,:;()/%+\-·]|_){3,}", " ", text)
+
+    def clean_english_token(match: re.Match) -> str:
+        token = match.group(0)
+        upper = token.upper()
+        if upper in KNOWN_OCR_NOISE_TOKENS:
+            return " "
+        if upper in SAFE_ENGLISH_TOKENS or any(character.isdigit() for character in token):
+            return token
+        has_mixed_case = not (token.islower() or token.isupper() or token.istitle())
+        unlikely_vowel_pattern = not re.search(r"[AEIOUaeiou]", token)
+        return " " if has_mixed_case or unlikely_vowel_pattern else token
+
+    text = re.sub(r"(?<![A-Za-z0-9])[A-Za-z]{3,12}(?![A-Za-z0-9])", clean_english_token, text)
+    text = re.sub(r"(?<!\S)([^\s])(?:\s+\1){4,}(?!\S)", r"\1", text)
+    return text
+
+
+def normalize_ocr_text(text: str) -> str:
+    """Normalize OCR for display and indexing while preserving paragraphs and source facts."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = repair_korean_spacing(text)
+    text = remove_ocr_noise(text)
+    text = re.sub(r"(\d{1,2})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*일", r"\1년 \2월 \3일", text)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
+def order_ocr_blocks(blocks: list[dict], page_width: float) -> list[dict]:
+    """Order positioned OCR blocks by columns, then from top to bottom."""
+    if not blocks:
+        return []
+    normalized = [block for block in blocks if str(block.get("text", "")).strip()]
+    if not normalized:
+        return []
+    column_width = max(float(page_width) / 3.0, 1.0)
+
+    def sort_key(block: dict) -> tuple[int, float, float]:
+        x0 = float(block.get("x0", 0.0))
+        y0 = float(block.get("y0", 0.0))
+        column = min(2, max(0, int(x0 // column_width)))
+        return column, y0, x0
+
+    return sorted(normalized, key=sort_key)
+
+
+def detect_mixed_case_blocks(text: str) -> bool:
+    """Detect likely multi-card text using repeated dates or accident headings."""
+    compact = re.sub(r"\s+", "", text)
+    date_count = len(re.findall(r"(?:20)?\d{2}(?:년|[./-])\d{1,2}(?:월|[./-])\d{1,2}", compact))
+    heading_count = sum(compact.count(marker) for marker in ("사고개요", "재해개요", "중대재해발생알림"))
+    return date_count >= 2 or heading_count >= 2
 
 
 def extract_case_blocks(page_text: str) -> list[str]:
@@ -882,6 +967,310 @@ def write_failed_page_records(records: list[dict]) -> None:
     temporary_path.replace(FAILED_PAGE_JSONL_PATH)
 
 
+def split_accident_sections(text: str) -> dict[str, str]:
+    """Separate OCR text into source-backed accident, cause, and prevention sections."""
+    normalized = normalize_ocr_text(text)
+    accident = _section_text(normalized, ("발생 개요", "재해 개요", "사고 개요"))
+    cause = _section_text(normalized, ("발생 원인", "재해 원인"))
+    prevention = _section_text(
+        normalized,
+        ("예방대책", "예방 대책", "예방사항", "안전수칙", "주요 예방조치"),
+    )
+    if not accident:
+        accident = re.split(
+            r"(?:발생\s*원인|재해\s*원인|예방\s*대책|예방사항|안전수칙|주요\s*예방조치)\s*[:：]?",
+            normalized,
+            maxsplit=1,
+        )[0]
+    lines = []
+    for line in accident.splitlines():
+        compact = line.strip()
+        if not compact:
+            continue
+        if re.match(r"^(?:출처|페이지|case[_ ]?id|사례\s*id)\s*[:：]", compact, re.IGNORECASE):
+            continue
+        if re.search(r"https?://|<[^>]+>", compact, re.IGNORECASE):
+            continue
+        lines.append(compact)
+    focused = normalize_ocr_text("\n".join(lines))
+    narrative_match = re.search(
+        r"(?:근로자|작업자|재해자|작업\s*중|사망|부상|끼임|추락|충돌|감전|질식|폭발)",
+        focused,
+    )
+    if narrative_match and len(focused) > 900:
+        start = max(0, narrative_match.start() - 120)
+        focused = focused[start : narrative_match.start() + 780]
+    date_matches = list(
+        re.finditer(r"(?:20)?\d{2}\s*(?:년|[./-])\s*\d{1,2}\s*(?:월|[./-])\s*\d{1,2}", focused)
+    )
+    if len(date_matches) >= 2:
+        second = date_matches[1]
+        if second.start() >= 120:
+            focused = focused[: second.start()]
+    return {
+        "accident_summary": normalize_ocr_text(focused),
+        "cause_summary": normalize_ocr_text(cause),
+        "prevention_summary": normalize_ocr_text(prevention),
+    }
+
+
+def normalize_industry(value: str, source_text: str = "") -> str:
+    normalized = normalize_ocr_text(str(value or ""))
+    if len(re.sub(r"\W", "", normalized)) <= 1:
+        normalized = ""
+    candidates = ("건설업", "제조업", "기타업종", "광업", "채석업", "운수업", "서비스업")
+    combined = f"{normalized}\n{source_text}"
+    return next((candidate for candidate in candidates if candidate in combined), normalized[:40])
+
+
+def infer_accident_type_from_text(value: str, source_text: str) -> str:
+    normalized = normalize_ocr_text(str(value or ""))
+    if normalized and normalized not in {"정보 없음", "없음", "미상"}:
+        return normalized
+    compact = re.sub(r"\s+", "", source_text)
+    return next((candidate for candidate in ACCIDENT_TYPES if candidate in compact), "")
+
+
+def _display_text(text: str, limit: int, missing_message: str = "") -> str:
+    normalized = normalize_ocr_text(text)
+    if not normalized:
+        return missing_message
+    normalized = re.sub(r"\s*(?:출처|페이지|case[_ ]?id|사례\s*id)\s*[:：].*$", "", normalized, flags=re.IGNORECASE)
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?。])\s+|\n+", normalized) if part.strip()]
+    selected: list[str] = []
+    for sentence in sentences:
+        if sentence in selected:
+            continue
+        if detect_mixed_case_blocks(sentence) and selected:
+            break
+        selected.append(sentence)
+        if len(" ".join(selected)) >= limit or len(selected) >= 4:
+            break
+    result = " ".join(selected) or normalized
+    if len(result) > limit:
+        clipped = result[:limit].rsplit(" ", 1)[0].rstrip(" ,;:")
+        result = (clipped or result[:limit]).rstrip() + "…"
+    return result
+
+
+def score_case_text_quality(case: dict) -> dict:
+    summary = str(case.get("accident_summary", ""))
+    compact = re.sub(r"\s+", "", summary)
+    reasons: list[str] = []
+    text_score = 100
+    english_noise = [
+        token for token in re.findall(r"\b[A-Za-z]{3,12}\b", summary)
+        if token.upper() in KNOWN_OCR_NOISE_TOKENS
+        or (token.upper() not in SAFE_ENGLISH_TOKENS
+        and (not re.search(r"[AEIOUaeiou]", token) or not (token.islower() or token.isupper() or token.istitle()))
+        )
+    ]
+    if len(compact) < MIN_CASE_SUMMARY_CHARS:
+        text_score -= 50
+        reasons.append("사고 개요가 짧음")
+    if len(summary) > 1800:
+        text_score -= 20
+        reasons.append("사고 개요가 과도하게 김")
+    if english_noise:
+        text_score -= min(30, len(english_noise) * 3)
+        reasons.append("비정상 영문 토큰")
+    if re.search(r"([^\s])\1{5,}", compact):
+        text_score -= 20
+        reasons.append("반복 문자")
+    mixed = detect_mixed_case_blocks(summary)
+    reading_score = 45 if mixed else 100
+    if mixed:
+        reasons.append("여러 사고 경계 혼합 의심")
+    industry = str(case.get("industry", "")).strip()
+    accident_type = str(case.get("accident_type", "")).strip()
+    metadata_score = 100
+    if len(re.sub(r"\W", "", industry)) <= 1:
+        metadata_score -= 35
+        reasons.append("업종 누락 또는 한 글자")
+    if not accident_type or accident_type == "정보 없음":
+        metadata_score -= 25
+        reasons.append("사고 유형 누락")
+    if not case.get("case_id") or case.get("page_start") in (None, ""):
+        metadata_score -= 40
+        reasons.append("출처 식별자 누락")
+    text_score = max(0, text_score)
+    needs_reocr = text_score < CASE_TEXT_QUALITY_MINIMUM or reading_score < 60
+    return {
+        "text_quality_score": text_score,
+        "reading_order_score": reading_score,
+        "metadata_quality_score": max(0, metadata_score),
+        "needs_reocr": needs_reocr,
+        "needs_manual_review": needs_reocr or metadata_score < 50,
+        "quality_reasons": reasons,
+    }
+
+
+def clean_case_record(case: dict) -> dict:
+    cleaned = dict(case)
+    original_accident = str(case.get("full_accident_summary") or case.get("accident_summary") or "")
+    sections = split_accident_sections(original_accident)
+    cleaned_accident = sections["accident_summary"] or normalize_ocr_text(original_accident)
+    original_cause = str(case.get("full_cause_summary") or case.get("cause_summary") or sections["cause_summary"])
+    original_prevention = str(case.get("full_prevention_summary") or case.get("prevention_summary") or sections["prevention_summary"])
+    cleaned["full_accident_summary"] = normalize_text(original_accident)
+    cleaned["full_cause_summary"] = normalize_text(original_cause)
+    cleaned["full_prevention_summary"] = normalize_text(original_prevention)
+    cleaned["accident_summary"] = cleaned_accident
+    cleaned["cause_summary"] = normalize_ocr_text(original_cause)
+    cleaned["prevention_summary"] = normalize_ocr_text(original_prevention)
+    source_file = str(case.get("source_file", ""))
+    source_category = ""
+    if "건설" in source_file:
+        source_category = "건설업"
+    elif "제조" in source_file:
+        source_category = "제조업"
+    elif "기타" in source_file:
+        source_category = "기타업종"
+    cleaned["industry"] = normalize_industry(
+        str(case.get("industry", "")), f"{source_category}\n{cleaned_accident}"
+    )
+    cleaned["accident_type"] = infer_accident_type_from_text(
+        str(case.get("accident_type", "")), cleaned_accident
+    )
+    cleaned["display_accident_summary"] = _display_text(cleaned_accident, DISPLAY_SUMMARY_MAX_CHARS)
+    cleaned["display_cause_summary"] = _display_text(
+        cleaned["cause_summary"],
+        DISPLAY_DETAIL_MAX_CHARS,
+        "공식 원문에서 별도 원인을 확인하지 못했습니다.",
+    )
+    cleaned["display_prevention_summary"] = _display_text(
+        cleaned["prevention_summary"],
+        DISPLAY_DETAIL_MAX_CHARS,
+        "공식 원문에서 별도 예방사항을 확인하지 못했습니다.",
+    )
+    cleaned.update(score_case_text_quality(cleaned))
+    cleaned["text"] = "\n".join(
+        item for item in (
+            cleaned["display_accident_summary"],
+            cleaned["display_cause_summary"],
+            cleaned["display_prevention_summary"],
+        ) if item
+    )
+    return cleaned
+
+
+def clean_case_records(cases: list[dict]) -> tuple[list[dict], dict]:
+    cleaned: list[dict] = []
+    seen_hashes: set[str] = set()
+    duplicates = 0
+    for case in cases:
+        item = clean_case_record(case)
+        clean_hash = hashlib.sha256(item["text"].encode("utf-8")).hexdigest()
+        item["clean_content_hash"] = clean_hash
+        if clean_hash in seen_hashes:
+            duplicates += 1
+            continue
+        seen_hashes.add(clean_hash)
+        cleaned.append(item)
+    return cleaned, {
+        "input_case_count": len(cases),
+        "cleaned_case_count": len(cleaned),
+        "duplicates_removed": duplicates,
+        "needs_reocr_count": sum(bool(case["needs_reocr"]) for case in cleaned),
+        "needs_manual_review_count": sum(bool(case["needs_manual_review"]) for case in cleaned),
+    }
+
+
+def write_cleaned_case_jsonl(cases: list[dict], path: Path = CLEAN_CASE_JSONL_PATH) -> None:
+    if not cases:
+        raise PipelineBlocked("정제된 사고사례가 없습니다.")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_suffix(path.suffix + ".tmp")
+    with temporary_path.open("w", encoding="utf-8", newline="\n") as output:
+        for case in cases:
+            output.write(json.dumps(case, ensure_ascii=False, sort_keys=True) + "\n")
+    temporary_path.replace(path)
+
+
+def select_case_reocr_targets(cases: list[dict]) -> dict[tuple[str, int], list[dict]]:
+    targets: dict[tuple[str, int], list[dict]] = {}
+    for case in cases:
+        if case.get("mine_relevance") not in {"high", "medium"}:
+            continue
+        if not case.get("needs_reocr"):
+            continue
+        source_file = str(case.get("source_file", "")).strip()
+        page_number = int(case.get("page_start") or 0)
+        if source_file and page_number > 0:
+            targets.setdefault((source_file, page_number), []).append(case)
+    return targets
+
+
+def selectively_reocr_cases(
+    cases: list[dict],
+    tesseract_path: Path,
+    tessdata_path: Path,
+    pdftoppm_path: Path,
+) -> tuple[list[dict], dict]:
+    """Re-OCR only low-quality high/medium pages and accept source-backed improvements."""
+    targets = select_case_reocr_targets(cases)
+    replacements: dict[str, dict] = {}
+    attempted_pages = 0
+    improved_cases = 0
+    with tempfile.TemporaryDirectory(prefix="minesafe_case_cleanup_reocr_") as temp_name:
+        temp_dir = Path(temp_name)
+        for (source_file, page_number), page_cases in sorted(targets.items()):
+            pdf_path = DOCS_DIR / source_file
+            if not pdf_path.is_file():
+                continue
+            image_path = temp_dir / f"page_{attempted_pages + 1}.png"
+            safe_pdf_path = temp_dir / f"source_{attempted_pages + 1}.pdf"
+            shutil.copyfile(pdf_path, safe_pdf_path)
+            _render_page(safe_pdf_path, page_number, image_path, pdftoppm_path, 400, True)
+            attempted_pages += 1
+            candidates: list[str] = []
+            for _dpi, psm in CLEANUP_REOCR_CANDIDATE_CONFIGS:
+                candidate_text = _run_tesseract(
+                    image_path,
+                    tesseract_path,
+                    tessdata_path,
+                    psm,
+                )
+                candidates.extend(extract_case_blocks(candidate_text) or [candidate_text])
+            for case in page_cases:
+                accident_type = str(case.get("accident_type", ""))
+
+                def candidate_rank(block: str) -> tuple[int, int, int]:
+                    normalized = normalize_ocr_text(block)
+                    quality = score_ocr_quality(normalized)
+                    return (
+                        int(bool(accident_type and accident_type in normalized)),
+                        int(quality["quality_status"] == "pass"),
+                        int(quality["korean_character_count"]),
+                    )
+
+                best_block = max(candidates, key=candidate_rank, default="")
+                if not best_block:
+                    continue
+                proposed = clean_case_record({**case, "accident_summary": best_block})
+                current_total = sum(
+                    int(case.get(field, 0))
+                    for field in ("text_quality_score", "reading_order_score", "metadata_quality_score")
+                )
+                proposed_total = sum(
+                    int(proposed.get(field, 0))
+                    for field in ("text_quality_score", "reading_order_score", "metadata_quality_score")
+                )
+                if proposed_total > current_total and not proposed.get("needs_manual_review"):
+                    proposed["reocr_applied"] = True
+                    proposed["reocr_candidate_count"] = len(CLEANUP_REOCR_CANDIDATE_CONFIGS)
+                    replacements[str(case.get("case_id"))] = proposed
+                    improved_cases += 1
+    result = [replacements.get(str(case.get("case_id")), case) for case in cases]
+    return result, {
+        "target_case_count": sum(len(items) for items in targets.values()),
+        "target_page_count": len(targets),
+        "attempted_page_count": attempted_pages,
+        "improved_case_count": improved_cases,
+        "candidate_settings": [list(item) for item in CLEANUP_REOCR_CANDIDATE_CONFIGS],
+    }
+
+
 def load_extracted_case_jsonl(path: Path = CASE_JSONL_PATH) -> list[dict]:
     """Load only the pinned extracted-case JSONL without scanning directories."""
     if not path.is_file():
@@ -940,6 +1329,12 @@ def case_vector_db_exclusion_reason(
         return "abnormal_repeated_text"
     if is_non_case_page(summary):
         return "non_case_document"
+    if int(case.get("text_quality_score", 100)) < CASE_TEXT_QUALITY_MINIMUM:
+        return "low_text_quality"
+    if bool(case.get("needs_manual_review", False)):
+        return "manual_review_required"
+    if detect_mixed_case_blocks(summary):
+        return "mixed_case_blocks"
     return ""
 
 
@@ -971,10 +1366,10 @@ def format_case_vector_document(case: dict) -> str:
         ("발생일", case.get("accident_date", "")),
         ("업종", case.get("industry", "")),
         ("작업 상황", case.get("work_type", "")),
-        ("사고 개요", case.get("accident_summary", "")),
+        ("사고 개요", case.get("display_accident_summary") or case.get("accident_summary", "")),
         ("주요 위험요인", case.get("equipment", "")),
-        ("발생 원인", case.get("cause_summary", "")),
-        ("예방 및 주의사항", case.get("prevention_summary", "")),
+        ("발생 원인", case.get("display_cause_summary") or case.get("cause_summary", "")),
+        ("예방 및 주의사항", case.get("display_prevention_summary") or case.get("prevention_summary", "")),
         ("광산 관련성", case.get("mine_relevance", "")),
         ("출처 문서", case.get("source_document", "")),
         ("출처 기간", case.get("source_period", "")),
@@ -1000,6 +1395,10 @@ def case_vector_metadata(case: dict) -> dict:
         "accident_type", "work_type", "equipment", "location_type", "mine_relevance",
         "mine_relevance_reason", "ocr_quality_status", "content_hash", "official_case",
         "accident_summary", "cause_summary", "prevention_summary",
+        "full_accident_summary", "full_cause_summary", "full_prevention_summary",
+        "display_accident_summary", "display_cause_summary", "display_prevention_summary",
+        "text_quality_score", "reading_order_score", "metadata_quality_score",
+        "needs_reocr", "needs_manual_review", "clean_content_hash",
     )
     return {
         field: normalize_chroma_metadata_value(case.get(field))
@@ -1065,9 +1464,13 @@ def verify_official_case_collection(collection, expected_cases: list[dict]) -> d
     }
 
 
-def build_official_case_vector_db(cases: list[dict]) -> dict:
+def build_official_case_vector_db(
+    cases: list[dict],
+    db_path: Path = CASE_VECTOR_DB_DIR,
+) -> dict:
     verify_collection_name_separation()
-    if CASE_VECTOR_DB_DIR.resolve() == LAW_VECTOR_DB_DIR.resolve():
+    db_path = db_path.resolve()
+    if db_path == LAW_VECTOR_DB_DIR.resolve():
         raise PipelineBlocked("신규 사례 DB와 기존 법령 DB 경로는 분리되어야 합니다.")
     included, exclusions = filter_cases_for_vector_db(cases)
     if not included:
@@ -1077,8 +1480,8 @@ def build_official_case_vector_db(cases: list[dict]) -> dict:
         model = model_class(EMBEDDING_MODEL_NAME, local_files_only=True)
     except Exception as error:
         raise PipelineBlocked("로컬 임베딩 모델을 찾지 못해 신규 DB를 만들지 않습니다.") from error
-    CASE_VECTOR_DB_DIR.mkdir(parents=True, exist_ok=True)
-    client = client_class(path=str(CASE_VECTOR_DB_DIR))
+    db_path.mkdir(parents=True, exist_ok=True)
+    client = client_class(path=str(db_path))
     try:
         collection = client.get_collection(name=COLLECTION_NAME)
         existing_ids = set(collection.get(include=[]).get("ids", []))
@@ -1113,19 +1516,25 @@ def build_official_case_vector_db(cases: list[dict]) -> dict:
         "eligible_case_count": len(included),
         "excluded_case_count": len(cases) - len(included),
         "excluded_by_reason": exclusions,
-        "db_path": str(CASE_VECTOR_DB_DIR),
+        "db_path": str(db_path),
         "embedding_model": EMBEDDING_MODEL_NAME,
         "embedding_normalized": True,
         **verification,
     }
 
 
-def verify_official_case_vector_db(cases: list[dict]) -> dict:
+def verify_official_case_vector_db(
+    cases: list[dict],
+    db_path: Path = CASE_VECTOR_DB_DIR,
+) -> dict:
     included, exclusions = filter_cases_for_vector_db(cases)
-    if not CASE_VECTOR_DB_DIR.is_dir():
+    db_path = db_path.resolve()
+    if db_path == LAW_VECTOR_DB_DIR.resolve():
+        raise PipelineBlocked("기존 법령 DB는 사례 DB 검증 대상이 아닙니다.")
+    if not db_path.is_dir():
         raise PipelineBlocked("신규 사례 DB 폴더를 찾지 못했습니다.")
     client_class, _ = _load_case_db_dependencies()
-    client = client_class(path=str(CASE_VECTOR_DB_DIR))
+    client = client_class(path=str(db_path))
     try:
         collection = client.get_collection(name=COLLECTION_NAME)
     except Exception as error:
@@ -1135,9 +1544,26 @@ def verify_official_case_vector_db(cases: list[dict]) -> dict:
         "eligible_case_count": len(included),
         "excluded_case_count": len(cases) - len(included),
         "excluded_by_reason": exclusions,
-        "db_path": str(CASE_VECTOR_DB_DIR),
+        "db_path": str(db_path),
         **verify_official_case_collection(collection, included),
     }
+
+
+def validated_candidate_swap_plan(now: datetime | None = None) -> dict[str, str]:
+    """Return checked candidate/final/backup paths; moving occurs only after DB verification."""
+    root = ROOT_DIR.resolve()
+    candidate = CASE_VECTOR_DB_CANDIDATE_DIR.resolve()
+    final = CASE_VECTOR_DB_DIR.resolve()
+    for path in (candidate, final):
+        if root not in path.parents:
+            raise PipelineBlocked("사례 DB 교체 경로가 프로젝트 밖을 가리킵니다.")
+        if path == LAW_VECTOR_DB_DIR.resolve():
+            raise PipelineBlocked("기존 법령 DB는 교체 대상이 아닙니다.")
+    stamp = (now or datetime.now()).strftime("%Y%m%d_%H%M%S")
+    backup = ROOT_DIR / f"23_official_accident_case_vector_db_backup_{stamp}"
+    if backup.exists():
+        raise PipelineBlocked("사례 DB 백업 경로가 이미 존재합니다.")
+    return {"candidate": str(candidate), "final": str(final), "backup": str(backup.resolve())}
 
 
 def build_vector_db(cases: list[dict]) -> int:
@@ -1169,12 +1595,49 @@ def main() -> int:
     parser.add_argument("--verify-only", action="store_true", help="manifest PDF 검증만 수행")
     parser.add_argument("--build-case-db", action="store_true", help="검증된 사례 JSONL로 별도 사례 DB 구축")
     parser.add_argument("--verify-case-db", action="store_true", help="별도 사례 DB 무결성만 확인")
+    parser.add_argument("--clean-case-data", action="store_true", help="기존 사례 JSONL을 구조적으로 정제")
+    parser.add_argument("--build-clean-case-db", action="store_true", help="정제 사례로 candidate DB 구축")
+    parser.add_argument("--verify-clean-case-db", action="store_true", help="candidate DB 무결성 확인")
+    parser.add_argument("--selective-reocr", action="store_true", help="저품질 관련 사례 페이지만 선택 재OCR")
     parser.add_argument("--tesseract", type=Path, help="Tesseract 실행 파일")
     parser.add_argument("--tessdata", type=Path, help="kor+eng tessdata 폴더")
     parser.add_argument("--pdftoppm", type=Path, help="Poppler pdftoppm 실행 파일")
     args = parser.parse_args()
 
     verify_collection_name_separation()
+    if args.clean_case_data:
+        source_cases = load_extracted_case_jsonl()
+        cases, result = clean_case_records(source_cases)
+        write_cleaned_case_jsonl(cases)
+        print(json.dumps({**result, "output_path": str(CLEAN_CASE_JSONL_PATH)}, ensure_ascii=False, indent=2))
+        return 0
+    if args.selective_reocr:
+        tesseract_path = (args.tesseract.resolve() if args.tesseract else find_tesseract())
+        pdftoppm_path = (args.pdftoppm.resolve() if args.pdftoppm else find_pdftoppm())
+        if not tesseract_path or not pdftoppm_path:
+            raise PipelineBlocked("선택 재OCR 실행 파일을 찾지 못했습니다.")
+        tessdata_path = select_tessdata_path(tesseract_path, args.tessdata)
+        verify_tesseract_languages(tesseract_path, tessdata_path)
+        cases = load_extracted_case_jsonl(CLEAN_CASE_JSONL_PATH)
+        cases, result = selectively_reocr_cases(
+            cases,
+            tesseract_path,
+            tessdata_path,
+            pdftoppm_path,
+        )
+        write_cleaned_case_jsonl(cases)
+        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
+    if args.build_clean_case_db or args.verify_clean_case_db:
+        cases = load_extracted_case_jsonl(CLEAN_CASE_JSONL_PATH)
+        result = (
+            build_official_case_vector_db(cases, CASE_VECTOR_DB_CANDIDATE_DIR)
+            if args.build_clean_case_db
+            else verify_official_case_vector_db(cases, CASE_VECTOR_DB_CANDIDATE_DIR)
+        )
+        result["swap_plan"] = validated_candidate_swap_plan()
+        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
     if args.build_case_db or args.verify_case_db:
         cases = load_extracted_case_jsonl()
         result = (

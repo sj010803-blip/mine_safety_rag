@@ -39,6 +39,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(ROOT_DIR / ".env", override=True)
 
 VECTOR_DB_DIR = ROOT_DIR / "10_vector_db_with_major_accident_docs"
+OFFICIAL_CASE_VECTOR_DB_DIR = ROOT_DIR / "23_official_accident_case_vector_db"
 SCENARIO_PATH = ROOT_DIR / "02_질문시나리오" / "question_scenarios_30.tsv"
 SCENARIO_PATH_65 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_65.tsv"
 SCENARIO_PATH_100 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_100.tsv"
@@ -65,6 +66,9 @@ AUTO_EVAL_BATCH_PATHS = [
     ROOT_DIR / "09_answer_tests" / "auto_eval_Q031_Q110.tsv",
 ]
 COLLECTION_NAME = "mine_safety_docs"
+OFFICIAL_CASE_COLLECTION_NAME = "mine_official_accident_cases"
+OFFICIAL_CASE_TOP_K = 3
+OFFICIAL_CASE_INTERNAL_SEARCH_COUNT = 12
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 GEMINI_MODEL_NAME = "gemini-2.5-flash-lite"
 GEMINI_MODEL_OPTIONS = [
@@ -1959,6 +1963,20 @@ def load_chroma_collection():
         return None, str(e)
 
 
+@st.cache_resource(show_spinner=False)
+def load_official_case_collection():
+    if OFFICIAL_CASE_COLLECTION_NAME == COLLECTION_NAME:
+        return None, "사례 collection과 법령 collection 이름이 분리되지 않았습니다."
+    if not OFFICIAL_CASE_VECTOR_DB_DIR.exists():
+        return None, "공식 사고사례 DB가 아직 준비되지 않았습니다."
+    try:
+        client = chromadb.PersistentClient(path=str(OFFICIAL_CASE_VECTOR_DB_DIR))
+        collection = client.get_collection(name=OFFICIAL_CASE_COLLECTION_NAME)
+        return collection, None
+    except Exception:
+        return None, "공식 사고사례 DB를 불러오지 못했습니다."
+
+
 def get_gemini_api_key() -> str | None:
     try:
         env_key = (os.getenv("GEMINI_API_KEY") or "").strip()
@@ -3310,6 +3328,154 @@ def search_vector_db(question: str, top_k: int = 5):
     return selected, None
 
 
+def official_case_query_terms(question_type: str) -> list[str]:
+    mapping = {
+        CONVEYOR_ROTATING_INTENT: ["컨베이어", "끼임", "말림", "회전체", "재가동", "청소"],
+        BACKING_SIGNAL_INTENT: ["후진", "신호수", "충돌", "깔림", "차량", "지게차", "덤프트럭"],
+        EQUIPMENT_TRANSPORT_INTENT: ["후진", "충돌", "깔림", "차량", "지게차", "덤프트럭", "굴착기"],
+        VENTILATION_GAS_INTENT: ["질식", "산소결핍", "유해가스", "밀폐공간", "중독", "환기"],
+        VENTILATION_EQUIPMENT_INTENT: ["질식", "산소결핍", "유해가스", "밀폐공간", "환기"],
+        GAS_DETECTOR_INTENT: ["질식", "산소결핍", "유해가스", "밀폐공간", "중독"],
+        ROOF_FALL_INTENT: ["붕괴", "매몰", "낙하", "토사", "암석", "무너짐", "낙반"],
+        ELECTRICAL_SAFETY_INTENT: ["감전", "누전", "전기설비", "전원", "정비", "에너지 차단"],
+        BLASTING_MISFIRE_INTENT: ["발파", "화약", "폭약", "폭발", "불발"],
+        DUST_RESPIRATORY_INTENT: ["분진", "집진", "호흡기", "방진마스크", "먼지"],
+        HEIGHT_WORK_INTENT: ["추락", "떨어짐", "고소작업", "작업발판", "사다리"],
+        FIRE_EMERGENCY_INTENT: ["화재", "폭발", "불꽃", "가연물"],
+        HOT_WORK_INTENT: ["화재", "폭발", "용접", "불꽃", "가연물"],
+        LIFTING_HEAVY_INTENT: ["인양", "크레인", "낙하", "맞음", "중량물"],
+    }
+    return mapping.get(question_type, [])
+
+
+def official_case_allowed_accident_types(question_type: str) -> set[str]:
+    mapping = {
+        CONVEYOR_ROTATING_INTENT: {"끼임", "말림"},
+        BACKING_SIGNAL_INTENT: {"충돌", "깔림", "끼임"},
+        EQUIPMENT_TRANSPORT_INTENT: {"충돌", "깔림", "끼임"},
+        VENTILATION_GAS_INTENT: {"질식", "중독", "폭발"},
+        VENTILATION_EQUIPMENT_INTENT: {"질식", "중독", "폭발"},
+        GAS_DETECTOR_INTENT: {"질식", "중독", "폭발"},
+        ROOF_FALL_INTENT: {"붕괴", "매몰", "낙하", "맞음"},
+        ELECTRICAL_SAFETY_INTENT: {"감전"},
+        BLASTING_MISFIRE_INTENT: {"폭발"},
+        HEIGHT_WORK_INTENT: {"추락", "떨어짐", "낙하"},
+        FIRE_EMERGENCY_INTENT: {"화재", "폭발"},
+        HOT_WORK_INTENT: {"화재", "폭발"},
+    }
+    return mapping.get(question_type, set())
+
+
+def search_official_siren_cases(
+    question: str,
+    question_type: str,
+    top_k: int = OFFICIAL_CASE_TOP_K,
+    diagnostic: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    diagnostic = diagnostic if isinstance(diagnostic, dict) else {}
+    if question_type == OUT_OF_SCOPE_INTENT:
+        diagnostic.update({"status": "skipped_out_of_scope", "result_count": 0})
+        return []
+    query_terms = official_case_query_terms(question_type)
+    allowed_accident_types = official_case_allowed_accident_types(question_type)
+    if not query_terms:
+        diagnostic.update({"status": "no_supported_case_type", "result_count": 0})
+        return []
+    collection, collection_error = load_official_case_collection()
+    if collection is None or collection_error:
+        diagnostic.update({"status": "db_unavailable", "result_count": 0})
+        return []
+    try:
+        collection_count = int(collection.count())
+        if collection_count <= 0:
+            diagnostic.update({"status": "empty_collection", "result_count": 0})
+            return []
+        model = load_embedding_model()
+        expanded_query = clean_text(f"{question} {' '.join(query_terms)}")
+        query_embedding = model.encode(
+            [expanded_query],
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        ).tolist()
+        payload = collection.query(
+            query_embeddings=query_embedding,
+            n_results=min(
+                max(int(top_k) * 4, OFFICIAL_CASE_INTERNAL_SEARCH_COUNT),
+                collection_count,
+            ),
+            include=["documents", "metadatas", "distances"],
+        )
+    except Exception:
+        diagnostic.update({"status": "search_failed", "result_count": 0})
+        return []
+
+    documents = payload.get("documents", [[]])[0]
+    metadatas = payload.get("metadatas", [[]])[0]
+    distances = payload.get("distances", [[]])[0]
+    candidates: list[dict[str, Any]] = []
+    seen_case_ids: set[str] = set()
+    for index, document in enumerate(documents):
+        metadata = metadatas[index] if index < len(metadatas) and isinstance(metadatas[index], dict) else {}
+        case_id = str(metadata.get("case_id", "")).strip()
+        if not case_id or case_id in seen_case_ids:
+            continue
+        if metadata.get("official_case") is not True:
+            continue
+        if str(metadata.get("mine_relevance", "")) not in {"high", "medium"}:
+            continue
+        if str(metadata.get("ocr_quality_status", "")) != "pass":
+            continue
+        accident_type = str(metadata.get("accident_type", "")).strip()
+        if accident_type and allowed_accident_types and not any(
+            allowed in accident_type for allowed in allowed_accident_types
+        ):
+            continue
+        combined_text = clean_text(
+            " ".join(
+                str(value or "")
+                for value in (
+                    document,
+                    metadata.get("accident_type"),
+                    metadata.get("accident_summary"),
+                    metadata.get("cause_summary"),
+                    metadata.get("prevention_summary"),
+                    metadata.get("equipment"),
+                )
+            )
+        ).lower()
+        matched_terms = [term for term in query_terms if term.lower() in combined_text]
+        if not matched_terms:
+            continue
+        distance = distances[index] if index < len(distances) else None
+        item = dict(metadata)
+        item.update(
+            {
+                "text": str(document or ""),
+                "distance": distance,
+                "matched_terms": matched_terms,
+                "source_grade": "공식 사고사례",
+            }
+        )
+        seen_case_ids.add(case_id)
+        candidates.append(item)
+
+    candidates.sort(
+        key=lambda item: (
+            -len(item.get("matched_terms", [])),
+            float(item["distance"]) if isinstance(item.get("distance"), (int, float)) else float("inf"),
+        )
+    )
+    selected = candidates[: max(1, min(int(top_k), OFFICIAL_CASE_TOP_K))]
+    diagnostic.update(
+        {
+            "status": "ready",
+            "collection_count": collection_count,
+            "result_count": len(selected),
+        }
+    )
+    return selected
+
+
 def build_context(results: list[dict[str, Any]]) -> str:
     context_blocks = []
     for r in results[:GEMINI_CONTEXT_TOP_K]:
@@ -3336,12 +3502,14 @@ def build_prompt(
     reference_cases: list[dict[str, Any]] | None = None,
     live_news_cases: list[dict[str, Any]] | None = None,
     evidence_assessment: dict[str, Any] | None = None,
+    official_cases: list[dict[str, Any]] | None = None,
 ) -> str:
     context = build_context(results)
     intent = intent or detect_question_intent(question)
     intent_guidance = worker_easy_intent_guidance(intent)
     reference_case_context = format_reference_cases_for_prompt(intent, reference_cases or [])
     live_news_context = format_live_news_cases_for_prompt(live_news_cases or [])
+    official_case_context = format_official_cases_for_prompt(official_cases or [])
     evidence_guardrail = build_evidence_guardrail_prompt_guidance(evidence_assessment)
     easy_evidence_guidance = build_worker_easy_evidence_guidance(evidence_assessment)
     easy_terms = "\n".join(f"- {item}" for item in WORKER_EASY_TERM_EXPLANATIONS)
@@ -3376,6 +3544,15 @@ def build_prompt(
 
 [전문용어를 쉬운 말로 설명하는 방향]
 {easy_terms}
+
+[공식 사고사례 사용 제한]
+- 아래 자료는 mine_official_accident_cases에서 검색한 공식 사고사례이지만 법령·지침은 아닙니다.
+- 사고 상황과 예방사항을 이해하는 참고자료로만 사용하고, 법령 위반 여부나 처벌 여부를 확정하지 마세요.
+- 공식 법령 근거는 mine_safety_docs의 문서명과 chunk_id입니다.
+- 사고사례 전체를 옮기지 말고 필요한 사고 개요와 예방사항만 짧게 참고하세요.
+
+[공식 사고사례]
+{official_case_context}
 
 [사례 기반 주의 포인트 사용 제한]
 - 아래 [사례 기반 주의 포인트]는 공식 법령 근거가 아니라 유사 위험을 이해하기 위한 참고 예시입니다.
@@ -3424,12 +3601,14 @@ def build_hybrid_prompt(
     reference_cases: list[dict[str, Any]] | None = None,
     live_news_cases: list[dict[str, Any]] | None = None,
     evidence_assessment: dict[str, Any] | None = None,
+    official_cases: list[dict[str, Any]] | None = None,
 ) -> str:
     context = build_context(results)
     intent = intent or detect_question_intent(question)
     intent_guidance = gemini_intent_guidance(intent)
     reference_case_context = format_reference_cases_for_prompt(intent, reference_cases or [])
     live_news_context = format_live_news_cases_for_prompt(live_news_cases or [])
+    official_case_context = format_official_cases_for_prompt(official_cases or [])
     evidence_guardrail = build_evidence_guardrail_prompt_guidance(evidence_assessment)
     return f"""
 당신은 광산 안전관리자를 돕는 MineSafe AI의 하이브리드 답변 보완 역할입니다.
@@ -3452,6 +3631,14 @@ def build_hybrid_prompt(
 - 근거 없는 법령 조항 번호·수치·출처를 만들지 마세요.
 - 검색 근거만으로 단정하기 어려운 내용은 "검색된 근거만으로는 단정하기 어렵습니다"라고 표시하세요.
 - 법령 해석이나 실제 작업재개 판단은 안전관리자, 관계기관, 전문가 확인이 필요하다고 안내하세요.
+
+[공식 사고사례 사용 제한]
+- 아래 자료는 mine_official_accident_cases에서 검색한 공식 사고사례이며 법령·지침 근거가 아닙니다.
+- 사고 상황과 예방사항 설명에만 짧게 사용하고, 법령 위반 여부·처벌·작업 재개 가능 여부를 확정하지 마세요.
+- 공식 법령 근거는 mine_safety_docs의 문서명과 chunk_id입니다.
+
+[공식 사고사례]
+{official_case_context}
 
 [사례 기반 주의 포인트 사용 제한]
 - 아래 [사례 기반 주의 포인트]는 공식 법령 근거가 아니라 유사 위험을 이해하기 위한 참고 예시입니다.
@@ -5332,6 +5519,7 @@ def generate_gemini_answer(
     reference_cases: list[dict[str, Any]] | None = None,
     live_news_cases: list[dict[str, Any]] | None = None,
     evidence_assessment: dict[str, Any] | None = None,
+    official_cases: list[dict[str, Any]] | None = None,
 ):
     intent = detect_question_intent(question)
     if prompt_kind == "hybrid":
@@ -5343,6 +5531,7 @@ def generate_gemini_answer(
             reference_cases or [],
             live_news_cases or [],
             evidence_assessment,
+            official_cases or [],
         )
     else:
         prompt = build_prompt(
@@ -5352,6 +5541,7 @@ def generate_gemini_answer(
             reference_cases or [],
             live_news_cases or [],
             evidence_assessment,
+            official_cases or [],
         )
 
     result = execute_gemini_request(prompt, model_name)
@@ -5748,6 +5938,64 @@ def case_warning_points_for_intent(intent: str, reference_cases: list[dict[str, 
     ]
 
 
+def format_official_cases_for_prompt(official_cases: list[dict[str, Any]]) -> str:
+    if not official_cases:
+        return "현재 질문과 직접 관련된 공식 사고사례 검색 결과 없음."
+    blocks: list[str] = []
+    for case in official_cases[:2]:
+        summary = make_preview(clean_text(str(case.get("accident_summary", ""))), 350)
+        prevention = make_preview(clean_text(str(case.get("prevention_summary", ""))), 220)
+        blocks.append(
+            "\n".join(
+                [
+                    f"[공식 사고사례] {case.get('case_id', '사례 ID 없음')}",
+                    f"- 사고 유형: {case.get('accident_type', '정보 없음')}",
+                    f"- 사고 개요: {summary or '정보 없음'}",
+                    f"- 예방사항: {prevention or '원문에 별도 예방사항 없음'}",
+                    f"- 출처: {case.get('source_document', '출처 정보 없음')} / {case.get('page_start', '페이지 정보 없음')}쪽",
+                ]
+            )
+        )
+    return "\n\n".join(blocks)
+
+
+def official_case_warning_points(
+    official_cases: list[dict[str, Any]],
+    intent: str,
+    reference_cases: list[dict[str, Any]] | None = None,
+) -> list[dict[str, str]]:
+    points: list[dict[str, str]] = []
+    for case in official_cases:
+        for field in ("prevention_summary", "cause_summary"):
+            value = make_preview(clean_text(str(case.get(field, ""))), 220)
+            if value and all(item["text"] != value for item in points):
+                points.append({"text": value, "source": "공식 사례 기반"})
+            if len(points) >= 3:
+                return points
+    for point in case_warning_points_for_intent(intent, reference_cases)[:3]:
+        points.append({"text": point, "source": "기존 안전규칙 기반"})
+    return points[:3]
+
+
+def summarize_official_cases_for_history(official_cases: list[dict[str, Any]]) -> dict[str, list[str]]:
+    return {
+        "official_case_ids": [
+            str(case.get("case_id", "")).strip()
+            for case in official_cases
+            if str(case.get("case_id", "")).strip()
+        ],
+        "official_case_titles": [
+            str(case.get("source_document", "")).strip()
+            for case in official_cases
+            if str(case.get("source_document", "")).strip()
+        ],
+        "official_case_sources": [
+            f"{case.get('source_document', '출처 정보 없음')} / {case.get('page_start', '페이지 정보 없음')}쪽 / {case.get('case_id', '사례 ID 없음')}"
+            for case in official_cases
+        ],
+    }
+
+
 def format_reference_cases_for_prompt(intent: str, reference_cases: list[dict[str, Any]]) -> str:
     if not reference_cases:
         return "관련 주의 포인트 없음."
@@ -5775,39 +6023,94 @@ def summarize_reference_cases_for_history(reference_cases: list[dict[str, Any]])
     return summaries
 
 
-def render_latest_reference_cases(reference_cases: list[dict[str, Any]], intent: str | None = None) -> None:
-    if not reference_cases:
-        return
-    points = case_warning_points_for_intent(intent or GENERAL_MINE_SAFETY_INTENT, reference_cases)
-    if not points:
-        return
-    list_html = "".join(f"<li>{escape(point)}</li>" for point in points[:3])
-    source_labels = []
-    for case in reference_cases[:2]:
-        case_id = escape(str(case.get("case_id", "CASE")))
-        label = escape(str(case.get("reliability_label", "참고자료")))
-        source_labels.append(f"{case_id} · {label}")
-    source_text = " / ".join(source_labels)
+def render_official_siren_case_card(case: dict[str, Any]) -> None:
+    accident_type = str(case.get("accident_type", "") or "정보 없음")
+    accident_date = str(
+        case.get("accident_date")
+        or case.get("accident_year")
+        or "정보 없음"
+    )
+    industry = str(case.get("industry", "") or "정보 없음")
+    summary = make_preview(clean_text(str(case.get("accident_summary", ""))), 650)
+    cause = make_preview(
+        clean_text(str(case.get("cause_summary") or case.get("equipment") or "")),
+        300,
+    )
+    prevention = make_preview(
+        clean_text(str(case.get("prevention_summary", ""))),
+        300,
+    )
+    relevance = "직접 관련" if str(case.get("mine_relevance")) == "high" else "유사 위험"
+    source_document = str(case.get("source_document", "") or "출처 정보 없음")
+    source_period = str(case.get("source_period", "") or "기간 정보 없음")
+    page_start = str(case.get("page_start", "") or "페이지 정보 없음")
+    case_id = str(case.get("case_id", "") or "사례 ID 없음")
     with st.container(border=True):
+        header_cols = st.columns(3)
+        header_cols[0].markdown(f"**사고 유형**  \n{accident_type}")
+        header_cols[1].markdown(f"**발생일·연도**  \n{accident_date}")
+        header_cols[2].markdown(f"**업종**  \n{industry}")
+        st.markdown(f"**사고 개요**  \n{summary or '원문에서 확인된 사고 개요가 없습니다.'}")
+        st.markdown(f"**주요 위험요인 또는 발생 원인**  \n{cause or '원문에 별도 기록이 없습니다.'}")
+        st.markdown(f"**예방 및 주의사항**  \n{prevention or '원문에 별도 기록이 없습니다.'}")
+        st.caption(
+            f"광산 관련성: {relevance} · 출처: {source_document} · "
+            f"기간: {source_period} · 페이지: {page_start} · case_id: {case_id}"
+        )
+
+
+def render_official_siren_cases(
+    official_cases: list[dict[str, Any]],
+    diagnostic: dict[str, Any] | None = None,
+) -> None:
+    st.caption(
+        "안전보건공단이 공개한 중대재해사이렌에서 검색한 과거 공식 사고사례입니다. "
+        "사고의 발생 상황과 예방사항을 이해하기 위한 참고자료이며, "
+        "개별 광산의 법령 위반 여부를 확정하는 근거는 아닙니다."
+    )
+    if globals().get("is_admin_mode", False) and isinstance(diagnostic, dict):
+        st.caption(
+            "관리자 진단 · 사례 DB 상태: "
+            f"{diagnostic.get('status', '정보 없음')} · "
+            f"검색 결과: {diagnostic.get('result_count', 0)}건"
+        )
+    if not official_cases:
+        st.info("현재 질문과 직접 관련된 공식 사고사례를 찾지 못했습니다.")
+        return
+    render_official_siren_case_card(official_cases[0])
+    for index, case in enumerate(official_cases[1:], start=2):
+        label = str(case.get("accident_type", "") or "추가 공식 사고사례")
+        with st.expander(f"추가 사례 {index - 1} · {label}", expanded=False):
+            render_official_siren_case_card(case)
+
+
+def render_latest_reference_cases(
+    reference_cases: list[dict[str, Any]],
+    intent: str | None = None,
+    official_cases: list[dict[str, Any]] | None = None,
+) -> None:
+    points = official_case_warning_points(
+        official_cases or [],
+        intent or GENERAL_MINE_SAFETY_INTENT,
+        reference_cases,
+    )
+    st.caption(
+        "공식 사례의 예방사항·원인을 우선하며, 없으면 기존 안전규칙을 사용합니다. "
+        "핵심 주의사항도 법적 판단 근거는 아닙니다."
+    )
+    if not points:
+        st.info("현재 질문에 표시할 핵심 주의사항이 없습니다.")
+        return
+    for item in points[:3]:
         st.markdown(
-            f"""
-            <div style="padding:2px 0;">
-                <div style="font-weight:800;color:#17324d;font-size:1.02rem;margin-bottom:3px;">사례 기반 주의 포인트</div>
-                <div style="color:#64748b;font-size:0.86rem;margin-bottom:8px;">
-                    공식 법령 판단 근거가 아니라, 유사 위험을 이해하기 위한 참고 예시입니다.
-                    {f" 참고 데이터: {source_text}" if source_text else ""}
-                </div>
-                <ul style="margin:0 0 8px 18px;padding:0;color:#334155;line-height:1.65;font-size:0.94rem;">
-                    {list_html}
-                </ul>
-                <div style="border-left:3px solid #f59e0b;background:#fffbeb;color:#92400e;padding:8px 10px;font-size:0.86rem;line-height:1.55;">
-                    ※ 위 내용은 공식 법령 판단이 아니라 유사 사례를 바탕으로 한 주의 포인트입니다.
-                    실제 위반 여부는 사고 경위, 사업장 조치, 법령 해석에 따라 달라질 수 있습니다.
-                </div>
-            </div>
-            """,
+            f"- {escape(item.get('text', ''))}  \n"
+            f"  <span style='color:#64748b;font-size:0.82rem;'>출처 성격: {escape(item.get('source', '참고자료'))}</span>",
             unsafe_allow_html=True,
         )
+    st.warning(
+        "※ 공식 사고사례와 핵심 주의사항은 사고 상황과 예방사항을 이해하기 위한 참고자료입니다. "
+        "법령 위반 여부와 처벌 여부는 공식 법령·지침 근거와 실제 현장 조치를 별도로 확인해야 합니다."
+    )
 
 
 
@@ -5964,38 +6267,37 @@ def format_live_news_cases_for_prompt(live_news_cases: list[dict[str, Any]]) -> 
 
 def render_live_news_reference_cases(live_news_cases: list[dict[str, Any]]) -> None:
     if not live_news_cases:
+        st.info("현재 표시할 최근 뉴스 검색 결과가 없습니다.")
         return
-    with st.container(border=True):
-        st.markdown("#### 실시간 사례 검색 참고")
-        st.caption("네이버 뉴스 검색 기반 참고자료이며, 공식 법령 판단 근거가 아닙니다.")
-        for case in live_news_cases[:3]:
-            title = escape(str(case.get("title", "제목 없음")))
-            pub_date = escape(str(case.get("pub_date", "정보 없음")))
-            summary = escape(str(case.get("summary", "")))
-            label = escape(str(case.get("reliability_label", "뉴스검색 참고")))
-            link = str(case.get("link", "") or "")
-            link_html = (
-                f'<a href="{escape(link)}" target="_blank" rel="noopener noreferrer">기사 보기</a>'
-                if link
-                else "링크 없음"
-            )
-            st.markdown(
-                f"""
-                <div style="border:1px solid #dbe4ef;border-radius:10px;padding:12px 14px;margin:8px 0;background:#ffffff;">
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px;">
-                        <strong style="color:#17324d;">{title}</strong>
-                        <span style="background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700;">{label}</span>
-                    </div>
-                    <div style="color:#64748b;font-size:13px;margin-bottom:7px;">게시일: {pub_date} · 출처: {link_html}</div>
-                    <div style="color:#334155;line-height:1.6;font-size:0.94rem;">{summary}</div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        st.warning(
-            "※ 이 결과는 네이버 뉴스 검색 기반 참고자료이며, 공식 법령 판단 근거가 아닙니다. "
-            "공식 답변 근거는 RAG 근거 문서와 chunk_id를 기준으로 확인해야 합니다."
+    st.caption("네이버 뉴스 검색 기반 참고자료이며, 공식 법령 판단 근거가 아닙니다.")
+    for case in live_news_cases[:3]:
+        title = escape(str(case.get("title", "제목 없음")))
+        pub_date = escape(str(case.get("pub_date", "정보 없음")))
+        summary = escape(str(case.get("summary", "")))
+        label = escape(str(case.get("reliability_label", "뉴스검색 참고")))
+        link = str(case.get("link", "") or "")
+        link_html = (
+            f'<a href="{escape(link)}" target="_blank" rel="noopener noreferrer">기사 보기</a>'
+            if link
+            else "링크 없음"
         )
+        st.markdown(
+            f"""
+            <div style="border:1px solid #dbe4ef;border-radius:10px;padding:12px 14px;margin:8px 0;background:#ffffff;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:5px;">
+                    <strong style="color:#17324d;">{title}</strong>
+                    <span style="background:#eef2ff;color:#3730a3;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700;">{label}</span>
+                </div>
+                <div style="color:#64748b;font-size:13px;margin-bottom:7px;">게시일: {pub_date} · 출처: {link_html}</div>
+                <div style="color:#334155;line-height:1.6;font-size:0.94rem;">{summary}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    st.warning(
+        "※ 이 결과는 네이버 뉴스 검색 기반 참고자료이며, 공식 법령 판단 근거가 아닙니다. "
+        "공식 답변 근거는 RAG 근거 문서와 chunk_id를 기준으로 확인해야 합니다."
+    )
 
 def source_chunk_labels(results: list[dict[str, Any]]) -> list[str]:
     labels: list[str] = []
@@ -6073,6 +6375,9 @@ def normalize_conversation_history_rows(rows: list[dict[str, Any]]) -> list[dict
                 "source_chunks": " | ".join(row.get("source_chunks", [])),
                 "recommended_evidence_records": " | ".join(row.get("recommended_evidence_records", [])),
                 "reference_cases": " | ".join(row.get("reference_cases", [])),
+                "공식 사고사례 ID": " | ".join(normalize_history_display_list(row.get("official_case_ids", []))),
+                "공식 사고사례 문서": " | ".join(normalize_history_display_list(row.get("official_case_titles", []))),
+                "공식 사고사례 출처": " | ".join(normalize_history_display_list(row.get("official_case_sources", []))),
                 "user_action_status": row.get("user_action_status", ""),
                 "manager": row.get("manager", ""),
                 "action_due_date": row.get("action_due_date", ""),
@@ -6142,7 +6447,13 @@ def render_history_report_field(title: str, content: str) -> None:
     )
 
 
-def render_history_report_card(selected: dict[str, Any], evidence_documents: list[str], recommended_records: list[str], reference_case_records: list[str] | None = None) -> None:
+def render_history_report_card(
+    selected: dict[str, Any],
+    evidence_documents: list[str],
+    recommended_records: list[str],
+    reference_case_records: list[str] | None = None,
+    official_case_records: list[str] | None = None,
+) -> None:
     st.subheader("증빙자료 보고서용 보기")
     render_history_report_field("질문", str(selected.get("question", "")))
     c1, c2 = st.columns(2)
@@ -6165,6 +6476,7 @@ def render_history_report_card(selected: dict[str, Any], evidence_documents: lis
     render_history_report_field("근거 문서", ", ".join(evidence_documents) if evidence_documents else "기록 없음")
     render_history_report_field("필요 증빙자료", ", ".join(recommended_records) if recommended_records else "기록 없음")
     render_history_report_field("참고 사례", ", ".join(reference_case_records or []) if reference_case_records else "기록 없음")
+    render_history_report_field("공식 사고사례", ", ".join(official_case_records or []) if official_case_records else "기록 없음")
     render_history_report_field("조치 상태", str(selected.get("user_action_status", "미조치") or "미조치"))
 
 
@@ -6405,6 +6717,7 @@ def auto_save_conversation_history(
     recommended_records: list[str],
     result_key: str,
     reference_cases: list[dict[str, Any]] | None = None,
+    official_cases: list[dict[str, Any]] | None = None,
     evidence_assessment: dict[str, Any] | None = None,
     answer_mode: str = "",
 ) -> str | None:
@@ -6418,6 +6731,7 @@ def auto_save_conversation_history(
         if isinstance(evidence_assessment, dict)
         else {}
     )
+    official_case_history = summarize_official_cases_for_history(official_cases or [])
     history_id = append_conversation_history(
         {
             "history_id": str(uuid.uuid4()),
@@ -6434,6 +6748,7 @@ def auto_save_conversation_history(
             "source_chunks": source_chunk_labels(results),
             "recommended_evidence_records": recommended_records,
             "reference_cases": summarize_reference_cases_for_history(reference_cases or []),
+            **official_case_history,
             "user_action_status": "미조치",
             "manager": "",
             "action_due_date": "",
@@ -6610,6 +6925,7 @@ def render_conversation_history_page() -> None:
     evidence_documents = normalize_history_display_list(selected.get("evidence_documents", []))
     recommended_records = normalize_history_display_list(selected.get("recommended_evidence_records", []))
     reference_case_records = normalize_history_display_list(selected.get("reference_cases", []))
+    official_case_records = normalize_history_display_list(selected.get("official_case_sources", []))
 
     with st.container(border=True):
         st.subheader("질문/답변")
@@ -6633,8 +6949,15 @@ def render_conversation_history_page() -> None:
         render_history_list_card("추천 증빙자료", recommended_records, "저장된 추천 증빙자료가 없습니다.")
     with col_cases:
         render_history_list_card("참고 사례", reference_case_records, "저장된 참고 사례가 없습니다.")
+    render_history_list_card("공식 사고사례", official_case_records, "저장된 공식 사고사례가 없습니다.")
 
-    render_history_report_card(selected, evidence_documents, recommended_records, reference_case_records)
+    render_history_report_card(
+        selected,
+        evidence_documents,
+        recommended_records,
+        reference_case_records,
+        official_case_records,
+    )
 
     with st.form(f"history_update_{selected.get('history_id')}"):
         c1, c2, c3 = st.columns(3)
@@ -7025,6 +7348,8 @@ def run_rag_flow(
             "actual_execution": "범위 밖 질문 안내",
             "mode_output_title": "답변 범위 안내",
             "question_intent": intent,
+            "official_cases": [],
+            "official_case_diagnostic": {"status": "skipped_out_of_scope", "result_count": 0},
             "reference_cases": [],
             "live_news_cases": [],
         }
@@ -7053,6 +7378,13 @@ def run_rag_flow(
     )
     reference_cases = match_reference_cases(question_text, intent, max_cases=2)
     live_news_cases = get_live_reference_cases(question_text, intent, max_cases=3)
+    official_case_diagnostic: dict[str, Any] = {}
+    official_cases = search_official_siren_cases(
+        question_text,
+        intent,
+        top_k=OFFICIAL_CASE_TOP_K,
+        diagnostic=official_case_diagnostic,
+    )
 
     base_status = {
         "selected_answer_mode": short_answer_mode(answer_mode),
@@ -7063,6 +7395,8 @@ def run_rag_flow(
         "model": selected_model,
         "question_intent": intent,
         "expanded_search_query": expand_search_query(question_text, intent),
+        "official_cases": official_cases,
+        "official_case_diagnostic": official_case_diagnostic,
         "reference_cases": reference_cases,
         "live_news_cases": live_news_cases,
         "evidence_assessment": evidence_assessment,
@@ -7106,6 +7440,7 @@ def run_rag_flow(
                 reference_cases=reference_cases,
                 live_news_cases=live_news_cases,
                 evidence_assessment=evidence_assessment,
+                official_cases=official_cases,
             )
 
         gemini_state = classify_gemini_status(gemini_status)
@@ -7147,6 +7482,7 @@ def run_rag_flow(
             reference_cases=reference_cases,
             live_news_cases=live_news_cases,
             evidence_assessment=evidence_assessment,
+            official_cases=official_cases,
         )
 
     gemini_state = classify_gemini_status(rag_status)
@@ -7710,6 +8046,12 @@ def render_rag_result(
     live_news_cases = answer_status.get("live_news_cases", [])
     if not isinstance(live_news_cases, list):
         live_news_cases = []
+    official_cases = answer_status.get("official_cases", [])
+    if not isinstance(official_cases, list):
+        official_cases = []
+    official_case_diagnostic = answer_status.get("official_case_diagnostic", {})
+    if not isinstance(official_case_diagnostic, dict):
+        official_case_diagnostic = {}
 
     if answer_status.get("question_intent") == OUT_OF_SCOPE_INTENT:
         render_gemini_runtime_status(answer_status, selected_model, mode_name)
@@ -7845,8 +8187,20 @@ def render_rag_result(
     render_major_accident_law_evidence_panel()
 
     render_recommended_evidence_records(recommended_records)
-    render_live_news_reference_cases(live_news_cases)
-    render_latest_reference_cases(reference_cases, answer_status.get("question_intent"))
+    st.markdown("### 사례 및 참고자료")
+    official_case_tab, news_reference_tab, warning_points_tab = st.tabs(
+        ["공식 재해사례", "최근 뉴스 참고", "핵심 주의사항"]
+    )
+    with official_case_tab:
+        render_official_siren_cases(official_cases, official_case_diagnostic)
+    with news_reference_tab:
+        render_live_news_reference_cases(live_news_cases)
+    with warning_points_tab:
+        render_latest_reference_cases(
+            reference_cases,
+            answer_status.get("question_intent"),
+            official_cases,
+        )
     if auto_save_history:
         saved_history_id = auto_save_conversation_history(
             effective_question,
@@ -7857,6 +8211,7 @@ def render_rag_result(
             recommended_records,
             result_key,
             reference_cases=reference_cases,
+            official_cases=official_cases,
             evidence_assessment=evidence_assessment,
             answer_mode=str(answer_status.get("selected_answer_mode", mode_name)),
         )

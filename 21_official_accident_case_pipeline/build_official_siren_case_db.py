@@ -37,11 +37,15 @@ CASE_JSONL_PATH = (
     / "22_official_accident_case_chunks"
     / "official_siren_cases_2025_to_2026_q1.jsonl"
 )
+CASE_VECTOR_DB_DIR = ROOT_DIR / "23_official_accident_case_vector_db"
+LAW_VECTOR_DB_DIR = ROOT_DIR / "10_vector_db_with_major_accident_docs"
 
 # These names remain as compatibility metadata only.  Vector DB construction is
 # explicitly disabled in this OCR-only stage.
 COLLECTION_NAME = "mine_official_accident_cases"
 LAW_COLLECTION_NAME = "mine_safety_docs"
+EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+CASE_DB_BATCH_SIZE = 32
 
 ALLOWED_SOURCE_HOSTS = {
     "portal.kosha.or.kr",
@@ -878,6 +882,264 @@ def write_failed_page_records(records: list[dict]) -> None:
     temporary_path.replace(FAILED_PAGE_JSONL_PATH)
 
 
+def load_extracted_case_jsonl(path: Path = CASE_JSONL_PATH) -> list[dict]:
+    """Load only the pinned extracted-case JSONL without scanning directories."""
+    if not path.is_file():
+        raise PipelineBlocked(f"사고사례 JSONL을 찾지 못했습니다: {path}")
+    cases: list[dict] = []
+    with path.open("r", encoding="utf-8") as input_file:
+        for line_number, line in enumerate(input_file, start=1):
+            if not line.strip():
+                continue
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise PipelineBlocked(
+                    f"사고사례 JSONL {line_number}행을 해석할 수 없습니다."
+                ) from error
+            if not isinstance(item, dict):
+                raise PipelineBlocked(f"사고사례 JSONL {line_number}행이 객체가 아닙니다.")
+            cases.append(item)
+    return cases
+
+
+def case_vector_db_exclusion_reason(
+    case: dict,
+    seen_case_ids: set[str],
+    seen_content_hashes: set[str],
+) -> str:
+    relevance = str(case.get("mine_relevance", "")).strip()
+    quality = str(case.get("ocr_quality_status", "")).strip()
+    case_id = str(case.get("case_id", "")).strip()
+    content_hash = str(case.get("content_hash", "")).strip()
+    summary = str(case.get("accident_summary", "")).strip()
+    compact_summary = re.sub(r"\s+", "", summary)
+    if relevance not in {"high", "medium"}:
+        return f"mine_relevance_{relevance or 'missing'}"
+    if quality != "pass":
+        return f"ocr_quality_{quality or 'missing'}"
+    if not case_id:
+        return "missing_case_id"
+    if not content_hash:
+        return "missing_content_hash"
+    if not summary:
+        return "empty_accident_summary"
+    if len(compact_summary) < MIN_CASE_SUMMARY_CHARS:
+        return "short_accident_summary"
+    if not str(case.get("source_document", "")).strip():
+        return "missing_source_document"
+    if case.get("page_start") in (None, ""):
+        return "missing_source_page"
+    if case.get("official_case") is not True:
+        return "not_official_case"
+    if case_id in seen_case_ids:
+        return "duplicate_case_id"
+    if content_hash in seen_content_hashes:
+        return "duplicate_content_hash"
+    if re.search(r"([^\s])\1{11,}", compact_summary):
+        return "abnormal_repeated_text"
+    if is_non_case_page(summary):
+        return "non_case_document"
+    return ""
+
+
+def filter_cases_for_vector_db(cases: list[dict]) -> tuple[list[dict], dict[str, int]]:
+    included: list[dict] = []
+    exclusions: Counter[str] = Counter()
+    seen_case_ids: set[str] = set()
+    seen_content_hashes: set[str] = set()
+    for case in cases:
+        reason = case_vector_db_exclusion_reason(
+            case,
+            seen_case_ids,
+            seen_content_hashes,
+        )
+        if reason:
+            exclusions[reason] += 1
+            continue
+        case_id = str(case["case_id"]).strip()
+        content_hash = str(case["content_hash"]).strip()
+        seen_case_ids.add(case_id)
+        seen_content_hashes.add(content_hash)
+        included.append(case)
+    return included, dict(sorted(exclusions.items()))
+
+
+def format_case_vector_document(case: dict) -> str:
+    fields = (
+        ("사고 유형", case.get("accident_type", "")),
+        ("발생일", case.get("accident_date", "")),
+        ("업종", case.get("industry", "")),
+        ("작업 상황", case.get("work_type", "")),
+        ("사고 개요", case.get("accident_summary", "")),
+        ("주요 위험요인", case.get("equipment", "")),
+        ("발생 원인", case.get("cause_summary", "")),
+        ("예방 및 주의사항", case.get("prevention_summary", "")),
+        ("광산 관련성", case.get("mine_relevance", "")),
+        ("출처 문서", case.get("source_document", "")),
+        ("출처 기간", case.get("source_period", "")),
+        ("페이지", case.get("page_start", "")),
+        ("사례 ID", case.get("case_id", "")),
+    )
+    return "\n".join(f"{label}: {str(value or '').strip()}" for label, value in fields)
+
+
+def normalize_chroma_metadata_value(value):
+    if value is None:
+        return ""
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
+def case_vector_metadata(case: dict) -> dict:
+    fields = (
+        "case_id", "source_type", "publisher", "source_document", "source_period",
+        "source_page_url", "source_file", "page_start", "page_end", "accident_date",
+        "accident_year", "accident_month", "industry", "industry_detail",
+        "accident_type", "work_type", "equipment", "location_type", "mine_relevance",
+        "mine_relevance_reason", "ocr_quality_status", "content_hash", "official_case",
+        "accident_summary", "cause_summary", "prevention_summary",
+    )
+    return {
+        field: normalize_chroma_metadata_value(case.get(field))
+        for field in fields
+    }
+
+
+def _load_case_db_dependencies():
+    try:
+        chroma_module = __import__("chroma" + "db")
+        sentence_module = __import__(
+            "sentence_transformers",
+            fromlist=["SentenceTransformer"],
+        )
+        client_class = getattr(chroma_module, "Persistent" + "Client")
+        model_class = getattr(sentence_module, "SentenceTransformer")
+    except Exception as error:
+        raise PipelineBlocked("로컬 ChromaDB 또는 임베딩 라이브러리를 사용할 수 없습니다.") from error
+    return client_class, model_class
+
+
+def verify_official_case_collection(collection, expected_cases: list[dict]) -> dict:
+    payload = collection.get(include=["metadatas"])
+    ids = [str(item) for item in payload.get("ids", [])]
+    metadatas = payload.get("metadatas", []) or []
+    expected_ids = {str(case["case_id"]) for case in expected_cases}
+    if len(ids) != len(expected_cases) or set(ids) != expected_ids:
+        raise PipelineBlocked("신규 사례 DB 건수가 필터링 결과와 일치하지 않습니다.")
+    content_hashes: list[str] = []
+    relevance_counts: Counter[str] = Counter()
+    for metadata in metadatas:
+        if not isinstance(metadata, dict):
+            raise PipelineBlocked("신규 사례 DB metadata 형식이 올바르지 않습니다.")
+        relevance = str(metadata.get("mine_relevance", ""))
+        quality = str(metadata.get("ocr_quality_status", ""))
+        summary = str(metadata.get("accident_summary", ""))
+        content_hash = str(metadata.get("content_hash", ""))
+        if relevance not in {"high", "medium"}:
+            raise PipelineBlocked("low 또는 review_required 사례가 신규 DB에 포함됐습니다.")
+        if quality != "pass":
+            raise PipelineBlocked("OCR 저품질 사례가 신규 DB에 포함됐습니다.")
+        if len(re.sub(r"\s+", "", summary)) < MIN_CASE_SUMMARY_CHARS:
+            raise PipelineBlocked("사고 개요가 없거나 지나치게 짧은 사례가 포함됐습니다.")
+        if metadata.get("page_start") in (None, ""):
+            raise PipelineBlocked("출처 페이지가 없는 사례가 포함됐습니다.")
+        if metadata.get("official_case") is not True:
+            raise PipelineBlocked("공식 사례 표시가 없는 자료가 포함됐습니다.")
+        if not content_hash:
+            raise PipelineBlocked("content_hash가 없는 사례가 포함됐습니다.")
+        relevance_counts[relevance] += 1
+        content_hashes.append(content_hash)
+    if len(content_hashes) != len(set(content_hashes)):
+        raise PipelineBlocked("신규 사례 DB에 content_hash 중복이 있습니다.")
+    if len(ids) != len(set(ids)):
+        raise PipelineBlocked("신규 사례 DB에 case_id 중복이 있습니다.")
+    return {
+        "collection_name": COLLECTION_NAME,
+        "stored_case_count": len(ids),
+        "high_count": relevance_counts.get("high", 0),
+        "medium_count": relevance_counts.get("medium", 0),
+        "case_id_duplicates": len(ids) - len(set(ids)),
+        "content_hash_duplicates": len(content_hashes) - len(set(content_hashes)),
+    }
+
+
+def build_official_case_vector_db(cases: list[dict]) -> dict:
+    verify_collection_name_separation()
+    if CASE_VECTOR_DB_DIR.resolve() == LAW_VECTOR_DB_DIR.resolve():
+        raise PipelineBlocked("신규 사례 DB와 기존 법령 DB 경로는 분리되어야 합니다.")
+    included, exclusions = filter_cases_for_vector_db(cases)
+    if not included:
+        raise PipelineBlocked("신규 사례 DB에 안전하게 저장할 사례가 없습니다.")
+    client_class, model_class = _load_case_db_dependencies()
+    try:
+        model = model_class(EMBEDDING_MODEL_NAME, local_files_only=True)
+    except Exception as error:
+        raise PipelineBlocked("로컬 임베딩 모델을 찾지 못해 신규 DB를 만들지 않습니다.") from error
+    CASE_VECTOR_DB_DIR.mkdir(parents=True, exist_ok=True)
+    client = client_class(path=str(CASE_VECTOR_DB_DIR))
+    try:
+        collection = client.get_collection(name=COLLECTION_NAME)
+        existing_ids = set(collection.get(include=[]).get("ids", []))
+        expected_ids = {str(case["case_id"]) for case in included}
+        if existing_ids - expected_ids:
+            raise PipelineBlocked("기존 신규 사례 DB에 예상하지 않은 ID가 있어 덮어쓰지 않습니다.")
+    except PipelineBlocked:
+        raise
+    except Exception:
+        collection = client.get_or_create_collection(
+            name=COLLECTION_NAME,
+            metadata={"hnsw:space": "cosine", "data_grade": "official_accident_case"},
+        )
+
+    for start in range(0, len(included), CASE_DB_BATCH_SIZE):
+        batch = included[start : start + CASE_DB_BATCH_SIZE]
+        documents = [format_case_vector_document(case) for case in batch]
+        embeddings = model.encode(
+            documents,
+            normalize_embeddings=True,
+            show_progress_bar=False,
+        ).tolist()
+        collection.upsert(
+            ids=[str(case["case_id"]) for case in batch],
+            embeddings=embeddings,
+            documents=documents,
+            metadatas=[case_vector_metadata(case) for case in batch],
+        )
+    verification = verify_official_case_collection(collection, included)
+    return {
+        "input_case_count": len(cases),
+        "eligible_case_count": len(included),
+        "excluded_case_count": len(cases) - len(included),
+        "excluded_by_reason": exclusions,
+        "db_path": str(CASE_VECTOR_DB_DIR),
+        "embedding_model": EMBEDDING_MODEL_NAME,
+        "embedding_normalized": True,
+        **verification,
+    }
+
+
+def verify_official_case_vector_db(cases: list[dict]) -> dict:
+    included, exclusions = filter_cases_for_vector_db(cases)
+    if not CASE_VECTOR_DB_DIR.is_dir():
+        raise PipelineBlocked("신규 사례 DB 폴더를 찾지 못했습니다.")
+    client_class, _ = _load_case_db_dependencies()
+    client = client_class(path=str(CASE_VECTOR_DB_DIR))
+    try:
+        collection = client.get_collection(name=COLLECTION_NAME)
+    except Exception as error:
+        raise PipelineBlocked("신규 사례 collection을 찾지 못했습니다.") from error
+    return {
+        "input_case_count": len(cases),
+        "eligible_case_count": len(included),
+        "excluded_case_count": len(cases) - len(included),
+        "excluded_by_reason": exclusions,
+        "db_path": str(CASE_VECTOR_DB_DIR),
+        **verify_official_case_collection(collection, included),
+    }
+
+
 def build_vector_db(cases: list[dict]) -> int:
     """Compatibility guard: DB creation is prohibited in the OCR validation stage."""
     del cases
@@ -905,12 +1167,23 @@ def write_run_summary(summary: dict) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description="공식 중대재해사이렌 한국어 OCR 및 사례 추출")
     parser.add_argument("--verify-only", action="store_true", help="manifest PDF 검증만 수행")
+    parser.add_argument("--build-case-db", action="store_true", help="검증된 사례 JSONL로 별도 사례 DB 구축")
+    parser.add_argument("--verify-case-db", action="store_true", help="별도 사례 DB 무결성만 확인")
     parser.add_argument("--tesseract", type=Path, help="Tesseract 실행 파일")
     parser.add_argument("--tessdata", type=Path, help="kor+eng tessdata 폴더")
     parser.add_argument("--pdftoppm", type=Path, help="Poppler pdftoppm 실행 파일")
     args = parser.parse_args()
 
     verify_collection_name_separation()
+    if args.build_case_db or args.verify_case_db:
+        cases = load_extracted_case_jsonl()
+        result = (
+            build_official_case_vector_db(cases)
+            if args.build_case_db
+            else verify_official_case_vector_db(cases)
+        )
+        print(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True))
+        return 0
     manifest = load_manifest()
     diagnostics = verify_sources(manifest)
     if args.verify_only:

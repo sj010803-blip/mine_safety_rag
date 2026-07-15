@@ -1,0 +1,143 @@
+MineSafe AI 공식 사고사례 DB·UI 통합 보고서
+작성일: 2026-07-15 (Asia/Seoul)
+
+1. 작업 목적
+- 품질 검증된 공식 중대재해사이렌 사례만 별도 ChromaDB에 저장하고, MineSafe AI에서 관련 사례를 추적 가능한 참고자료로 표시했다.
+
+2. 작업 전 Git 상태
+- main, local/origin SHA 37c37f752dd5bc6a9a38eef6edf8db2fce42398f, ahead 0, behind 0, staged 0, app.py clean이었다.
+- 관련 없는 기존 변경은 47개, 지문은 D99F1C5F4E4450CFA453D5AF74110FBD5189100EBCE4A131A8593BEDEA1E0717이었다.
+
+3. 작업 전 테스트 결과
+- 핵심 39/39, OCR 18/18 통과. 공식 사례 테스트는 20개 중 8개 통과·12개 skip, 실패·오류 0이었다.
+
+4. DB 후보 129건 설명
+- 전체 422건 중 mine_relevance high 5건과 medium 124건을 1차 후보로 삼았다. 129건을 무조건 넣지 않고 필수 품질 조건을 다시 검사했다.
+
+5. 실제 DB 포함 조건
+- high/medium, OCR pass, case_id·content_hash·사고 개요·출처 문서·페이지 존재, 공백 제외 40자 이상, official_case=true, 중복·반복 손상·비사고 문서 없음 조건을 모두 적용했다.
+
+6. 제외 조건
+- low, review_required, OCR review/failed, 필수값 누락, 짧거나 손상된 개요, 출처 누락, 중복, 표지·목차·통계·저작권 안내를 제외한다.
+
+7. 최종 DB 저장 사례 수
+- 129건. 필터 결과와 collection count가 정확히 일치한다.
+
+8. high·medium별 저장 수
+- high 5건, medium 124건.
+
+9. OCR 품질로 제외된 사례 수
+- 최종 저장 자료는 모두 OCR pass다. review_required 14건은 제외 및 수동 검토 대상으로 유지했다.
+
+10. 누락 필드로 제외된 사례 수
+- high/medium 후보에서 누락 필드로 제외된 사례 0건.
+
+11. 중복으로 제외된 사례 수
+- case_id 중복 0건, content_hash 중복 0건.
+
+12. 신규 DB 경로
+- C:\Users\USER\Desktop\mine_safety_rag\23_official_accident_case_vector_db
+
+13. 신규 collection 이름
+- mine_official_accident_cases
+
+14. 기존 법령 DB와 분리한 이유
+- 공식 사고사례는 사고 상황·예방사항 참고자료이지 법령·지침이 아니다. 기존 `mine_safety_docs`의 문서명+chunk_id 근거와 혼합하지 않기 위해 경로와 collection을 모두 분리했다.
+
+15. 사용한 embedding 방식
+- 앱과 같은 `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, 384차원, normalize_embeddings=true를 사용했다. `local_files_only=True`로 기존 로컬 모델만 사용했고 다운로드나 패키지 설치를 하지 않았다.
+
+16. 대표 질문별 검색 결과
+- 컨베이어: 3건. 예: KOSHA-SIREN-2025-BOOK-0346, 331쪽, 끼임.
+- 장비 후진: 3건. 예: KOSHA-SIREN-2025-BOOK-0182, 158쪽, 충돌.
+- 산소결핍: 직접 일치 사례 0건으로 빈 결과.
+- 낙반: 3건. 예: KOSHA-SIREN-2025-BOOK-0167, 143쪽, 붕괴.
+- 전기: 사고 유형 교차검증 후 감전 사례를 반환한다. 예: KOSHA-SIREN-2025-BOOK-0307, 267쪽.
+- 발파·불발: 직접 일치 사례 0건으로 빈 결과. 다른 위험 유형을 억지로 표시하지 않는다.
+
+17. 검색 결과 case_id와 페이지 존재 여부
+- 반환 사례는 모두 중복 없는 case_id, source_document, page_start를 가진다.
+
+18. UI 묶기 결과
+- 기존 뉴스와 주의 포인트를 `사례 및 참고자료` 상위 영역으로 묶었다.
+
+19. 공식 재해사례 탭
+- 가장 관련 있는 1건을 기본 표시하고 추가 사례는 expander로 표시한다. 사고 유형·발생일/연도·업종·사고 개요·원인/위험요인·예방사항·광산 관련성·문서·기간·페이지·case_id를 표시한다.
+
+20. 최근 뉴스 참고 탭
+- 기존 네이버 뉴스 제목·요약·게시일·링크, 실패 시 빈 결과, 30분 캐시를 유지했다. 뉴스는 공식 법령 판단 근거가 아니라는 안내를 유지했다.
+
+21. 핵심 주의사항 탭
+- 공식 사례 prevention_summary, cause_summary, 기존 안전규칙 순으로 2~3개를 표시하고 `공식 사례 기반` 또는 `기존 안전규칙 기반`으로 출처 성격을 표시한다.
+
+22. 자료 등급 구분 방식
+- 법령·지침: mine_safety_docs/문서명+chunk_id. 공식 사고사례: mine_official_accident_cases/문서명+페이지+case_id. 뉴스: 네이버 뉴스 참고. 핵심 주의사항: 공식 사례 예방사항 또는 기존 안전규칙.
+
+23. 범위 밖 질문 처리
+- run_rag_flow의 조기 반환이 공식 사례 검색보다 앞선다. 범위 밖에서는 법령 RAG, 사례 RAG, 근거 상태, KRAS, 증빙, 사례 및 참고자료, 뉴스, 주의사항을 표시하지 않는다.
+
+24. 답변 모드별 제한 지침
+- 쉬운 설명·하이브리드 프롬프트에 공식 사례는 법령 근거가 아니며 위반·처벌·작업재개를 확정하지 않는다는 제한을 추가했다. 안정형과 fallback도 같은 UI 자료 등급을 공유한다.
+
+25. 대화 이력 연동 여부
+- official_case_ids, official_case_titles, official_case_sources를 저장하고 Excel에는 사람이 읽기 쉬운 ` | ` 구분 문자열로 내보낸다. 기존 기록의 필드 누락은 빈 값으로 호환한다.
+
+26. 기존 핵심 테스트 결과
+- 39/39 통과, 실패·오류 0. 비파괴 회귀 14개는 경고 0.
+
+27. OCR 테스트 결과
+- 18/18 통과, 실패·오류 0. OCR 전용 build_vector_db 차단은 유지하고 별도 사례 DB 함수만 추가했다.
+
+28. 공식 사례 테스트 결과
+- 20/20 통과, skip 0, 실패·오류 0. 실제 신규 collection 129건의 품질·중복·출처 metadata를 검사한다.
+
+29. 전체 테스트 결과
+- test_*.py 전체 77/77 통과, skip 0, 실패·오류 0.
+
+30. Streamlit HTTP 결과
+- 포트 8505 headless 실행에서 프로세스 유지, HTTP 200, traceback 0, 신규 사례 DB 로딩 오류 0을 확인하고 프로세스를 종료했다.
+
+31. 실제 Gemini·뉴스 API 확인 여부
+- 실제 Gemini와 네이버 뉴스 API는 호출하지 않았다. 기존 실패 fallback과 정적 구조만 회귀 검사했다.
+
+32. app.py 작업 전후 SHA-256
+- 전: 8B8A0EC5E9076A8B83D96FE9F50DCA8FCAFFB6D7AFDB96BB8AA4E89C187F7337 (341,429 bytes)
+- 후: 1AE2D838A26070F904DBF22117D5BA26E1ACE4AD1231AEB79D68CA1C06FA0209 (357,717 bytes)
+
+33. 생성한 백업
+- app_backup_before_official_case_db_ui_20260715_125043.py. 원본과 크기·SHA-256 일치 후 수정했으며 Git 제외 상태다.
+
+34. 수정 파일
+- app.py
+- 21_official_accident_case_pipeline/build_official_siren_case_db.py
+- 18_legal_evidence_features/test_official_siren_case_rag.py
+- 18_legal_evidence_features/official_siren_case_rag_report.txt
+
+35. 생성 파일
+- 18_legal_evidence_features/official_case_db_ui_integration_report.txt
+- 23_official_accident_case_vector_db 내부 런타임 DB 파일(커밋 제외)
+- app 백업(커밋 제외)
+
+36. 기존 관련 없는 변경 파일 보호 여부
+- 구현·검증 중 기존 47개 파일을 수정·stage·복구·삭제하지 않았다. 최종 지문은 commit 전후 다시 비교한다.
+
+37. Git whitelist
+- app.py
+- 21_official_accident_case_pipeline/build_official_siren_case_db.py
+- 18_legal_evidence_features/test_official_siren_case_rag.py
+- 18_legal_evidence_features/official_siren_case_rag_report.txt
+- 18_legal_evidence_features/official_case_db_ui_integration_report.txt
+
+38. Git 제외 파일
+- app 백업, PDF, OCR 페이지 JSONL, 사고사례 JSONL, 신규·기존 ChromaDB, tessdata, .env, 평가 파일, 관련 없는 변경 파일.
+
+39. 커밋 SHA와 push 결과
+- 이 보고서가 포함되는 commit은 자신의 SHA와 push 이후 상태를 미리 기록할 수 없다. 정확한 staged 목록, commit SHA와 push 결과는 완료 보고에 기록한다.
+
+40. 남은 한계
+- 산소결핍과 발파·불발 대표 질문은 품질 필터와 유형 교차검증을 통과한 직접 사례가 없어 빈 결과다. 사례가 없을 때 생성하지 않는 보수적 동작이다.
+- OCR review 39쪽·failed 13쪽과 review_required 14건은 수동 검토 대상이며 DB에서 제외했다.
+- 실제 Gemini·뉴스 API 응답 내용은 확인하지 않았다.
+
+41. 교수님 설명용 문구
+안전보건공단의 공식 중대재해사이렌 자료를 한국어 OCR로 구조화한 뒤, 광산 직접 관련 사례와 광산 현장에 적용 가능한 유사 위험 사례 중 품질 검증을 통과한 자료만 별도 사례 Vector DB에 저장했습니다. 기존 법령·지침 RAG와 사고사례 RAG는 서로 다른 collection으로 분리했습니다. 화면에서는 공식 재해사례, 최근 뉴스 참고, 핵심 주의사항을 하나의 사례 및 참고자료 영역으로 묶고, 공식 사례의 case_id와 출처 페이지를 표시해 근거를 추적할 수 있도록 했습니다.

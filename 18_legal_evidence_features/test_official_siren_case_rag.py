@@ -2,6 +2,7 @@ import ast
 import json
 import re
 import unittest
+import warnings
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -21,29 +22,37 @@ DB_PATH = ROOT / "23_official_accident_case_vector_db"
 class OfficialSirenPipelineContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            import chromadb
+
         cls.pipeline = PIPELINE_PATH.read_text(encoding="utf-8")
         cls.pipeline_tree = ast.parse(cls.pipeline)
         cls.manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
         cls.ignore = IGNORE_PATH.read_text(encoding="utf-8")
         cls.app = APP_PATH.read_text(encoding="utf-8-sig")
-        cls.integration_ready = (
-            DB_PATH.exists()
-            and "mine_official_accident_cases" in cls.app
-            and re.search(r"def\s+search_official_siren_cases\s*\(", cls.app) is not None
-        )
+        cls.app_tree = ast.parse(cls.app)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            cls.client = chromadb.PersistentClient(path=str(DB_PATH))
+            cls.collection = cls.client.get_collection(name="mine_official_accident_cases")
+            cls.collection_payload = cls.collection.get(include=["metadatas"])
 
     def require_integration(self):
-        if not self.integration_ready:
-            self.skipTest(
-                "공식 PDF가 이미지 기반이라 사례 DB 및 app.py 통합 선행조건이 충족되지 않음"
-            )
+        self.assertTrue(DB_PATH.is_dir(), "신규 공식 사고사례 DB가 없습니다.")
+        self.assertIn("mine_official_accident_cases", self.app)
+        self.assertRegex(self.app, r"def\s+search_official_siren_cases\s*\(")
 
     def test_01_new_collection_name_exists(self):
         self.assertIn('COLLECTION_NAME = "mine_official_accident_cases"', self.pipeline)
+        self.assertEqual("mine_official_accident_cases", self.collection.name)
 
     def test_02_law_and_case_collections_are_separate(self):
         self.assertIn('LAW_COLLECTION_NAME = "mine_safety_docs"', self.pipeline)
         self.assertIn("COLLECTION_NAME == LAW_COLLECTION_NAME", self.pipeline)
+        self.assertIn("23_official_accident_case_vector_db", self.pipeline)
+        self.assertIn("10_vector_db_with_major_accident_docs", self.pipeline)
+        self.assertNotEqual("mine_official_accident_cases", "mine_safety_docs")
 
     def test_03_manifest_uses_only_allowed_official_hosts(self):
         allowed = {
@@ -70,6 +79,9 @@ class OfficialSirenPipelineContractTests(unittest.TestCase):
         self.assertIn("verify_sources", function_names)
         self.assertIn("extract_cases", function_names)
         self.assertIn("build_vector_db", function_names)
+        self.assertIn("build_official_case_vector_db", function_names)
+        self.assertIn("verify_official_case_vector_db", function_names)
+        self.assertIn("filter_cases_for_vector_db", function_names)
         self.assertIn("PipelineBlocked", self.pipeline)
 
     def test_06_generated_data_paths_are_git_ignored(self):
@@ -83,15 +95,37 @@ class OfficialSirenPipelineContractTests(unittest.TestCase):
     def test_07_official_case_search_function_exists(self):
         self.require_integration()
         self.assertRegex(self.app, r"def\s+search_official_siren_cases\s*\(")
+        self.assertEqual(129, self.collection.count())
 
     def test_08_missing_db_and_search_failure_fallback_exists(self):
         self.require_integration()
         self.assertRegex(self.app, r"23_official_accident_case_vector_db")
         self.assertRegex(self.app, r"return\s+\[\]")
+        self.assertIn("db_unavailable", self.app)
+        self.assertIn("search_failed", self.app)
 
     def test_09_out_of_scope_skips_case_search(self):
         self.require_integration()
-        self.assertRegex(self.app, r"OUT_OF_SCOPE_INTENT")
+        run_flow = next(
+            node
+            for node in self.app_tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "run_rag_flow"
+        )
+        out_scope_if = next(
+            node
+            for node in ast.walk(run_flow)
+            if isinstance(node, ast.If)
+            and "OUT_OF_SCOPE_INTENT" in ast.unparse(node.test)
+            and any(isinstance(item, ast.Return) for item in ast.walk(node))
+        )
+        search_call = next(
+            node
+            for node in ast.walk(run_flow)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "search_official_siren_cases"
+        )
+        self.assertLess(out_scope_if.lineno, search_call.lineno)
 
     def test_10_combined_reference_area_exists(self):
         self.require_integration()
@@ -112,11 +146,23 @@ class OfficialSirenPipelineContractTests(unittest.TestCase):
     def test_14_case_id_is_rendered(self):
         self.require_integration()
         self.assertIn("case_id", self.app)
+        ids = [str(item) for item in self.collection_payload.get("ids", [])]
+        self.assertEqual(len(ids), len(set(ids)))
 
     def test_15_document_and_page_are_rendered(self):
         self.require_integration()
         self.assertIn("source_document", self.app)
         self.assertRegex(self.app, r"page_(?:start|end)")
+        metadatas = self.collection_payload.get("metadatas", []) or []
+        self.assertEqual(129, len(metadatas))
+        self.assertTrue(all(meta.get("source_document") for meta in metadatas))
+        self.assertTrue(all(meta.get("page_start") not in (None, "") for meta in metadatas))
+        self.assertTrue(all(meta.get("official_case") is True for meta in metadatas))
+        self.assertTrue(all(meta.get("mine_relevance") in {"high", "medium"} for meta in metadatas))
+        self.assertTrue(all(meta.get("ocr_quality_status") == "pass" for meta in metadatas))
+        hashes = [str(meta.get("content_hash", "")) for meta in metadatas]
+        self.assertTrue(all(hashes))
+        self.assertEqual(len(hashes), len(set(hashes)))
 
     def test_16_official_case_is_not_a_legal_judgment_notice(self):
         self.require_integration()
@@ -128,6 +174,7 @@ class OfficialSirenPipelineContractTests(unittest.TestCase):
     def test_18_official_prevention_then_local_fallback_structure(self):
         self.require_integration()
         self.assertIn("prevention_summary", self.app)
+        self.assertIn("official_case_warning_points", self.app)
         self.assertIn("case_warning_points_for_intent", self.app)
 
     def test_19_existing_law_rag_chunk_id_remains(self):

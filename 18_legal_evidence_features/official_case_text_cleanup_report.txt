@@ -149,5 +149,7 @@ MineSafe AI 공식 사고사례 OCR 텍스트 정제 및 화면 개선 보고서
 - 이번 개선은 화면에서 깨진 글자를 숨기는 데 그치지 않고 OCR 원문, 사고 경계, metadata와 화면용 요약을 분리했습니다. 여러 사고가 섞였거나 OCR 품질이 낮은 사례는 자동으로 DB에서 제외하고, 검증된 공식 사례만 출처 문서·페이지·case_id와 함께 검색합니다. 이 품질 점수는 법적 정확도가 아니라 OCR 및 문서 구조 품질을 확인하는 안전장치입니다.
 
 36. commit과 push 결과
-- 커밋 메시지 예정: fix: clean OCR accident case text and improve case cards
-- 실제 commit SHA와 push 결과는 이 보고서 작성 후 whitelist 검증을 거쳐 완료 보고에 기록한다.
+- 기능 커밋: d8c9748e28e3ab3dbc750ac484f958f7cec7588f
+- 커밋 메시지: fix: clean OCR accident case text and improve case cards
+- origin/main push 성공, 기능 커밋 반영 직후 ahead 0, behind 0을 확인했다.
+- 이 결과 기록은 보고서 파일만 별도 whitelist 문서 커밋으로 반영한다.

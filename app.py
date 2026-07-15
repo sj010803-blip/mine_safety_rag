@@ -43,6 +43,9 @@ load_dotenv(ROOT_DIR / ".env", override=True)
 VECTOR_DB_DIR = ROOT_DIR / "10_vector_db_with_major_accident_docs"
 UNVERIFIED_OFFICIAL_CASE_VECTOR_DB_DIR = ROOT_DIR / "23_official_accident_case_vector_db"
 OFFICIAL_CASE_VECTOR_DB_DIR = ROOT_DIR / "23_verified_official_accident_case_vector_db"
+AUTO_SCREENED_OFFICIAL_CASE_VECTOR_DB_DIR = (
+    ROOT_DIR / "23_auto_screened_official_accident_case_vector_db"
+)
 SCENARIO_PATH = ROOT_DIR / "02_질문시나리오" / "question_scenarios_30.tsv"
 SCENARIO_PATH_65 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_65.tsv"
 SCENARIO_PATH_100 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_100.tsv"
@@ -71,6 +74,7 @@ AUTO_EVAL_BATCH_PATHS = [
 COLLECTION_NAME = "mine_safety_docs"
 UNVERIFIED_OFFICIAL_CASE_COLLECTION_NAME = "mine_official_accident_cases"
 OFFICIAL_CASE_COLLECTION_NAME = "mine_verified_official_accident_cases"
+AUTO_SCREENED_OFFICIAL_CASE_COLLECTION_NAME = "mine_auto_screened_official_accident_cases"
 OFFICIAL_CASE_TOP_K = 3
 OFFICIAL_CASE_INTERNAL_SEARCH_COUNT = 75
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -1972,16 +1976,37 @@ def load_official_case_collection():
     if OFFICIAL_CASE_COLLECTION_NAME in {
         COLLECTION_NAME,
         UNVERIFIED_OFFICIAL_CASE_COLLECTION_NAME,
+        AUTO_SCREENED_OFFICIAL_CASE_COLLECTION_NAME,
     }:
-        return None, "검증 완료 사례 collection이 기존 collection과 분리되지 않았습니다."
+        return None, "verified_collection_conflict"
     if not OFFICIAL_CASE_VECTOR_DB_DIR.exists():
-        return None, "원문 대조 검증이 완료된 공식 사고사례 DB가 아직 없습니다."
+        return None, "verified_not_created_zero_cases"
     try:
         client = chromadb.PersistentClient(path=str(OFFICIAL_CASE_VECTOR_DB_DIR))
         collection = client.get_collection(name=OFFICIAL_CASE_COLLECTION_NAME)
         return collection, None
     except Exception:
-        return None, "공식 사고사례 DB를 불러오지 못했습니다."
+        return None, "verified_db_unavailable"
+
+
+@st.cache_resource(show_spinner=False)
+def load_auto_screened_case_collection():
+    collection_names = {
+        COLLECTION_NAME,
+        UNVERIFIED_OFFICIAL_CASE_COLLECTION_NAME,
+        OFFICIAL_CASE_COLLECTION_NAME,
+        AUTO_SCREENED_OFFICIAL_CASE_COLLECTION_NAME,
+    }
+    if len(collection_names) != 4:
+        return None, "auto_screened_collection_conflict"
+    if not AUTO_SCREENED_OFFICIAL_CASE_VECTOR_DB_DIR.exists():
+        return None, "auto_screened_not_created_zero_cases"
+    try:
+        client = chromadb.PersistentClient(path=str(AUTO_SCREENED_OFFICIAL_CASE_VECTOR_DB_DIR))
+        collection = client.get_collection(name=AUTO_SCREENED_OFFICIAL_CASE_COLLECTION_NAME)
+        return collection, None
+    except Exception:
+        return None, "auto_screened_db_unavailable"
 
 
 def get_gemini_api_key() -> str | None:
@@ -3373,6 +3398,63 @@ def official_case_allowed_accident_types(question_type: str) -> set[str]:
     return mapping.get(question_type, set())
 
 
+def official_case_relation_terms(question_type: str) -> dict[str, tuple[str, ...]]:
+    mapping = {
+        CONVEYOR_ROTATING_INTENT: {
+            "direct": ("컨베이어", "벨트", "끼임", "말림"),
+            "analogous": (
+                "회전체", "정비 중 재가동", "청소 중 기계 작동",
+                "방호장치", "에너지 차단", "전원 미차단",
+            ),
+        },
+        BACKING_SIGNAL_INTENT: {
+            "direct": ("후진", "신호수", "덤프트럭", "굴착기", "지게차", "차량 충돌"),
+            "analogous": ("이동식 장비", "사각지대", "깔림", "중장비", "작업자 충돌"),
+        },
+        EQUIPMENT_TRANSPORT_INTENT: {
+            "direct": ("후진", "신호수", "덤프트럭", "굴착기", "지게차", "차량 충돌"),
+            "analogous": ("이동식 장비", "사각지대", "깔림", "중장비", "작업자 충돌"),
+        },
+        ROOF_FALL_INTENT: {
+            "direct": ("낙반", "암석 붕락", "갱도 붕괴"),
+            "analogous": ("토사 붕괴", "굴착면 붕괴", "매몰", "구조물 무너짐", "물체 낙하"),
+        },
+        ELECTRICAL_SAFETY_INTENT: {
+            "direct": ("감전", "전기설비", "누전"),
+            "analogous": ("정비 중 전원 투입", "에너지 차단", "잠금", "표지", "설비 재가동"),
+        },
+        VENTILATION_GAS_INTENT: {
+            "direct": ("산소결핍", "유해가스", "질식"),
+            "analogous": ("밀폐공간", "환기 불량", "가스 중독", "탱크", "맨홀"),
+        },
+        VENTILATION_EQUIPMENT_INTENT: {
+            "direct": ("산소결핍", "유해가스", "질식"),
+            "analogous": ("밀폐공간", "환기 불량", "가스 중독", "탱크", "맨홀"),
+        },
+        GAS_DETECTOR_INTENT: {
+            "direct": ("산소결핍", "유해가스", "질식"),
+            "analogous": ("밀폐공간", "환기 불량", "가스 중독", "탱크", "맨홀"),
+        },
+        BLASTING_MISFIRE_INTENT: {
+            "direct": ("발파", "불발공", "화약"),
+            "analogous": ("폭발", "폭발물", "점화원", "화약류"),
+        },
+        HEIGHT_WORK_INTENT: {
+            "direct": ("추락", "떨어짐", "고소작업"),
+            "analogous": ("작업발판", "사다리", "개구부"),
+        },
+        FIRE_EMERGENCY_INTENT: {
+            "direct": ("화재", "불꽃"),
+            "analogous": ("폭발", "가연물", "점화원"),
+        },
+        HOT_WORK_INTENT: {
+            "direct": ("용접", "화기작업", "화재"),
+            "analogous": ("폭발", "가연물", "점화원"),
+        },
+    }
+    return mapping.get(question_type, {"direct": (), "analogous": ()})
+
+
 def search_official_siren_cases(
     question: str,
     question_type: str,
@@ -3383,20 +3465,40 @@ def search_official_siren_cases(
     if question_type == OUT_OF_SCOPE_INTENT:
         diagnostic.update({"status": "skipped_out_of_scope", "result_count": 0})
         return []
-    query_terms = official_case_query_terms(question_type)
-    allowed_accident_types = official_case_allowed_accident_types(question_type)
-    if not query_terms:
+    relation_terms = official_case_relation_terms(question_type)
+    direct_terms = relation_terms.get("direct", ())
+    analogous_terms = relation_terms.get("analogous", ())
+    query_terms = list(dict.fromkeys((*direct_terms, *analogous_terms)))
+    if not direct_terms and not analogous_terms:
         diagnostic.update({"status": "no_supported_case_type", "result_count": 0})
         return []
-    collection, collection_error = load_official_case_collection()
-    if collection is None or collection_error:
-        diagnostic.update({"status": "db_unavailable", "result_count": 0})
+
+    verified_collection, verified_db_status = load_official_case_collection()
+    auto_collection, auto_db_status = load_auto_screened_case_collection()
+    available_collections = [
+        ("verified", verified_collection),
+        (verified_review.AUTO_SCREENED_STATUS, auto_collection),
+    ]
+    available_collections = [item for item in available_collections if item[1] is not None]
+    if not available_collections:
+        actual_errors = [
+            status
+            for status in (verified_db_status, auto_db_status)
+            if status and ("db_unavailable" in status or "conflict" in status)
+        ]
+        diagnostic.update(
+            {
+                "status": "db_unavailable" if actual_errors else "no_quality_screened_cases",
+                "verified_db_status": verified_db_status,
+                "auto_screened_db_status": auto_db_status,
+                "result_count": 0,
+            }
+        )
         return []
+
+    query_payloads: list[tuple[str, Any, dict[str, Any]]] = []
+    search_errors: list[str] = []
     try:
-        collection_count = int(collection.count())
-        if collection_count <= 0:
-            diagnostic.update({"status": "empty_collection", "result_count": 0})
-            return []
         model = load_embedding_model()
         expanded_query = clean_text(f"{question} {' '.join(query_terms)}")
         query_embedding = model.encode(
@@ -3404,81 +3506,101 @@ def search_official_siren_cases(
             normalize_embeddings=True,
             show_progress_bar=False,
         ).tolist()
-        payload = collection.query(
-            query_embeddings=query_embedding,
-            n_results=min(
-                max(int(top_k) * 4, OFFICIAL_CASE_INTERNAL_SEARCH_COUNT),
-                collection_count,
-            ),
-            include=["documents", "metadatas", "distances"],
-        )
     except Exception:
         diagnostic.update({"status": "search_failed", "result_count": 0})
         return []
 
-    documents = payload.get("documents", [[]])[0]
-    metadatas = payload.get("metadatas", [[]])[0]
-    distances = payload.get("distances", [[]])[0]
-    candidates: list[dict[str, Any]] = []
-    seen_case_ids: set[str] = set()
-    for index, document in enumerate(documents):
-        metadata = metadatas[index] if index < len(metadatas) and isinstance(metadatas[index], dict) else {}
-        case_id = str(metadata.get("case_id", "")).strip()
-        if not case_id or case_id in seen_case_ids:
-            continue
-        if metadata.get("official_case") is not True:
-            continue
-        if str(metadata.get("verification_status", "")) != "verified":
-            continue
-        if str(metadata.get("mine_relevance", "")) not in {"high", "medium"}:
-            continue
-        if str(metadata.get("ocr_quality_status", "")) != "pass":
-            continue
-        accident_type = str(metadata.get("accident_type", "")).strip()
-        if accident_type and allowed_accident_types and not any(
-            allowed in accident_type for allowed in allowed_accident_types
-        ):
-            continue
-        combined_text = clean_text(
-            " ".join(
-                str(value or "")
-                for value in (
-                    document,
-                    metadata.get("accident_type"),
-                    metadata.get("accident_summary"),
-                    metadata.get("cause_summary"),
-                    metadata.get("prevention_summary"),
-                    metadata.get("equipment"),
-                )
+    collection_counts: dict[str, int] = {}
+    for expected_status, collection in available_collections:
+        try:
+            collection_count = int(collection.count())
+            collection_counts[expected_status] = collection_count
+            if collection_count <= 0:
+                continue
+            payload = collection.query(
+                query_embeddings=query_embedding,
+                n_results=min(
+                    max(int(top_k) * 6, OFFICIAL_CASE_INTERNAL_SEARCH_COUNT),
+                    collection_count,
+                ),
+                include=["documents", "metadatas", "distances"],
             )
-        ).lower()
-        matched_terms = [term for term in query_terms if term.lower() in combined_text]
-        if not matched_terms:
-            continue
-        distance = distances[index] if index < len(distances) else None
-        item = dict(metadata)
-        item.update(
-            {
-                "text": str(document or ""),
-                "distance": distance,
-                "matched_terms": matched_terms,
-                "source_grade": "공식 사고사례",
-            }
-        )
-        seen_case_ids.add(case_id)
-        candidates.append(item)
+            query_payloads.append((expected_status, collection, payload))
+        except Exception:
+            search_errors.append(expected_status)
 
-    candidates.sort(
-        key=lambda item: (
-            -len(item.get("matched_terms", [])),
-            float(item["distance"]) if isinstance(item.get("distance"), (int, float)) else float("inf"),
-        )
+    candidates: list[dict[str, Any]] = []
+    safety_rejected_count = 0
+    for expected_status, _collection, payload in query_payloads:
+        documents = payload.get("documents", [[]])[0]
+        metadatas = payload.get("metadatas", [[]])[0]
+        distances = payload.get("distances", [[]])[0]
+        for index, document in enumerate(documents):
+            metadata = (
+                metadatas[index]
+                if index < len(metadatas) and isinstance(metadatas[index], dict)
+                else {}
+            )
+            case_id = str(metadata.get("case_id", "")).strip()
+            if not case_id or metadata.get("official_case") is not True:
+                continue
+            status = str(metadata.get("verification_status", ""))
+            if status != "verified" and status != verified_review.AUTO_SCREENED_STATUS:
+                continue
+            if status != expected_status:
+                continue
+            if str(metadata.get("mine_relevance", "")) not in {"high", "medium"}:
+                continue
+            if (
+                status == verified_review.AUTO_SCREENED_STATUS
+                and str(metadata.get("ocr_quality_status", "")) != "pass"
+            ):
+                continue
+            relation_type, matched_terms = verified_review.classify_case_relation(
+                metadata,
+                direct_terms,
+                analogous_terms,
+            )
+            if relation_type not in {"direct", "analogous"}:
+                continue
+            distance = distances[index] if index < len(distances) else None
+            item = verified_review.sanitize_display_case(metadata)
+            item.update(
+                {
+                    "text": str(document or ""),
+                    "distance": distance,
+                    "matched_terms": matched_terms,
+                    "relation_type": relation_type,
+                    "source_grade": (
+                        "원문 대조 검증 완료 공식 사고사례"
+                        if status == "verified"
+                        else "자동 품질검사 통과 공식 사고사례"
+                    ),
+                }
+            )
+            if not verified_review.is_display_safe_case(item):
+                safety_rejected_count += 1
+                continue
+            candidates.append(item)
+
+    selected = verified_review.rank_public_official_cases(
+        candidates,
+        max_results=max(1, min(int(top_k), OFFICIAL_CASE_TOP_K)),
     )
-    selected = candidates[: max(1, min(int(top_k), OFFICIAL_CASE_TOP_K))]
+    if search_errors and not query_payloads:
+        final_status = "search_failed"
+    elif selected:
+        final_status = "ready"
+    else:
+        final_status = "no_search_results"
     diagnostic.update(
         {
-            "status": "ready",
-            "collection_count": collection_count,
+            "status": final_status,
+            "verified_db_status": verified_db_status or "ready",
+            "auto_screened_db_status": auto_db_status or "ready",
+            "collection_counts": collection_counts,
+            "search_error_sources": search_errors,
+            "safety_rejected_count": safety_rejected_count,
             "result_count": len(selected),
         }
     )
@@ -3555,7 +3677,8 @@ def build_prompt(
 {easy_terms}
 
 [공식 사고사례 사용 제한]
-- 아래 자료는 mine_official_accident_cases에서 검색한 공식 사고사례이지만 법령·지침은 아닙니다.
+- 아래 자료는 사람 검증 완료 또는 자동 품질검사 통과 전용 collection에서 검색한 공식 사고사례이지만 법령·지침은 아닙니다.
+- 각 사례의 검증 상태와 직접 관련·유사 위험 구분을 유지하고, 유사 위험 사례를 동일 작업 사고처럼 표현하지 마세요.
 - 사고 상황과 예방사항을 이해하는 참고자료로만 사용하고, 법령 위반 여부나 처벌 여부를 확정하지 마세요.
 - 공식 법령 근거는 mine_safety_docs의 문서명과 chunk_id입니다.
 - 사고사례 전체를 옮기지 말고 필요한 사고 개요와 예방사항만 짧게 참고하세요.
@@ -3642,7 +3765,8 @@ def build_hybrid_prompt(
 - 법령 해석이나 실제 작업재개 판단은 안전관리자, 관계기관, 전문가 확인이 필요하다고 안내하세요.
 
 [공식 사고사례 사용 제한]
-- 아래 자료는 mine_official_accident_cases에서 검색한 공식 사고사례이며 법령·지침 근거가 아닙니다.
+- 아래 자료는 사람 검증 완료 또는 자동 품질검사 통과 전용 collection에서 검색한 공식 사고사례이며 법령·지침 근거가 아닙니다.
+- 각 사례의 검증 상태와 직접 관련·유사 위험 구분을 유지하고, 유사 위험 사례를 동일 작업 사고처럼 표현하지 마세요.
 - 사고 상황과 예방사항 설명에만 짧게 사용하고, 법령 위반 여부·처벌·작업 재개 가능 여부를 확정하지 마세요.
 - 공식 법령 근거는 mine_safety_docs의 문서명과 chunk_id입니다.
 
@@ -5952,18 +6076,30 @@ def format_official_cases_for_prompt(official_cases: list[dict[str, Any]]) -> st
         return "현재 질문과 직접 관련된 공식 사고사례 검색 결과 없음."
     blocks: list[str] = []
     for case in official_cases[:2]:
+        status_label = (
+            "원문 대조 검증 완료"
+            if str(case.get("verification_status", "")) == "verified"
+            else "자동 품질검사 통과"
+        )
+        relation_label = (
+            "직접 관련"
+            if str(case.get("relation_type", "")) == "direct"
+            else "유사 위험"
+        )
         summary = make_preview(
-            clean_text(str(case.get("display_accident_summary") or case.get("accident_summary", ""))),
+            clean_text(str(case.get("display_accident_summary", ""))),
             350,
         )
         prevention = make_preview(
-            clean_text(str(case.get("display_prevention_summary") or case.get("prevention_summary", ""))),
+            clean_text(str(case.get("display_prevention_summary", ""))),
             220,
         )
         blocks.append(
             "\n".join(
                 [
                     f"[공식 사고사례] {case.get('case_id', '사례 ID 없음')}",
+                    f"- 검증 상태: {status_label}",
+                    f"- 질문 관련성: {relation_label}",
                     f"- 사고 유형: {case.get('accident_type', '정보 없음')}",
                     f"- 사고 개요: {summary or '정보 없음'}",
                     f"- 예방사항: {prevention or '원문에 별도 예방사항 없음'}",
@@ -5980,15 +6116,36 @@ def official_case_warning_points(
     reference_cases: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, str]]:
     points: list[dict[str, str]] = []
-    for case in official_cases:
-        for field in ("display_prevention_summary", "display_cause_summary"):
-            fallback_field = field.removeprefix("display_")
+    safe_cases = [
+        verified_review.sanitize_display_case(case)
+        for case in official_cases
+        if verified_review.is_display_safe_case(case)
+    ]
+    priority_steps = (
+        ("verified", "display_prevention_summary"),
+        (verified_review.AUTO_SCREENED_STATUS, "display_prevention_summary"),
+        ("verified", "display_cause_summary"),
+        (verified_review.AUTO_SCREENED_STATUS, "display_cause_summary"),
+    )
+    for status, field in priority_steps:
+        for case in safe_cases:
+            if str(case.get("verification_status", "")) != status:
+                continue
             value = make_preview(
-                clean_text(str(case.get(field) or case.get(fallback_field, ""))),
+                clean_text(str(case.get(field, ""))),
                 220,
             )
-            if value and all(item["text"] != value for item in points):
-                points.append({"text": value, "source": "공식 사례 기반"})
+            if (
+                value
+                and not verified_review.detect_corrupted_ocr_text(value)
+                and all(item["text"] != value for item in points)
+            ):
+                source_label = (
+                    "원문 대조 검증 사례 기반"
+                    if status == "verified"
+                    else "자동 품질검사 통과 사례 기반"
+                )
+                points.append({"text": value, "source": source_label})
             if len(points) >= 3:
                 return points
     for point in case_warning_points_for_intent(intent, reference_cases)[:3]:
@@ -6043,7 +6200,11 @@ def summarize_reference_cases_for_history(reference_cases: list[dict[str, Any]])
 
 
 def render_official_siren_case_card(case: dict[str, Any]) -> None:
-    if str(case.get("verification_status", "")) != "verified":
+    verification_status = str(case.get("verification_status", ""))
+    if verification_status != "verified" and verification_status != verified_review.AUTO_SCREENED_STATUS:
+        return
+    case = verified_review.sanitize_display_case(case)
+    if not verified_review.is_display_safe_case(case):
         return
     accident_type = str(case.get("accident_type", "") or "정보 없음")
     accident_date = str(
@@ -6053,15 +6214,13 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
     )
     industry = str(case.get("industry", "") or "정보 없음")
     summary = make_preview(
-        clean_text(str(case.get("display_accident_summary") or case.get("accident_summary", ""))),
+        clean_text(str(case.get("display_accident_summary", ""))),
         450,
     )
     cause = make_preview(
         clean_text(
             str(
                 case.get("display_cause_summary")
-                or case.get("cause_summary")
-                or case.get("equipment")
                 or "공식 원문에서 별도 원인을 확인하지 못했습니다."
             )
         ),
@@ -6071,13 +6230,13 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
         clean_text(
             str(
                 case.get("display_prevention_summary")
-                or case.get("prevention_summary")
                 or "공식 원문에서 별도 예방사항을 확인하지 못했습니다."
             )
         ),
         360,
     )
-    relevance = "직접 관련" if str(case.get("mine_relevance")) == "high" else "유사 위험"
+    relation_type = str(case.get("relation_type", ""))
+    relation_label = "직접 관련 사례" if relation_type == "direct" else "유사 위험 사례"
     source_document = str(case.get("source_document", "") or "출처 정보 없음")
     source_period = str(case.get("source_period", "") or "기간 정보 없음")
     page_start = str(
@@ -6087,7 +6246,20 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
     )
     case_id = str(case.get("case_id", "") or "사례 ID 없음")
     with st.container(border=True):
-        st.success("✓ 원본 PDF와 대조하여 내용 검증이 완료된 공식 사고사례입니다.")
+        if verification_status == "verified":
+            st.success("✓ 원본 PDF와 대조하여 내용 검증이 완료된 공식 사고사례입니다.")
+        else:
+            st.info(
+                "자동 품질검사 통과 · 공식 원문에서 자동 추출한 뒤 문자 깨짐·혼합 문장·"
+                "출처 정보에 대한 품질검사를 통과한 사례입니다. "
+                "사람의 원문 대조 검수는 아직 완료되지 않았습니다."
+            )
+        st.caption(f"관련성: {relation_label}")
+        if relation_type == "analogous":
+            st.warning(
+                "동일한 작업이나 설비의 사고가 아니라, 사고 발생 원리와 위험요인이 "
+                "유사한 공식 사례입니다."
+            )
         header_cols = st.columns(3)
         header_cols[0].markdown(f"**사고 유형**  \n{accident_type}")
         header_cols[1].markdown(f"**발생일·연도**  \n{accident_date}")
@@ -6096,11 +6268,11 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
         st.markdown(f"**주요 원인**  \n{cause}")
         st.markdown(f"**예방 및 주의사항**  \n{prevention}")
         st.caption(
-            f"광산 관련성: {relevance} · 출처: {source_document} · "
+            f"출처: {source_document} · "
             f"기간: {source_period} · 페이지: {page_start} · case_id: {case_id}"
         )
         original_image = ROOT_DIR / str(case.get("original_page_image", ""))
-        if original_image.is_file():
+        if verification_status == "verified" and original_image.is_file():
             with st.expander("원문 이미지 확인", expanded=False):
                 st.image(str(original_image), caption=f"{source_document} · {page_start}쪽")
 
@@ -6109,37 +6281,56 @@ def render_official_siren_cases(
     official_cases: list[dict[str, Any]],
     diagnostic: dict[str, Any] | None = None,
 ) -> None:
-    verified_cases = [
+    public_cases = [
         case
         for case in official_cases
-        if str(case.get("verification_status", "")) == "verified"
+        if str(case.get("verification_status", "")) in verified_review.PUBLIC_CASE_STATUSES
+        and verified_review.is_display_safe_case(case)
     ]
     st.caption(
-        "안전보건공단 원본 PDF와 대조 검증을 마친 공식 사고사례만 표시합니다. "
+        "원본 PDF 대조 검증 사례를 우선하고, 없으면 엄격한 자동 품질검사를 통과한 공식 사고사례를 표시합니다. "
         "사고의 발생 상황과 예방사항을 이해하기 위한 참고자료이며, "
         "개별 광산의 법령 위반 여부를 확정하는 근거는 아닙니다."
     )
     if globals().get("is_admin_mode", False) and isinstance(diagnostic, dict):
+        verified_db_label = {
+            "verified_not_created_zero_cases": "검증 완료 사례 0건",
+            "verified_db_unavailable": "실제 verified DB 연결 오류",
+            "verified_collection_conflict": "verified collection 설정 충돌",
+            "ready": "verified DB 준비됨",
+        }.get(str(diagnostic.get("verified_db_status", "")), "verified DB 상태 확인 필요")
+        auto_db_label = {
+            "auto_screened_not_created_zero_cases": "자동 품질검사 통과 사례 0건",
+            "auto_screened_db_unavailable": "실제 auto_screened DB 연결 오류",
+            "auto_screened_collection_conflict": "auto_screened collection 설정 충돌",
+            "ready": "auto_screened DB 준비됨",
+        }.get(str(diagnostic.get("auto_screened_db_status", "")), "auto_screened DB 상태 확인 필요")
         st.caption(
-            "관리자 진단 · 사례 DB 상태: "
-            f"{diagnostic.get('status', '정보 없음')} · "
+            "관리자 진단 · "
+            f"{verified_db_label} · {auto_db_label} · "
             f"검색 결과: {diagnostic.get('result_count', 0)}건"
         )
-    if not verified_cases:
-        st.info("현재 질문과 관련해 원문 대조 검증이 완료된 공식 사고사례가 없습니다.")
+    if not public_cases:
+        st.info("현재 질문과 관련해 품질검사를 통과한 공식 사고사례가 없습니다.")
         return
-    render_official_siren_case_card(verified_cases[0])
-    for index, case in enumerate(verified_cases[1:], start=2):
+    render_official_siren_case_card(public_cases[0])
+    for index, case in enumerate(public_cases[1:], start=2):
         label = str(case.get("accident_type", "") or "추가 공식 사고사례")
         with st.expander(f"추가 사례 {index - 1} · {label}", expanded=False):
             render_official_siren_case_card(case)
+
+
+def admin_case_display_preview(case: dict[str, Any]) -> str:
+    """관리자 검수 화면에서 정제본을 우선하고 OCR 원문 대조를 허용합니다."""
+    return str(case.get("display_accident_summary") or case.get("accident_summary", ""))
 
 
 def render_verified_official_case_review_page() -> None:
     st.header("공식 사고사례 검수")
     st.caption(
         "기존 OCR 사례는 모두 미검증 상태입니다. 원본 카드 이미지와 각 필드를 직접 비교한 뒤 "
-        "관리자가 명시적으로 승인한 사례만 공개용 verified DB에 반영됩니다."
+        "관리자가 명시적으로 승인한 사례는 verified DB에 반영되고 자동검사 통과 사례보다 우선 표시됩니다. "
+        "auto_screened 사례도 이 화면에서 원문과 대조해 verified로 승격할 수 있습니다."
     )
     try:
         records = verified_review.initialize_review_store()
@@ -6147,11 +6338,12 @@ def render_verified_official_case_review_page() -> None:
         st.error(str(error))
         return
     counts = verified_review.review_status_counts(records)
-    metric_columns = st.columns(5)
+    metric_columns = st.columns(6)
     metric_values = (
         ("전체 후보", counts["total"]),
         ("미검증", counts["unverified"]),
         ("검증 완료", counts["verified"]),
+        ("자동 품질검사", counts["auto_screened"]),
         ("사용 제외", counts["rejected"]),
         ("수동검토", counts["manual_review"]),
     )
@@ -6202,6 +6394,7 @@ def render_verified_official_case_review_page() -> None:
     status_labels = {
         "unverified": "미검증",
         "verified": "검증 완료",
+        "auto_screened": "자동 품질검사 통과",
         "rejected": "사용 제외",
         "manual_review": "수동 검토",
     }
@@ -6225,12 +6418,13 @@ def render_verified_official_case_review_page() -> None:
             st.write(f"**문서명:** {selected.get('source_document') or '정보 없음'}")
             st.write(f"**페이지:** {selected.get('original_page_number') or '정보 없음'}")
             st.write(f"**case_id:** {selected_case_id}")
+            admin_display_preview = admin_case_display_preview(selected)
             with st.expander("원문 OCR 내용 보기", expanded=False):
                 st.text(
                     str(
                         selected.get("layout_ocr_text")
                         or selected.get("full_accident_summary")
-                        or selected.get("accident_summary")
+                        or admin_display_preview
                         or "OCR 원문 없음"
                     )
                 )
@@ -6317,13 +6511,15 @@ def render_verified_official_case_review_page() -> None:
                 verified_fields,
                 rejection_reason,
             )
-            db_result = verified_review.rebuild_verified_case_db(
-                verified_review.load_review_records()
-            )
+            updated_records = verified_review.load_review_records()
+            db_result = verified_review.rebuild_verified_case_db(updated_records)
+            auto_db_result = verified_review.rebuild_auto_screened_case_db(updated_records)
             load_official_case_collection.clear()
+            load_auto_screened_case_collection.clear()
             st.success(
                 f"검수 상태를 저장했습니다. verified DB 상태: "
-                f"{db_result.get('status', '확인 필요')}"
+                f"{db_result.get('status', '확인 필요')} · auto_screened DB 상태: "
+                f"{auto_db_result.get('status', '확인 필요')}"
             )
             st.rerun()
         except verified_review.ReviewWorkflowBlocked as error:
@@ -8447,13 +8643,13 @@ def render_rag_result(
 
     render_recommended_evidence_records(recommended_records)
     st.markdown("### 사례 및 참고자료")
-    official_case_tab, news_reference_tab, warning_points_tab = st.tabs(
-        ["공식 재해사례", "최근 뉴스 참고", "핵심 주의사항"]
+    news_reference_tab, official_case_tab, warning_points_tab = st.tabs(
+        ["최근 뉴스 참고", "공식 재해사례", "핵심 주의사항"]
     )
-    with official_case_tab:
-        render_official_siren_cases(official_cases, official_case_diagnostic)
     with news_reference_tab:
         render_live_news_reference_cases(live_news_cases)
+    with official_case_tab:
+        render_official_siren_cases(official_cases, official_case_diagnostic)
     with warning_points_tab:
         render_latest_reference_cases(
             reference_cases,

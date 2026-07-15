@@ -1,0 +1,133 @@
+MineSafe AI 자동 품질검사 통과 공식 사고사례 표시 개선 보고서
+작성일: 2026-07-15 (Asia/Seoul)
+
+1. 작업 목적
+사람이 원문과 대조한 verified 사례를 가장 우선하고, verified 사례가 없을 때에는 엄격한 구조·문자열·출처 품질검사를 모두 통과한 auto_screened 사례만 보조적으로 표시하도록 검색·검증·UI 구조를 개선했다. 깨진 OCR 문장을 복원하거나 추측하지 않았고, 품질 기준을 통과하지 못한 사례는 공개하지 않았다.
+
+2. 기존 verified 사례 수
+작업 전후 모두 0건이다. 기존 verified 상태와 검수 이력을 변경하지 않았다.
+
+3. auto_screened 후보 수
+기존 검수 저장소의 unverified 사례 75건을 후보 입력으로 검사했다. 75건은 모두 광산 관련성 high 또는 medium이었지만, 이것만으로 공개 승인하지 않았다.
+
+4. auto_screened 최종 승인 수
+0건이다. 엄격한 필수 조건을 모두 충족한 사례가 없어 auto_screened 상태로 승인하지 않았다.
+
+5. 품질 미달 제외 수
+75건 전부 제외했다. 승인 사례가 없더라도 기준을 낮추거나 깨진 문장을 임의 보정하지 않았다.
+
+6. 제외 사유별 수
+각 사례에서 가장 먼저 확인된 차단 사유 기준으로 메타데이터 품질 점수 미달 45건, 원본 카드 이미지 연결 누락 27건, display 사고 개요의 비정상 숫자·기호 연속 3건이다. case_id 중복 0건, content_hash 중복 0건, 출처 페이지 누락 0건, 한 글자 업종 0건, display 사고 개요 40자 미만 0건, 450자 초과 0건이었다. 원본 이미지 누락은 전체 기준으로 63건이지만, 이 중 36건은 앞 단계의 메타데이터 품질 미달로 먼저 제외됐다.
+
+7. 직접 관련 검색 방식
+질문 유형별 직접 용어군을 사용한다. 컨베이어는 컨베이어·벨트·끼임·말림, 차량은 후진·신호수·덤프트럭·굴착기·지게차·차량 충돌, 낙반은 낙반·암석 붕락·갱도 붕괴, 전기는 감전·전기설비·누전, 가스는 산소결핍·유해가스·질식, 발파는 발파·불발공·화약을 직접 관련 기준으로 사용한다.
+
+8. 유사 위험 검색 방식
+직접 용어가 없을 때만 사고 발생 원리 중심 용어군을 사용한다. 예를 들어 컨베이어 질문은 회전체·정비 중 재가동·에너지 차단, 후진 질문은 이동식 장비·사각지대·깔림, 낙반 질문은 토사·굴착면 붕괴·매몰, 전기 질문은 전원 투입·에너지 차단·잠금·표지, 가스 질문은 밀폐공간·환기 불량·가스 중독, 발파 질문은 폭발·폭발물·점화원을 유사 위험으로 구분한다. 관계없는 위험 유형은 반환하지 않는다.
+
+9. 검색 우선순위
+직접 관련 verified → 직접 관련 auto_screened → 유사 위험 verified → 유사 위험 auto_screened 순이다. 최대 3건만 선택하고 동일 case_id는 한 번만 반환한다.
+
+10. 깨진 문자열 차단 규칙
+알려진 OCR 잡음 토큰, 무의미한 영문 조각, Latin-1 깨짐, 한글 자모·과도한 글자 분리, 동일 문자·토큰 반복, 서로 다른 복수 날짜, 복수 사고 제목, 비정상 숫자·기호 연속, HTML·JSON·Python 리스트 형태, 통계표·홍보 문구를 보수적으로 차단한다. LOTO, PPE, CCTV 같은 허용 약어는 무조건 삭제하지 않는다.
+
+11. display 필드 사용 방식
+공개 카드, Gemini·하이브리드 참고 문맥, 핵심 주의사항은 display_accident_summary, display_cause_summary, display_prevention_summary만 사용한다. 사고 개요는 공백 제외 40~450자를 요구한다. 원인과 예방 필드는 원문에 없을 수 있으므로 빈 값 자체는 허용하되, 값이 있으면 같은 문자열 안전검사를 적용한다.
+
+12. raw OCR 공개 차단 방식
+현장관리자 공개 카드에서는 raw OCR, full OCR, 진단 JSON, text_hash, content_hash, 내부 점수와 내부 변수명을 읽거나 표시하지 않는다. 관리자·개발자 검수 화면에서만 원본 이미지와 OCR 원문을 대조할 수 있다. auto_screened 공개 카드에는 원문 expander를 제공하지 않는다.
+
+13. verified 배지
+“원문 대조 검증 완료”와 “원본 PDF와 대조하여 내용 검증이 완료된 공식 사고사례입니다.” 문구를 유지한다.
+
+14. auto_screened 배지
+“자동 품질검사 통과” 배지를 표시한다. 사람의 원문 대조 검수는 아직 완료되지 않았음을 별도 문장으로 명확히 알린다.
+
+15. direct·analogous 배지
+direct는 “직접 관련 사례”, analogous는 “유사 위험 사례”로 표시한다. analogous에는 동일 작업·설비 사고가 아니라 사고 원리와 위험요인이 유사한 사례라는 안내를 추가한다.
+
+16. auto_screened DB 경로
+C:\Users\USER\Desktop\mine_safety_rag\23_auto_screened_official_accident_case_vector_db
+
+17. collection 이름
+mine_auto_screened_official_accident_cases
+
+18. 기존 법령 DB와 분리 여부
+기존 법령 mine_safety_docs, 기존 미검증 mine_official_accident_cases, 사람 검증 mine_verified_official_accident_cases, 자동검사 mine_auto_screened_official_accident_cases를 서로 다른 collection 이름과 경로로 분리했다. 기존 법령 DB를 갱신하거나 재구축하는 명령은 실행하지 않았다.
+
+19. 탭 순서 변경 결과
+“사례 및 참고자료”의 순서를 최근 뉴스 참고 → 공식 재해사례 → 핵심 주의사항으로 변경했다. 변수와 각 탭의 렌더링 내용도 같은 순서로 연결했다.
+
+20. 최근 뉴스 참고 탭 유지
+기존 네이버 뉴스 렌더링과 30분(1,800초) 캐시 구조를 유지했다. 이번 검증에서 실제 외부 뉴스 API는 호출하지 않았다.
+
+21. 공식 재해사례 탭 동작
+verified 또는 auto_screened이면서 최종 display 안전검사를 통과한 사례만 표시한다. 현재 두 상태의 공개 가능 사례가 모두 0건이므로 “현재 질문과 관련해 품질검사를 통과한 공식 사고사례가 없습니다.”라고 안전하게 안내한다. db_unavailable 같은 내부 문자열은 사용자에게 표시하지 않는다.
+
+22. 핵심 주의사항 탭 동작
+verified 예방사항 → auto_screened 예방사항 → verified 원인 → auto_screened 원인 → 기존 로컬 안전규칙 순으로 최대 3개를 선택한다. display 안전검사를 통과하지 않은 문자열은 사용하지 않는다.
+
+23. 범위 밖 질문 처리
+범위 밖 질문은 공식 법령 RAG, verified·auto_screened 사례 검색, 사례 및 참고자료 탭, 뉴스, 핵심 주의사항, KRAS, 증빙자료와 근거 배지보다 먼저 기존 조기 반환 경로로 끝난다.
+
+24. 대표 질문별 검색 결과
+컨베이어 청소, 장비 후진·신호수, 낙반, 전기 잠금, 산소 부족, 발파·불발공의 6개 질문 유형에 대해 direct·analogous 용어군 연결 구조를 확인했다. 현재 verified DB와 auto_screened DB에 공개 가능한 사례가 0건이므로 실제 결과는 모두 0건이며, 관련 없는 사례를 억지로 반환하지 않고 품질검사 통과 사례 없음 안내를 사용한다.
+
+25. 깨진 문자열 잔여 수
+공개 승인 사례가 0건이므로 공개 화면에 남는 깨진 문자열은 0건이다. 후보 전체 진단에서는 무의미한 영문, 깨진 문자, 반복 토큰, 비정상 숫자·기호 등 복수 품질 징후가 확인됐으며, 첫 차단 사유 방식으로 75건 모두 공개 대상에서 제외했다.
+
+26. 기존 테스트 결과
+작업 전 기존 테스트 117/117 통과, 실패·오류·skip 0이었다. 작업 후에도 기존 계약과 호환성을 포함한 전체 테스트에서 기존 117건이 유지됐다.
+
+27. 신규 테스트 결과
+test_auto_screened_official_case_display.py의 30/30이 통과했다. 상태·순위·제외 상태·direct/analogous·문자 깨짐 차단·display 전용 UI·네 collection 분리·최대 3건·중복 제거·탭 순서·범위 밖 조기 반환·검수 승격·비밀값 미출력을 검사한다.
+
+28. 전체 테스트 결과
+python -B -m unittest discover -s "18_legal_evidence_features" -p "test_*.py" -v 결과 147/147 통과, 실패 0, 오류 0, skip 0이다. app.py, 파이프라인, verified_case_review.py 문법 검사도 모두 통과했다.
+
+29. Streamlit HTTP 결과
+포트 8508에서 headless 실행해 HTTP 200을 확인했다. 프로세스는 검사 전까지 정상 실행 중이었고 traceback 및 오류 로그는 0건이었다. 검증 후 프로세스를 종료했으며 포트 listener가 남지 않았다. Codex 내장 브라우저는 로컬 브라우저 런타임 자산 경로 오류로 연결되지 않아 클릭 기반 화면 검증은 수행하지 못했고, UI 구조는 신규 30개 테스트와 전체 정적 테스트로 검증했다.
+
+30. app.py 작업 전후 SHA-256
+작업 전: 4C17A4EF48115BB766B1434C943A913B86BA31F517C32328F1E88AAF65607F06 (368,506 bytes)
+작업 후: 58489DF0BDADF2404A724E76CDF87F901A7B73B1BB6369A4E5DE5899478B5E97 (378,124 bytes)
+
+31. 수정 파일
+.gitignore
+app.py
+verified_case_review.py
+21_official_accident_case_pipeline/build_official_siren_case_db.py
+
+32. 생성 파일
+18_legal_evidence_features/test_auto_screened_official_case_display.py
+18_legal_evidence_features/auto_screened_official_case_display_report.txt
+25_verified_case_review/auto_screened_quality_results.jsonl (Git 제외 감사 데이터)
+
+33. 생성 백업
+app_backup_before_auto_screened_case_display_20260715_173444.py. 백업 SHA-256은 작업 전 app.py와 동일하며 수정·stage·commit하지 않는다.
+
+34. Git whitelist
+app.py
+verified_case_review.py
+21_official_accident_case_pipeline/build_official_siren_case_db.py
+.gitignore
+18_legal_evidence_features/test_auto_screened_official_case_display.py
+18_legal_evidence_features/auto_screened_official_case_display_report.txt
+
+35. Git 제외 파일
+원본 PDF, OCR JSONL, 품질검사 감사 JSONL, 모든 기존·candidate·backup Vector DB, 원본 카드 이미지, 검수 상태 데이터, app 백업, .env, 인증정보, 기존 평가 파일, __pycache__, pyc, node_modules, .artifact_runtime 및 기존 관련 없는 변경 파일을 stage하지 않는다.
+
+36. commit SHA
+이 보고서 자체가 동일 commit의 대상이므로 최종 commit SHA를 보고서 본문에 자기 참조 방식으로 사전 고정할 수 없다. 최종 SHA는 커밋 직후 Codex 완료 보고에 정확히 기록한다.
+
+37. push 결과
+보고서 작성 시점에는 아직 push 전이다. whitelist 검증, commit, push 결과는 작업 완료 보고에 기록한다.
+
+38. 기존 변경 파일 보호 여부
+작업 전 기존 관련 없는 변경 파일은 51개였다. 작업 후 whitelist 파일을 제외한 상태도 51개이며 정렬된 상태 지문 SHA-256이 작업 전후 모두 27ECE9979C126A4B9AD0963F66AA33AD3BD7F98578A95E44B857B16596933618로 동일하다. 수정·stage·복구·삭제하지 않았다.
+
+39. 남은 한계
+현재 엄격한 기준을 통과한 실제 사례가 0건이므로 공개 카드의 실제 데이터 렌더링은 아직 볼 수 없다. 63건은 원본 카드 이미지 연결이 없고, 45건은 메타데이터 품질 기준에 미달한다. 우선 원본 이미지 대조와 메타데이터 보강이 필요하다. 내장 브라우저 연결 환경 오류로 클릭 기반 화면 점검도 미완료지만 HTTP 기동과 코드·테스트 검증은 완료했다.
+
+40. 교수님 설명용 문구
+공식 사고사례는 사람이 원문을 직접 대조한 검증 완료 사례를 가장 우선해 표시하고, 해당 사례가 없을 경우 문자 깨짐, 문장 혼합, 출처 정보와 OCR 품질검사를 통과한 사례를 자동 품질검사 통과 사례로 구분해 제공합니다. 동일 작업의 사례가 없으면 끼임, 충돌, 붕괴, 질식, 폭발과 같이 사고 발생 원리가 유사한 공식 사례까지 단계적으로 검색합니다. 자동 품질검사 사례와 사람 검증 사례는 배지로 구분하며, 깨진 OCR 원문은 공개 화면에 표시하지 않습니다. 현재 데이터는 엄격한 기준을 통과한 사례가 없어 빈 결과를 유지했으며, 이는 품질 기준을 낮추지 않은 안전한 결과입니다.

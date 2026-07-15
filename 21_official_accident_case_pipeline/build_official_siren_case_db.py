@@ -40,6 +40,12 @@ CASE_JSONL_PATH = (
 )
 CASE_VECTOR_DB_DIR = ROOT_DIR / "23_official_accident_case_vector_db"
 CASE_VECTOR_DB_CANDIDATE_DIR = ROOT_DIR / "23_official_accident_case_vector_db_candidate"
+AUTO_SCREENED_CASE_VECTOR_DB_DIR = (
+    ROOT_DIR / "23_auto_screened_official_accident_case_vector_db"
+)
+AUTO_SCREENED_CASE_VECTOR_DB_CANDIDATE_DIR = (
+    ROOT_DIR / "23_auto_screened_official_accident_case_vector_db_candidate"
+)
 LAW_VECTOR_DB_DIR = ROOT_DIR / "10_vector_db_with_major_accident_docs"
 CLEAN_CASE_JSONL_PATH = CASE_JSONL_PATH.with_name(
     "official_siren_cases_2025_to_2026_q1_cleaned.jsonl"
@@ -50,7 +56,9 @@ CLEAN_CASE_JSONL_PATH = CASE_JSONL_PATH.with_name(
 COLLECTION_NAME = "mine_official_accident_cases"
 LAW_COLLECTION_NAME = "mine_safety_docs"
 VERIFIED_COLLECTION_NAME = "mine_verified_official_accident_cases"
+AUTO_SCREENED_COLLECTION_NAME = "mine_auto_screened_official_accident_cases"
 VERIFICATION_STATUSES = ("unverified", "verified", "rejected", "manual_review")
+AUTO_SCREENED_STATUS = "auto_screened"
 DEFAULT_VERIFICATION_STATUS = "unverified"
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 CASE_DB_BATCH_SIZE = 32
@@ -125,6 +133,7 @@ def prepare_unverified_review_cases(cases: list[dict]) -> list[dict]:
             {
                 "verification_status": DEFAULT_VERIFICATION_STATUS,
                 "verified_at": "",
+                "screened_at": "",
                 "verification_note": "",
                 "verified_fields": [],
                 "original_page_image": "",
@@ -143,8 +152,14 @@ def prepare_unverified_review_cases(cases: list[dict]) -> list[dict]:
 
 def verify_collection_name_separation() -> None:
     """Prevent future case data from sharing the existing law collection."""
-    if VERIFIED_COLLECTION_NAME in {COLLECTION_NAME, LAW_COLLECTION_NAME}:
-        raise PipelineBlocked("Verified accident cases require a separate collection.")
+    collection_names = {
+        COLLECTION_NAME,
+        LAW_COLLECTION_NAME,
+        VERIFIED_COLLECTION_NAME,
+        AUTO_SCREENED_COLLECTION_NAME,
+    }
+    if len(collection_names) != 4:
+        raise PipelineBlocked("네 공식 collection 이름은 서로 분리되어야 합니다.")
     if COLLECTION_NAME == LAW_COLLECTION_NAME:
         raise PipelineBlocked("사고사례와 기존 법령 컬렉션 이름은 분리되어야 합니다.")
 

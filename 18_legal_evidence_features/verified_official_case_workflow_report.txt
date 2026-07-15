@@ -1,0 +1,140 @@
+MineSafe AI 공식 사고사례 원문 대조 검수 워크플로 보고서
+작성일: 2026-07-15
+
+1. 작업 목적
+- 기존 Tesseract OCR 기반 공식 사고사례 75건을 자동 검증 완료 자료로 취급하지 않도록 변경했다.
+- 공개 화면에는 관리자가 원본 PDF 이미지와 대조하여 직접 승인한 verified 사례만 표시한다.
+- 깨진 OCR 문장을 Gemini 또는 규칙으로 추측해 다시 쓰지 않는다.
+
+2. 작업 전 상태
+- 브랜치: main
+- local main과 origin/main: 동일(3c979e0c6b700fb4a4b9b6e29cffe8c0fa8dd46f)
+- ahead 0, behind 0, staged 0
+- 관련 없는 기존 변경: 51개
+- 관련 없는 변경 상태 지문: 27ECE9979C126A4B9AD0963F66AA33AD3BD7F98578A95E44B857B16596933618
+- 작업 전 기존 테스트: 97/97 통과, 실패·오류·skip 0
+
+3. 기존 75건 처리
+- 전체 75건을 unverified로 초기화했다.
+- verified 0건, manual_review 0건, rejected 0건이다.
+- 기존 case_id는 삭제하거나 변경하지 않았다.
+- 검수 상태 이벤트는 원본 OCR JSONL과 분리된 로컬 JSONL에 누적 저장한다.
+- 검수 이벤트 수: 88개(초기화 및 원본 이미지 연결 이력 포함)
+
+4. 공개 화면 안전조치
+- 공개 검색 collection을 mine_verified_official_accident_cases로 분리했다.
+- search_official_siren_cases와 카드 렌더링에서 verification_status == verified를 다시 확인한다.
+- unverified, manual_review, rejected 사례는 공개 결과에서 제외한다.
+- verified 결과가 없으면 다음 취지로 안내한다.
+  현재 질문과 관련해 원문 대조 검증이 완료된 공식 사고사례가 없습니다.
+- 공개 카드에서 깨진 OCR 원문과 내부 OCR 진단값을 제거했다.
+- 최근 뉴스 참고와 핵심 주의사항 탭, 범위 밖 질문 조기 반환은 유지했다.
+
+5. 관리자·개발자 검수 화면
+- 메뉴명: 공식 사고사례 검수
+- 상단 지표: 전체 후보, 미검증, 검증 완료, 사용 제외, 수동검토
+- 왼쪽: 원본 카드 이미지, 문서명, 페이지, case_id, 관리자 전용 OCR 원문
+- 오른쪽: 발생일, 업종, 사고 유형, 사고 개요, 원인, 예방사항, 검증 메모
+- 기능: 수정 저장, 수동 검토, 사용 제외, 검증 완료
+- 검증 완료에는 원본 일치, 날짜, 업종, 사고 유형, 단일 사고, OCR 잡음 없음의 6개 확인이 모두 필요하다.
+- 원본 카드 이미지가 없거나 필수 필드가 없으면 verified 저장을 차단한다.
+
+6. 발표 우선 검수 대상과 원본 이미지
+- 컨베이어 끼임, 차량 후진·충돌, 낙반·붕괴, 전기·감전 유형별 최대 3건을 선정했다.
+- 우선 검수 대상: 12건
+- 생성한 원본 카드 이미지: 12개
+- 이미지가 연결된 우선 검수 사례: 12건
+- 이미지와 검수 데이터는 25_verified_case_review 아래에 저장하며 Git에서 제외했다.
+- 이미지 생성은 페이지를 300 DPI로 렌더링하고 Tesseract TSV 단어 좌표를 이용해 카드 영역을 나누는 보수적 보조 방식이다.
+- 새 OCR 결과는 자동으로 verified 처리하지 않는다.
+
+7. 검수 상태 저장과 verified DB
+- 저장 파일: 25_verified_case_review/official_case_review_status.jsonl
+- case_id별 최신 상태를 읽되, 과거 이벤트 행은 삭제하지 않는 append-only 방식이다.
+- 원본 OCR JSONL은 덮어쓰지 않는다.
+- verified 전용 DB 경로: 23_verified_official_accident_case_vector_db
+- verified 전용 collection: mine_verified_official_accident_cases
+- 기존 미검증 collection: mine_official_accident_cases
+- 기존 법령 collection: mine_safety_docs
+- 세 collection 이름은 서로 다르다.
+- 현재 verified 사례가 0건이므로 verified DB는 만들지 않았다.
+- verified 사례 수와 collection 수가 일치할 때만 candidate DB를 최종 경로로 교체하도록 구현했다.
+
+8. 기존 DB 보존 확인
+- 기존 사례 DB 백업:
+  23_official_accident_case_vector_db_backup_before_verified_workflow_20260715_164207
+- 백업과 활성 DB는 각각 5개 파일, 총 2,752,676바이트다.
+- collection, metadata, 문서, 75개 embeddings 등 사례 데이터 관련 SQLite 테이블은 백업과 논리적으로 동일하다.
+- ChromaDB 읽기 이후 acquire_write 잠금 기록과 HNSW 런타임 인덱스 파일의 물리 해시는 백업과 달라졌다.
+- 기존 사례 DB를 삭제하거나 재구축하지 않았고, 작업 전 파일은 백업에 보존했다.
+- 기존 법령 DB에는 직접 접근하거나 쓰기 작업을 하지 않았고, 법령 DB 경로와 collection 코드를 변경하지 않았다.
+
+9. 레이아웃 OCR 대안 조사
+- 현재 Python: 3.14.6
+- PaddleOCR 3.7.0의 공개 배포 분류자는 Python 3.13까지 표시되어 현재 Python 3.14 환경과 호환 위험이 있다.
+- 공개 패키지 기준 PaddlePaddle CPU Windows wheel은 약 101.7MB이며, PaddleOCR 본체 외에 PaddleX 의존성과 모델 다운로드가 추가된다.
+- PaddleOCR 문서의 CPU 실행 경로가 있어 GPU는 필수가 아니지만, 레이아웃 모델별 실제 다운로드 용량은 선택 모델에 따라 달라진다.
+- 기존 환경 충돌과 다운로드 규모를 고려해 이번 작업에서는 PaddleOCR/PaddlePaddle을 설치하지 않았다.
+- 공식 확인 URL:
+  https://pypi.org/project/paddleocr/
+  https://pypi.org/project/paddlepaddle/3.2.0/
+  http://www.paddleocr.ai/main/en/quick_start.html
+  http://www.paddleocr.ai/main/en/version3.x/pipeline_usage/OCR.html
+
+10. 백업과 app.py 무결성
+- app.py 백업:
+  app_backup_before_verified_case_workflow_20260715_164207.py
+- 작업 전 app.py SHA-256:
+  CC366C0EADD9D790C327E43DB823457CA5292E6389AD5E75A3BE6C10723CDFA3
+- 작업 후 app.py SHA-256:
+  4C17A4EF48115BB766B1434C943A913B86BA31F517C32328F1E88AAF65607F06
+- 작업 전 크기: 358,877바이트
+- 작업 후 크기: 368,506바이트
+
+11. 테스트와 실행 결과
+- app.py 문법: 통과
+- 파이프라인 문법: 통과
+- verified_case_review.py 문법: 통과
+- 기존 테스트: 97/97 통과
+- 신규 test_verified_official_case_workflow.py: 20/20 통과
+- 전체 test_*.py: 117/117 통과
+- 전체 실패·오류·skip: 0
+- Streamlit 포트: 8507
+- HTTP 응답: 200
+- 프로세스 즉시 종료: 없음
+- 로그 traceback/Uncaught app exception: 없음
+- 브라우저 직접 화면 자동화는 Codex 로컬 브라우저 런타임의 경로 초기화 오류로 완료하지 못했다.
+- 관리자 화면 구성, 버튼, 원본 이미지 연결, public OCR 차단은 신규 20개 정적·기능 테스트로 확인했다.
+
+12. 수정 및 생성 파일
+- 수정: app.py
+- 수정: .gitignore
+- 수정: 21_official_accident_case_pipeline/build_official_siren_case_db.py
+- 생성: verified_case_review.py
+- 생성: 18_legal_evidence_features/test_verified_official_case_workflow.py
+- 생성: 18_legal_evidence_features/verified_official_case_workflow_report.txt
+- 생성하였으나 Git 제외: app 백업, 기존 사례 DB 백업, 검수 상태 JSONL, 원본 카드 이미지 12개
+
+13. Git whitelist
+- app.py
+- .gitignore
+- 21_official_accident_case_pipeline/build_official_siren_case_db.py
+- verified_case_review.py
+- 18_legal_evidence_features/test_verified_official_case_workflow.py
+- 18_legal_evidence_features/verified_official_case_workflow_report.txt
+
+14. Git 제외
+- 원본 PDF, OCR JSONL, 정제 JSONL, 카드 이미지, 검수 상태 데이터
+- 기존·신규 Vector DB와 DB 백업
+- 모델 파일, app 백업, .env, 인증정보, 평가 파일, 관련 없는 기존 변경
+
+15. 남은 한계
+- verified 사례는 현재 0건이다. 관리자가 원본 이미지와 직접 대조해 승인하기 전에는 공개 공식 사례가 표시되지 않는다.
+- 우선 12건의 카드 crop은 자동 레이아웃 보조 결과이므로, 사용자가 원본 PDF 페이지와 카드 경계를 확인해야 한다.
+- PaddleOCR/PP-Structure 계열 도입은 Python 3.13 이하의 분리 환경, 용량, 모델 라이선스·품질을 검토하고 별도 승인 후 진행해야 한다.
+- 브라우저 자동화 도구 오류 때문에 이번 작업에서 관리자 화면을 사람 눈으로 클릭 검수한 결과는 기록하지 않았다.
+
+16. Git 처리
+- 커밋 메시지 예정: feat: add verified official accident case review workflow
+- 정확한 whitelist 파일만 개별 stage한다.
+- commit SHA와 push 결과는 커밋 이후 최종 완료 보고에서 제공한다.

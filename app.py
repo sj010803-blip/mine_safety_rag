@@ -31,6 +31,8 @@ from google import genai
 from google.genai import types
 from sentence_transformers import SentenceTransformer
 
+import verified_case_review as verified_review
+
 
 # ==============================
 # 기본 설정
@@ -39,7 +41,8 @@ ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(ROOT_DIR / ".env", override=True)
 
 VECTOR_DB_DIR = ROOT_DIR / "10_vector_db_with_major_accident_docs"
-OFFICIAL_CASE_VECTOR_DB_DIR = ROOT_DIR / "23_official_accident_case_vector_db"
+UNVERIFIED_OFFICIAL_CASE_VECTOR_DB_DIR = ROOT_DIR / "23_official_accident_case_vector_db"
+OFFICIAL_CASE_VECTOR_DB_DIR = ROOT_DIR / "23_verified_official_accident_case_vector_db"
 SCENARIO_PATH = ROOT_DIR / "02_질문시나리오" / "question_scenarios_30.tsv"
 SCENARIO_PATH_65 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_65.tsv"
 SCENARIO_PATH_100 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_100.tsv"
@@ -66,7 +69,8 @@ AUTO_EVAL_BATCH_PATHS = [
     ROOT_DIR / "09_answer_tests" / "auto_eval_Q031_Q110.tsv",
 ]
 COLLECTION_NAME = "mine_safety_docs"
-OFFICIAL_CASE_COLLECTION_NAME = "mine_official_accident_cases"
+UNVERIFIED_OFFICIAL_CASE_COLLECTION_NAME = "mine_official_accident_cases"
+OFFICIAL_CASE_COLLECTION_NAME = "mine_verified_official_accident_cases"
 OFFICIAL_CASE_TOP_K = 3
 OFFICIAL_CASE_INTERNAL_SEARCH_COUNT = 75
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -1965,10 +1969,13 @@ def load_chroma_collection():
 
 @st.cache_resource(show_spinner=False)
 def load_official_case_collection():
-    if OFFICIAL_CASE_COLLECTION_NAME == COLLECTION_NAME:
-        return None, "사례 collection과 법령 collection 이름이 분리되지 않았습니다."
+    if OFFICIAL_CASE_COLLECTION_NAME in {
+        COLLECTION_NAME,
+        UNVERIFIED_OFFICIAL_CASE_COLLECTION_NAME,
+    }:
+        return None, "검증 완료 사례 collection이 기존 collection과 분리되지 않았습니다."
     if not OFFICIAL_CASE_VECTOR_DB_DIR.exists():
-        return None, "공식 사고사례 DB가 아직 준비되지 않았습니다."
+        return None, "원문 대조 검증이 완료된 공식 사고사례 DB가 아직 없습니다."
     try:
         client = chromadb.PersistentClient(path=str(OFFICIAL_CASE_VECTOR_DB_DIR))
         collection = client.get_collection(name=OFFICIAL_CASE_COLLECTION_NAME)
@@ -3420,6 +3427,8 @@ def search_official_siren_cases(
         if not case_id or case_id in seen_case_ids:
             continue
         if metadata.get("official_case") is not True:
+            continue
+        if str(metadata.get("verification_status", "")) != "verified":
             continue
         if str(metadata.get("mine_relevance", "")) not in {"high", "medium"}:
             continue
@@ -6034,6 +6043,8 @@ def summarize_reference_cases_for_history(reference_cases: list[dict[str, Any]])
 
 
 def render_official_siren_case_card(case: dict[str, Any]) -> None:
+    if str(case.get("verification_status", "")) != "verified":
+        return
     accident_type = str(case.get("accident_type", "") or "정보 없음")
     accident_date = str(
         case.get("accident_date")
@@ -6069,9 +6080,14 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
     relevance = "직접 관련" if str(case.get("mine_relevance")) == "high" else "유사 위험"
     source_document = str(case.get("source_document", "") or "출처 정보 없음")
     source_period = str(case.get("source_period", "") or "기간 정보 없음")
-    page_start = str(case.get("page_start", "") or "페이지 정보 없음")
+    page_start = str(
+        case.get("original_page_number")
+        or case.get("page_start")
+        or "페이지 정보 없음"
+    )
     case_id = str(case.get("case_id", "") or "사례 ID 없음")
     with st.container(border=True):
+        st.success("✓ 원본 PDF와 대조하여 내용 검증이 완료된 공식 사고사례입니다.")
         header_cols = st.columns(3)
         header_cols[0].markdown(f"**사고 유형**  \n{accident_type}")
         header_cols[1].markdown(f"**발생일·연도**  \n{accident_date}")
@@ -6083,25 +6099,23 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
             f"광산 관련성: {relevance} · 출처: {source_document} · "
             f"기간: {source_period} · 페이지: {page_start} · case_id: {case_id}"
         )
-        if str(case.get("ocr_quality_status", "")) == "pass":
-            full_text = make_preview(
-                clean_text(
-                    str(case.get("full_accident_summary") or case.get("accident_summary", ""))
-                ),
-                1500,
-            )
-            if full_text:
-                with st.expander("원문 OCR 내용 보기", expanded=False):
-                    st.text(full_text)
-                    st.caption("전체 내용은 출처 PDF에서 확인해 주세요.")
+        original_image = ROOT_DIR / str(case.get("original_page_image", ""))
+        if original_image.is_file():
+            with st.expander("원문 이미지 확인", expanded=False):
+                st.image(str(original_image), caption=f"{source_document} · {page_start}쪽")
 
 
 def render_official_siren_cases(
     official_cases: list[dict[str, Any]],
     diagnostic: dict[str, Any] | None = None,
 ) -> None:
+    verified_cases = [
+        case
+        for case in official_cases
+        if str(case.get("verification_status", "")) == "verified"
+    ]
     st.caption(
-        "안전보건공단이 공개한 중대재해사이렌에서 검색한 과거 공식 사고사례입니다. "
+        "안전보건공단 원본 PDF와 대조 검증을 마친 공식 사고사례만 표시합니다. "
         "사고의 발생 상황과 예방사항을 이해하기 위한 참고자료이며, "
         "개별 광산의 법령 위반 여부를 확정하는 근거는 아닙니다."
     )
@@ -6111,14 +6125,209 @@ def render_official_siren_cases(
             f"{diagnostic.get('status', '정보 없음')} · "
             f"검색 결과: {diagnostic.get('result_count', 0)}건"
         )
-    if not official_cases:
-        st.info("현재 질문과 직접 관련된 공식 사고사례를 찾지 못했습니다.")
+    if not verified_cases:
+        st.info("현재 질문과 관련해 원문 대조 검증이 완료된 공식 사고사례가 없습니다.")
         return
-    render_official_siren_case_card(official_cases[0])
-    for index, case in enumerate(official_cases[1:], start=2):
+    render_official_siren_case_card(verified_cases[0])
+    for index, case in enumerate(verified_cases[1:], start=2):
         label = str(case.get("accident_type", "") or "추가 공식 사고사례")
         with st.expander(f"추가 사례 {index - 1} · {label}", expanded=False):
             render_official_siren_case_card(case)
+
+
+def render_verified_official_case_review_page() -> None:
+    st.header("공식 사고사례 검수")
+    st.caption(
+        "기존 OCR 사례는 모두 미검증 상태입니다. 원본 카드 이미지와 각 필드를 직접 비교한 뒤 "
+        "관리자가 명시적으로 승인한 사례만 공개용 verified DB에 반영됩니다."
+    )
+    try:
+        records = verified_review.initialize_review_store()
+    except verified_review.ReviewWorkflowBlocked as error:
+        st.error(str(error))
+        return
+    counts = verified_review.review_status_counts(records)
+    metric_columns = st.columns(5)
+    metric_values = (
+        ("전체 후보", counts["total"]),
+        ("미검증", counts["unverified"]),
+        ("검증 완료", counts["verified"]),
+        ("사용 제외", counts["rejected"]),
+        ("수동검토", counts["manual_review"]),
+    )
+    for column, (label, value) in zip(metric_columns, metric_values):
+        column.metric(label, f"{value}건")
+
+    priority_records = verified_review.priority_review_candidates(records)
+    priority_ids = {str(record.get("case_id", "")) for record in priority_records}
+    st.info(
+        f"발표 질문 우선 검수 대상: {len(priority_records)}건 · "
+        "컨베이어, 차량 후진, 낙반, 전기 유형별 최대 3건"
+    )
+    if st.button("우선 검수 원본 이미지 준비", key="prepare_verified_case_images"):
+        try:
+            result = verified_review.generate_priority_card_images(records)
+            st.success(
+                f"원본 카드 이미지 {result.get('generated_image_count', 0)}건을 준비했습니다. "
+                "자동 검증 완료 처리는 하지 않았습니다."
+            )
+            st.rerun()
+        except verified_review.ReviewWorkflowBlocked as error:
+            st.error(str(error))
+
+    show_priority_only = st.checkbox(
+        "발표용 우선 검수 대상만 보기",
+        value=True,
+        key="verified_case_priority_only",
+    )
+    visible_records = (
+        [record for record in records if str(record.get("case_id", "")) in priority_ids]
+        if show_priority_only
+        else records
+    )
+    if not visible_records:
+        st.warning("검수 가능한 공식 사고사례가 없습니다.")
+        return
+    record_map = {str(record.get("case_id", "")): record for record in visible_records}
+    selected_case_id = st.selectbox(
+        "검수할 case_id",
+        list(record_map),
+        format_func=lambda case_id: (
+            f"{case_id} · {record_map[case_id].get('accident_type') or '유형 미확인'} · "
+            f"{record_map[case_id].get('verification_status', 'unverified')}"
+        ),
+    )
+    selected = record_map[selected_case_id]
+    current_status = str(selected.get("verification_status", "unverified"))
+    status_labels = {
+        "unverified": "미검증",
+        "verified": "검증 완료",
+        "rejected": "사용 제외",
+        "manual_review": "수동 검토",
+    }
+    st.caption(f"현재 상태: {status_labels.get(current_status, current_status)}")
+
+    with st.form("verified_official_case_review_form"):
+        left_column, right_column = st.columns([1.05, 1])
+        with left_column:
+            image_path = ROOT_DIR / str(selected.get("original_page_image", ""))
+            if image_path.is_file():
+                st.image(
+                    str(image_path),
+                    caption=(
+                        f"{selected.get('source_document', '문서명 없음')} · "
+                        f"{selected.get('original_page_number', '페이지 없음')}쪽"
+                    ),
+                    use_container_width=True,
+                )
+            else:
+                st.warning("원본 사고 카드 이미지가 아직 준비되지 않았습니다.")
+            st.write(f"**문서명:** {selected.get('source_document') or '정보 없음'}")
+            st.write(f"**페이지:** {selected.get('original_page_number') or '정보 없음'}")
+            st.write(f"**case_id:** {selected_case_id}")
+            with st.expander("원문 OCR 내용 보기", expanded=False):
+                st.text(
+                    str(
+                        selected.get("layout_ocr_text")
+                        or selected.get("full_accident_summary")
+                        or selected.get("accident_summary")
+                        or "OCR 원문 없음"
+                    )
+                )
+                st.caption("이 원문은 관리자 대조용이며 공개 화면에는 표시되지 않습니다.")
+
+        with right_column:
+            accident_date = st.text_input("발생일", value=str(selected.get("accident_date", "")))
+            industry = st.text_input("업종", value=str(selected.get("industry", "")))
+            accident_type = st.text_input("사고 유형", value=str(selected.get("accident_type", "")))
+            accident_summary = st.text_area(
+                "사고 개요",
+                value=str(selected.get("accident_summary", "")),
+                height=150,
+            )
+            cause_summary = st.text_area(
+                "원인",
+                value=str(selected.get("cause_summary", "")),
+                height=90,
+            )
+            prevention_summary = st.text_area(
+                "예방사항",
+                value=str(selected.get("prevention_summary", "")),
+                height=90,
+            )
+            verification_note = st.text_area(
+                "검증 메모",
+                value=str(selected.get("verification_note", "")),
+                height=80,
+            )
+            rejection_reason = st.text_input(
+                "사용 제외 사유",
+                value=str(selected.get("rejection_reason", "")),
+            )
+
+        st.markdown("#### 검증 완료 전 필수 확인")
+        existing_checks = set(selected.get("verified_fields", []))
+        check_labels = (
+            ("summary_matches_source", "원본 이미지와 사고 개요가 일치함"),
+            ("date_matches_source", "날짜가 일치함"),
+            ("industry_matches_source", "업종이 일치함"),
+            ("accident_type_matches_source", "사고 유형이 일치함"),
+            ("single_accident_only", "다른 사고 내용이 섞이지 않음"),
+            ("no_ocr_noise", "의미 없는 OCR 문자열이 없음"),
+        )
+        checked: dict[str, bool] = {}
+        check_columns = st.columns(2)
+        for index, (field, label) in enumerate(check_labels):
+            with check_columns[index % 2]:
+                checked[field] = st.checkbox(
+                    label,
+                    value=field in existing_checks,
+                    key=f"review_check_{selected_case_id}_{field}",
+                )
+
+        action_columns = st.columns(4)
+        save_clicked = action_columns[0].form_submit_button("수정 저장", use_container_width=True)
+        manual_clicked = action_columns[1].form_submit_button("수동 검토", use_container_width=True)
+        reject_clicked = action_columns[2].form_submit_button("사용 제외", use_container_width=True)
+        verify_clicked = action_columns[3].form_submit_button("검증 완료", use_container_width=True)
+
+    if any((save_clicked, manual_clicked, reject_clicked, verify_clicked)):
+        target_status = current_status
+        if manual_clicked:
+            target_status = "manual_review"
+        elif reject_clicked:
+            target_status = "rejected"
+        elif verify_clicked:
+            target_status = "verified"
+        edited_fields = {
+            "accident_date": accident_date,
+            "industry": industry,
+            "accident_type": accident_type,
+            "accident_summary": accident_summary,
+            "cause_summary": cause_summary,
+            "prevention_summary": prevention_summary,
+        }
+        verified_fields = [field for field, is_checked in checked.items() if is_checked]
+        try:
+            verified_review.save_review_update(
+                selected_case_id,
+                edited_fields,
+                target_status,
+                verification_note,
+                verified_fields,
+                rejection_reason,
+            )
+            db_result = verified_review.rebuild_verified_case_db(
+                verified_review.load_review_records()
+            )
+            load_official_case_collection.clear()
+            st.success(
+                f"검수 상태를 저장했습니다. verified DB 상태: "
+                f"{db_result.get('status', '확인 필요')}"
+            )
+            st.rerun()
+        except verified_review.ReviewWorkflowBlocked as error:
+            st.error(str(error))
 
 
 def render_latest_reference_cases(
@@ -7064,6 +7273,7 @@ if is_admin_mode:
         <div class="portal-nav-item">대화 이력</div>
         <div class="portal-nav-item">공지 및 지침</div>
         <div class="portal-nav-group">지식 관리</div>
+        <div class="portal-nav-item">공식 사고사례 검수</div>
         <div class="portal-nav-item">Vector DB 관리</div>
         <div class="portal-nav-item">문서 관리</div>
         <div class="portal-nav-item">모델 관리</div>
@@ -7250,7 +7460,14 @@ if is_admin_mode:
     st.sidebar.caption("시연 시에는 110개 분진·보호구 보강 평가 세트를 선택하는 것을 권장합니다.")
     feature_page = st.sidebar.radio(
         "기능 메뉴",
-        ["안전 질의 및 답변", "중대재해처벌법 대응", "위험성평가 초안", "대화 이력", "공지 및 지침"],
+        [
+            "안전 질의 및 답변",
+            "중대재해처벌법 대응",
+            "위험성평가 초안",
+            "공식 사고사례 검수",
+            "대화 이력",
+            "공지 및 지침",
+        ],
         index=0,
     )
 
@@ -7278,6 +7495,11 @@ else:
         ["안전 질문 답변", "중대재해처벌법 대응 체크리스트", "위험성평가 초안", "대화 이력", "Excel 내보내기 또는 보고서"],
         index=0,
     )
+
+
+if is_admin_mode and feature_page == "공식 사고사례 검수":
+    render_verified_official_case_review_page()
+    st.stop()
 
 
 # ==============================

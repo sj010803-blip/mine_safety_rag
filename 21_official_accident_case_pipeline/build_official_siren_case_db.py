@@ -49,6 +49,9 @@ CLEAN_CASE_JSONL_PATH = CASE_JSONL_PATH.with_name(
 # explicitly disabled in this OCR-only stage.
 COLLECTION_NAME = "mine_official_accident_cases"
 LAW_COLLECTION_NAME = "mine_safety_docs"
+VERIFIED_COLLECTION_NAME = "mine_verified_official_accident_cases"
+VERIFICATION_STATUSES = ("unverified", "verified", "rejected", "manual_review")
+DEFAULT_VERIFICATION_STATUS = "unverified"
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 CASE_DB_BATCH_SIZE = 32
 CASE_TEXT_QUALITY_MINIMUM = 60
@@ -108,8 +111,40 @@ class PipelineBlocked(RuntimeError):
     """Raised when verified source or OCR quality is not safe enough."""
 
 
+def prepare_unverified_review_cases(cases: list[dict]) -> list[dict]:
+    """Add review fields without changing case_id or source OCR text.
+
+    OCR output must never be marked verified automatically. Only the separate
+    administrator review workflow can create that state after source-image
+    comparison.
+    """
+    prepared: list[dict] = []
+    for case in cases:
+        record = dict(case)
+        record.update(
+            {
+                "verification_status": DEFAULT_VERIFICATION_STATUS,
+                "verified_at": "",
+                "verification_note": "",
+                "verified_fields": [],
+                "original_page_image": "",
+                "original_page_number": case.get("page_start", ""),
+                "source_document": case.get("source_document", ""),
+                "extraction_engine": case.get(
+                    "extraction_engine", "tesseract_legacy_unverified"
+                ),
+                "extraction_quality": case.get("ocr_quality_status", "unverified"),
+                "rejection_reason": "",
+            }
+        )
+        prepared.append(record)
+    return prepared
+
+
 def verify_collection_name_separation() -> None:
     """Prevent future case data from sharing the existing law collection."""
+    if VERIFIED_COLLECTION_NAME in {COLLECTION_NAME, LAW_COLLECTION_NAME}:
+        raise PipelineBlocked("Verified accident cases require a separate collection.")
     if COLLECTION_NAME == LAW_COLLECTION_NAME:
         raise PipelineBlocked("사고사례와 기존 법령 컬렉션 이름은 분리되어야 합니다.")
 

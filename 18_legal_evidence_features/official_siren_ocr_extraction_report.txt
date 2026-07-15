@@ -1,0 +1,249 @@
+MineSafe AI 공식 중대재해사이렌 한국어 OCR·사례 추출 보고서
+작성일: 2026-07-15 (Asia/Seoul, 최종 검증 보완)
+
+1. 작업 목적
+- 이미지 기반 공식 중대재해사이렌 PDF에 한국어 OCR을 적용하고, 페이지 출처를 유지한 사고 한 건 단위 JSONL을 생성했다.
+- 이번 단계에서는 app.py, Streamlit UI, Gemini, 네이버 API, 기존·신규 ChromaDB를 사용하지 않았다.
+
+2. 이전 텍스트 추출 실패 원인
+- 2026년 1~3월 PDF 9개는 pypdf 일반 추출 결과가 모든 페이지에서 0자였던 이미지 기반 PDF다.
+- 2025년 통합본은 352쪽 중 120자 이상 추출되는 페이지가 4쪽뿐이고 총 추출량도 1,001자여서 일반 텍스트만으로 사고사례를 안전하게 만들 수 없었다.
+
+3. 이전 백업 접근 문제와 방지 조치
+- 저장소 루트 전체 재귀 검색을 사용하지 않았다.
+- manifest에 정확히 기록된 PDF 10개와 허용된 프로젝트 파일만 직접 열었다.
+- rglob, 저장소 전체 Get-ChildItem -Recurse, 저장소 전체 grep·Select-String·ripgrep을 사용하지 않았다.
+- app_backup_before_*.py와 기타 백업 파일을 검색하거나 열지 않았다.
+
+4. Tesseract 설치 여부
+- 설치됨.
+- 실행 파일: C:\Program Files\Tesseract-OCR\tesseract.exe
+- 공식 설치 안내: https://github.com/tesseract-ocr/tessdoc/blob/main/Installation.md
+- Windows 배포 안내: https://github.com/UB-Mannheim/tesseract/wiki
+- 사용 설치 파일: tesseract-ocr-w64-setup-5.5.0.20241111.exe
+- 설치 파일 SHA-256: F3FC4236425B690C8BE756F35793F77394EE004BE0A6460A440C754D892F68BC
+- 설치 완료 후 시스템 PATH나 TESSDATA_PREFIX를 영구 변경하지 않았다.
+
+5. Tesseract 버전
+- tesseract v5.5.0.20241111
+
+6. 사용한 언어 목록
+- kor, eng, osd를 로컬 tessdata 폴더에서 확인했다.
+- 실제 OCR 언어 설정: kor+eng
+
+7. kor.traineddata 출처와 SHA-256
+- 공식 저장소: https://github.com/tesseract-ocr/tessdata
+- kor.traineddata
+  URL: https://github.com/tesseract-ocr/tessdata/raw/refs/heads/main/kor.traineddata
+  크기: 15,317,715 bytes
+  SHA-256: 9520BFE9E3CFC38D4A808E036B0287C88A1D37FB80B9A0A23928DDCCDD20595B
+- eng.traineddata
+  URL: https://github.com/tesseract-ocr/tessdata/raw/refs/heads/main/eng.traineddata
+  크기: 23,466,654 bytes
+  SHA-256: DAA0C97D651C19FBA3B25E81317CD697E9908C8208090C94C3905381C23FC047
+- osd.traineddata
+  URL: https://github.com/tesseract-ocr/tessdata/raw/refs/heads/main/osd.traineddata
+  크기: 10,562,874 bytes
+  SHA-256: E19F2AE860792FDF372CF48D8CE70AE5DA3C4052962FE22E9DE1F680C374BB0E
+
+8. tessdata 경로
+- C:\Users\USER\Desktop\mine_safety_rag\21_official_accident_case_pipeline\tessdata_local
+- 프로젝트 로컬 경로를 명시적으로 전달했으며 시스템 전역 환경변수로 등록하지 않았다.
+
+9. 사용한 PDF 목록
+- 2025 중대재해 사이렌.pdf
+- 26년1월중대재해사이렌공개자료(중대재해발생알림-건설).pdf
+- 26년 1월중대재해사이렌공개자료(중대재해발생알림-제조).pdf
+- 26년 1월중대재해사이렌공개자료(중대재해발생알림-기타).pdf
+- 26년2월 중대재해사이렌공개자료(중대재해발생알림-건설).pdf
+- 26년2월 중대재해사이렌공개자료(중대재해발생알림-제조).pdf
+- 26년2월 중대재해사이렌공개자료(중대재해발생알림-기타).pdf
+- 26년3월 중대재해사이렌공개자료(중대재해발생알림-건설).pdf
+- 26년3월 중대재해사이렌공개자료(중대재해발생알림-제조).pdf
+- 26년3월 중대재해사이렌공개자료(중대재해발생알림-기타).pdf
+- 10개 모두 manifest의 파일명, 크기, SHA-256, 페이지 수, 공식 HTTPS 출처, 한국어 표시와 일치했다. 다시 다운로드하지 않았다.
+
+10. PDF별 페이지 수
+- 2025 통합본: 352쪽
+- 2026-01 건설 2쪽, 제조 8쪽, 기타 4쪽
+- 2026-02 건설 4쪽, 제조 8쪽, 기타 3쪽
+- 2026-03 건설 19쪽, 제조 11쪽, 기타 4쪽
+- 합계: 415쪽
+
+11. OCR 처리 페이지 수
+- 고유 페이지 415쪽을 처리했다.
+- 1차 300 DPI·PSM 6, 저품질 재시도는 400 DPI·grayscale·명암 보정·PSM 11을 사용했다.
+- 2025년 두 열 카드 후보에는 아직 두 번째 시도를 쓰지 않은 경우에만 PSM 3 열 분할 분석을 적용했다.
+- 모든 페이지의 총 attempt_count는 2 이하이며 3회 이상 처리된 페이지는 0쪽이다.
+
+12. OCR 성공 페이지 수
+- 페이지 자체 품질 상태 pass: 363쪽
+- review: 39쪽
+- failed: 13쪽
+- 2026년 우선 처리분은 63쪽 모두 pass다.
+
+13. 실패 페이지 수
+- 완전 실패(failed): 13쪽
+- 수동 검토 필요(review): 39쪽
+- 두 번 처리 후 pass가 아닌 52쪽은 다음 파일에 원문 없이 진단 메타데이터만 기록했다.
+  21_official_accident_case_ocr/failed_pages/official_siren_failed_pages.jsonl
+
+14. 재시도 페이지 수
+- 저품질 재시도: 총 64쪽(2026년 2쪽, 2025년 62쪽)
+- 2025년 두 열 레이아웃 분석: 총 154쪽
+- 이 가운데 두 개 이상의 유효 사고 블록이 확인되어 채택된 페이지: 62쪽
+- 레이아웃 분석도 페이지당 최대 2회 제한 안에서만 수행했다.
+
+15. PDF별 평균 글자 수
+- 2025 통합본: 745.59자
+- 2026-01 건설 484.00자, 제조 432.62자, 기타 444.75자
+- 2026-02 건설 551.25자, 제조 514.62자, 기타 528.67자
+- 2026-03 건설 533.47자, 제조 503.45자, 기타 575.75자
+
+16. 한국어 텍스트 포함 페이지 비율
+- 2026년: 63/63쪽, 100%
+- 2025년 전체: 333/352쪽, 94.60%
+- 전체: 396/415쪽, 95.42%
+
+17. 2026년 자료 품질 판정
+- 의미 있는 사고 카드 후보 63쪽 중 성공 63쪽, 실패·검토 0쪽이다.
+- 공백 제외 100자 이상 페이지 63쪽, 비정상 반복 문자 페이지 0쪽, 평균 509.41자다.
+- 성공률 100%로 기준 70%를 통과했다.
+
+18. 2025년 표본 OCR 결과
+- 앞부분·중간 균등 구간·후반부·기존 부분 텍스트 페이지를 합쳐 중복 제거 후 34쪽을 검사했다.
+- 구분 표지 1쪽을 제외한 의미 있는 후보 33쪽 중 26쪽이 pass, 7쪽이 review/failed다.
+- 성공률 78.79%, 평균 685.26자, 저품질 재시도 9쪽으로 기준 70%를 통과했다.
+
+19. 2025년 전체 OCR 실행 여부
+- 실행함.
+- 352쪽 중 구분 표지 등 9쪽을 제외한 의미 있는 후보 343쪽에서 292쪽 pass, 51쪽 review/failed다.
+- 의미 있는 후보 기준 성공률 85.13%로 70% 기준을 통과했다.
+- 전체 페이지 상태 자체는 pass 300쪽, review 39쪽, failed 13쪽이다.
+
+20. 추출된 사고사례 수
+- 422건
+- 필수 필드 누락 0건, 페이지 출처 누락 0건, 40자 미만 사고 개요 0건이다.
+- 권장 필드는 원문에서 확인된 경우만 채웠다: 날짜 262건, 업종 38건, 사고유형 154건, 예방대책 32건.
+- 발생 원인처럼 명시적으로 분리되지 않은 값은 추측하지 않고 빈 문자열로 유지했다.
+
+21. high·medium·low·review_required 수
+- high: 5건
+- medium: 124건
+- low: 279건
+- review_required: 14건
+- OCR이 불명확한 사례는 high나 medium으로 억지 분류하지 않았다.
+- 향후 사고사례 DB 후보는 high 5건과 medium 124건을 합한 129건이다.
+- low 279건은 향후 DB에서 제외한다.
+- review_required 14건은 향후 DB에서 제외하고 수동 검토 대상으로 유지한다.
+
+22. 중복 제거 수
+- 동일 content_hash 또는 정규화 사고 개요 중복 제거: 0건
+- 최종 JSONL 내부 content_hash 중복: 0건
+- case_id 중복: 0건
+- 페이지 캐시의 PDF SHA-256·페이지 조합 중복: 0건
+- OCR 페이지 JSONL의 text_hash 중복은 3개 그룹이며, 각 그룹의 첫 행을 제외하면 19행이다. 모두 서로 다른 원본 페이지의 review 또는 failed 결과로, 비어 있거나 저품질인 OCR 출력이 반복된 경우다.
+- 사고사례 JSONL의 case_id와 content_hash 중복은 모두 0건이므로 422건 사례의 고유성 조건은 충족했다.
+
+23. 생성한 case_id 목록
+- 전체 422개 ID는 아래의 연속 범위이며 중간 누락과 중복이 없다.
+- KOSHA-SIREN-2025-BOOK-0001 ~ KOSHA-SIREN-2025-BOOK-0365 (365건)
+- KOSHA-SIREN-2026-01-CONSTRUCTION-0001 ~ 0002 (2건)
+- KOSHA-SIREN-2026-01-MANUFACTURING-0001 ~ 0008 (8건)
+- KOSHA-SIREN-2026-01-OTHER-0001 ~ 0004 (4건)
+- KOSHA-SIREN-2026-02-CONSTRUCTION-0001 ~ 0004 (4건)
+- KOSHA-SIREN-2026-02-MANUFACTURING-0001 ~ 0008 (8건)
+- KOSHA-SIREN-2026-02-OTHER-0001 ~ 0003 (3건)
+- KOSHA-SIREN-2026-03-CONSTRUCTION-0001 ~ 0018 (18건)
+- KOSHA-SIREN-2026-03-MANUFACTURING-0001 ~ 0006 (6건)
+- KOSHA-SIREN-2026-03-OTHER-0001 ~ 0004 (4건)
+
+24. 페이지 출처 누락 여부
+- 누락 0건.
+- 모든 사례에 source_document, source_file, source_page_url, page_start, page_end를 기록했다.
+- 시각 표본 4쪽을 점검했고, 2025년 구분 표지는 사례에서 제외하고 한 페이지 두 카드 표본은 2건으로 분리되는 것을 확인했다.
+
+25. 생성한 OCR 페이지 JSONL
+- C:\Users\USER\Desktop\mine_safety_rag\21_official_accident_case_ocr\page_text\official_siren_ocr_pages.jsonl
+- 415행, 899,195 bytes
+- 원본 SHA-256, 페이지 번호, 설정, 시도 수, 문자 수, 한글 수, text_hash, 품질 상태와 OCR 텍스트를 저장했다.
+
+26. 생성한 사고사례 JSONL
+- C:\Users\USER\Desktop\mine_safety_rag\22_official_accident_case_chunks\official_siren_cases_2025_to_2026_q1.jsonl
+- 422행, 1,176,635 bytes
+- source_type=official_serious_accident_siren, publisher=한국산업안전보건공단, official_case=true를 유지했다.
+
+27. 생성하지 못한 결과와 이유
+- searchable PDF는 생성하지 않았다. 이번 목표는 페이지 텍스트 캐시와 사례 단위 JSONL의 품질 검증이며 원본 PDF를 덮어쓰지 않았다.
+- 52쪽은 OCR 품질이 pass가 아니므로 추측 보완하지 않고 별도 진단 목록으로 남겼다.
+- 일부 권장 필드가 비어 있다. OCR 오탈자를 사실처럼 자동 수정하거나 원문에 없는 값을 만들지 않기 위해서다.
+
+28. 기존 테스트 결과
+- test_minesafe_non_destructive_regression.py: 14/14 통과, 실패·오류·경고 0.
+- test_rag_evidence_sufficiency_guardrail.py: 10/10 통과, 실패·오류 0.
+- test_worker_easy_explanation_mode.py: 15/15 통과, 실패·오류 0.
+- 기존 핵심 테스트 합계: 39/39 통과.
+- test_official_siren_case_rag.py: 20개 중 8개 통과, 12개 skip, 실패·오류 0.
+- 12개 skip은 신규 사례 Vector DB와 app.py 통합을 아직 하지 않은 현재 단계에서 의도된 결과다.
+- 공식 사례 테스트에서 발견된 컬렉션 분리 보호 조건 누락은 파이프라인에 verify_collection_name_separation()을 추가해 보완했으며, 재검사에서 통과했다.
+
+29. 신규 테스트 결과
+- 명령: python -B -m unittest discover -s "18_legal_evidence_features" -p "test_official_siren_ocr_extraction.py" -v
+- 결과: 18개 통과, 실패 0, 오류 0.
+- 문법 검사: pipeline syntax OK.
+- app.py 문법 검사: app.py syntax OK.
+- 금지 백업 검색 방지, Tesseract 탐지, kor+eng, 로컬 tessdata, 캐시, 최대 2회, 품질 판정, 빈 결과·표지 제외, 재현 가능한 ID, 중복 제거, review_required, 원인·예방대책 비생성, app.py 미접근, DB 미접근, Git ignore, 인증정보 미접근, 두 카드 분리를 검사했다.
+- JSONL 무결성 재검증: OCR 페이지 415행, pass 363·review 39·failed 13; 사고사례 422행, high 5·medium 124·low 279·review_required 14.
+
+30. app.py를 수정하지 않았는지 여부
+- 수정하지 않았다.
+- 이번 최종 검증 요청에서 허용한 기존 회귀 테스트와 문법 검사에 필요한 범위로만 읽었다.
+- 작업 전 Git 상태에서 app.py는 clean이었고, 테스트 뒤에도 modified 상태가 아님을 확인했다.
+
+31. 기존 DB에 접근하지 않았는지 여부
+- 기존 10_vector_db, 10_vector_db_with_major_accident_docs와 신규 23_official_accident_case_vector_db를 열거나 수정하거나 생성하지 않았다.
+- 파이프라인의 build_vector_db는 이 OCR 단계에서 항상 PipelineBlocked를 발생시키며 chromadb를 import하지 않는다.
+
+32. .env와 인증정보에 접근하지 않았는지 여부
+- .env, API Key, Client Secret, 인증정보 파일 및 환경변수 실제 값에 접근하거나 출력하지 않았다.
+
+33. Git whitelist
+- .gitignore
+- 21_official_accident_case_pipeline/build_official_siren_case_db.py
+- 21_official_accident_case_pipeline/official_siren_source_manifest.json
+- 18_legal_evidence_features/test_official_siren_case_rag.py
+- 18_legal_evidence_features/test_official_siren_ocr_extraction.py
+- 18_legal_evidence_features/official_siren_case_rag_report.txt
+- 18_legal_evidence_features/official_siren_ocr_extraction_report.txt
+- 이 중 이번 작업에서 실제 변경·생성된 작은 파일만 향후 정확한 경로로 stage할 수 있다.
+
+34. Git 제외 파일
+- 21_official_accident_case_docs/
+- 21_official_accident_case_ocr/
+- 21_official_accident_case_pipeline/tessdata_local/
+- 22_official_accident_case_chunks/
+- 23_official_accident_case_vector_db/
+- PDF, OCR 원문, 실패 페이지 진단, 사례 JSONL, 언어 모델은 git check-ignore로 제외됨을 확인했다.
+- app.py, 백업, .env, 평가 파일, 기존 관련 없는 변경 파일도 stage하지 않는다.
+
+35. 남은 한계
+- 2025년 전체에서 review 39쪽과 failed 13쪽은 수동 확인 대상이다.
+- 14건은 OCR 품질 때문에 review_required로 분류했다.
+- 두 열 카드 후보 160쪽 중 154쪽을 열 분할 분석했고 62쪽을 복수 사례로 채택했다. 나머지는 두 유효 블록 조건을 충족하지 않아 기존 보수적 결과를 유지했다.
+- 권장 날짜·업종·사고유형·예방대책은 OCR이 명확히 인식한 경우에만 채워 누락이 남아 있다.
+- 이번 단계에서는 Vector DB를 만들지 않았다. 향후 DB 후보는 high+medium 129건으로 제한하며 low 279건과 review_required 14건은 포함하지 않는다.
+- OCR 페이지 text_hash 반복은 저품질 출력 3개 그룹에 남아 있으므로 페이지 재검토 시 참고해야 한다. 사고사례 case_id와 content_hash 중복은 없다.
+
+36. 교수님 설명용 문구
+기존 공식 중대재해사이렌 PDF는 이미지 기반이라 일반 텍스트 추출로 사고 내용을 확보할 수 없었습니다. 이번에는 공식 원본의 해시와 페이지를 먼저 검증한 뒤 한국어 OCR을 적용하고, 페이지별 품질 상태와 출처를 함께 저장했습니다. 한 페이지에 사고 카드가 두 개 있는 경우에는 열 분할 OCR로 사고별로 나누되, 원문에 없는 원인이나 예방대책은 만들지 않았습니다. OCR이 불명확한 자료는 review_required로 남겨 사람이 추가 확인할 수 있게 했으며, 품질이 검증되기 전에는 웹사이트나 Vector DB를 변경하지 않았습니다.
+
+Git 결과
+- 현재 브랜치: main
+- local main: 5ae965304cad2aebb543ef2ffd87926eacb8ee81
+- origin/main: 5ae965304cad2aebb543ef2ffd87926eacb8ee81
+- ahead 0, behind 0, fetch origin 성공
+- 작업 전 staged 파일: 없음
+- Git stage 대상은 이 보고서를 포함한 whitelist 파일 중 실제 변경·생성된 파일로만 제한한다.
+- commit 메시지: feat: add Korean OCR pipeline for official accident cases
+- 이 보고서가 포함되는 commit은 자신의 최종 SHA와 push 이후 원격 상태를 파일 내용에 미리 기록할 수 없다. 정확한 staged 목록, commit SHA, push 결과와 local/origin 최종 SHA는 commit·push 완료 후 Codex 완료 보고에 기록한다.
+- app.py, PDF, OCR 페이지 JSONL, 사고사례 JSONL, OCR 캐시, tessdata, Vector DB, chunks, 백업, .env, 평가 파일과 기존 관련 없는 변경 파일은 stage하지 않는다.

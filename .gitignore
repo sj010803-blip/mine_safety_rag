@@ -30,3 +30,10 @@ node_modules/
 
 # Temporary office files
 ~$*
+
+# Official serious-accident source data and generated runtime artifacts
+21_official_accident_case_docs/
+22_official_accident_case_chunks/
+23_official_accident_case_vector_db/
+21_official_accident_case_ocr/
+21_official_accident_case_pipeline/tessdata_local/

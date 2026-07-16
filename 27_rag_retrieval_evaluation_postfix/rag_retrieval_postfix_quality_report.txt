@@ -1,0 +1,108 @@
+MineSafe AI 수정 후 RAG 검색 회귀평가 품질 보고서
+
+평가명: 질문 context 및 미완성 답변 안전장치 수정 후 회귀평가
+평가 유형: post-fix regression evaluation
+생성 시각: 2026-07-16T22:52:53+09:00
+
+[중요 주의]
+동일한 30문항을 재사용한 기존 기준선과의 변화 확인용 수정 후 회귀평가이며, 최종 잠금 평가·독립 평가·완전한 블라인드 평가가 아니다.
+RAG 검색 지표는 법적 정확도, 최종 답변 정확도 또는 일반화 성능 확정을 직접 의미하지 않는다.
+
+1. 평가 목적
+- 기존 26_rag_retrieval_evaluation 결과는 수정 전 자동 기준선으로 보존한다.
+- 현재 app.py 검색 로직으로 동일한 30문항을 다시 실행해 변화만 확인한다.
+- 질문 내용·ID·유형·난이도·기대 문서·기대 요소·Top K·지표 계산식을 변경하지 않았다.
+
+2. 실행 환경
+- Python: C:\Users\USER\Desktop\mine_safety_rag\.venv\Scripts\python.exe
+- embedding 모델: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+- embedding 차원: 384
+- normalize_embeddings: True
+- Vector DB: 10_vector_db_with_major_accident_docs (평가 목적의 로컬 읽기 질의만 수행)
+- collection: mine_safety_docs
+- Top K: 5
+- 외부 Gemini·Naver·인터넷 호출: 없음
+
+3. 버전 무결성
+- 수정 전 기준선 app SHA-256: 983B80A2C390829BA7750830696BC333E8AEABC1A7A4F7407237995AB4AC2FF2
+- 수정 후 app SHA-256 작업 전/후: 3D798DA421F8BBE08B16135C85E084ACB85D0ACD16AC8939A647A184A27E4680 / 3D798DA421F8BBE08B16135C85E084ACB85D0ACD16AC8939A647A184A27E4680
+- 원본 110문항 SHA-256 작업 전/후: 544888A7717DD31CB0AF5099128D8493DE7AD50EB38F9ACE90FEFA2AFD72277A / 544888A7717DD31CB0AF5099128D8493DE7AD50EB38F9ACE90FEFA2AFD72277A
+- Gold set SHA-256: F950A1505743A4B3607F0EC3BC60D8ED477FB6C3627F14FCD156BF7C81B7D076
+- DB collection count 작업 전/후: 820 / 820
+- DB ID SHA-256 작업 전/후: 53180E445B05917FC93D7E6616D251F46A27741399092013073E0CB0C812E39D / 53180E445B05917FC93D7E6616D251F46A27741399092013073E0CB0C812E39D
+- 물리 파일 주의: ChromaDB 읽기 질의 과정에서 data_level0.bin, length.bin, chroma.sqlite3의 수정시각이 평가 시각으로 갱신됐다. 논리 count와 ID SHA는 동일하지만 작업 전 물리 파일 SHA를 수집하지 않아 물리 바이트 무변경은 단정하지 않는다.
+
+4. 기존 기준선 지표
+- Document Hit@1: 0.4000
+- Document Hit@3: 0.5333
+- Document Hit@5: 0.5667
+- MRR: 0.4639
+- Element Coverage@1: 0.1135
+- Element Coverage@3: 0.2294
+- Element Coverage@5: 0.2856
+- Metadata 완전성: 0.7500
+- 수동 검토 필요 문항 수: 28
+- 검색 실행 실패 문항 수: 0
+
+5. 수정 후 회귀평가 지표
+- Document Hit@1: 0.4000
+- Document Hit@3: 0.5333
+- Document Hit@5: 0.5667
+- MRR: 0.4639
+- Element Coverage@1: 0.1135
+- Element Coverage@3: 0.2294
+- Element Coverage@5: 0.2856
+- Metadata 완전성: 0.7500
+- 수동 검토 필요 문항 수: 28
+- 검색 실행 실패 문항 수: 0
+
+6. 기존 대비 증감
+- Document Hit@1: +0.0000
+- Document Hit@3: +0.0000
+- Document Hit@5: +0.0000
+- MRR: +0.0000
+- Element Coverage@1: +0.0000
+- Element Coverage@3: +0.0000
+- Element Coverage@5: +0.0000
+- Metadata 완전성: +0.0000
+- 수동 검토 필요 문항 수: +0
+- 검색 실행 실패 문항 수: +0
+
+7. 유형별 Hit@3 변화
+- 낙반·붕락·지보: 기준선 0.3333 / 수정 후 0.3333 / 증감 +0.0000
+- 발파·불발: 기준선 0.6667 / 수정 후 0.6667 / 증감 +0.0000
+- 분진·호흡보호·보호구: 기준선 1.0000 / 수정 후 1.0000 / 증감 +0.0000
+- 사고보고·응급조치: 기준선 0.3333 / 수정 후 0.3333 / 증감 +0.0000
+- 위험성평가·KRAS·TBM: 기준선 0.6667 / 수정 후 0.6667 / 증감 +0.0000
+- 장비·운반·차량: 기준선 0.3333 / 수정 후 0.3333 / 증감 +0.0000
+- 전기안전·에너지 차단: 기준선 0.3333 / 수정 후 0.3333 / 증감 +0.0000
+- 중대재해처벌법·증빙자료: 기준선 0.3333 / 수정 후 0.3333 / 증감 +0.0000
+- 컨베이어·끼임: 기준선 0.3333 / 수정 후 0.3333 / 증감 +0.0000
+- 환기·메탄·유해가스·산소부족: 기준선 1.0000 / 수정 후 1.0000 / 증감 +0.0000
+
+8. 난이도별 Hit@3 변화
+- 상: 기준선 0.8750 / 수정 후 0.8750 / 증감 +0.0000
+- 중: 기준선 0.3810 / 수정 후 0.3810 / 증감 +0.0000
+- 하: 기준선 1.0000 / 수정 후 1.0000 / 증감 +0.0000
+
+9. 수동 검토 필요 문항
+- 28문항: R001, R002, R003, R004, R005, R006, R008, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030
+
+10. 검색 실행 실패 문항
+- 0문항: 없음
+
+11. 산출물
+- rag_retrieval_postfix_results_30.tsv
+- rag_retrieval_postfix_results_30.xlsx
+- rag_retrieval_postfix_manual_review_30.xlsx
+- rag_retrieval_postfix_summary.xlsx
+- rag_retrieval_baseline_vs_postfix.xlsx
+- rag_retrieval_baseline_vs_postfix.png
+- rag_retrieval_postfix_quality_report.txt
+- evaluation_manifest.json
+
+12. 평가 한계
+- 동일한 30문항을 재사용했으므로 최종 잠금 성능 평가나 독립·블라인드 평가가 아니다.
+- Hit@K와 MRR은 기대 문서 검색 순위, Element Coverage는 규칙 기반 용어 출현을 측정한다.
+- 검색 결과가 좋아져도 법령 해석, 현장 사실관계, 최종 답변의 법적·실무적 정확성을 자동으로 보장하지 않는다.
+- 자동 REVIEW 판정 문항은 수동 검토 workbook에서 사람이 검색 chunk를 확인해야 한다.

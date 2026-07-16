@@ -17,6 +17,8 @@ from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 EVAL_DIR = ROOT / "26_rag_retrieval_evaluation"
+POSTFIX_EVAL_DIR = ROOT / "27_rag_retrieval_evaluation_postfix"
+POSTFIX_MANIFEST_PATH = POSTFIX_EVAL_DIR / "evaluation_manifest.json"
 SCRIPT_PATH = EVAL_DIR / "run_rag_retrieval_quality_evaluation.py"
 SOURCE_PATH = ROOT / "02_질문시나리오" / "question_scenarios_110.tsv"
 APP_PATH = ROOT / "app.py"
@@ -86,6 +88,7 @@ class RagRetrievalQualityEvaluationTests(unittest.TestCase):
         cls.integrity = _integrity_values()
         cls.gold_rows = _read_tsv(GOLD_PATH)
         cls.result_rows = _read_tsv(RESULT_TSV_PATH)
+        cls.postfix_manifest = json.loads(POSTFIX_MANIFEST_PATH.read_text(encoding="utf-8"))
 
     def test_01_original_110_question_file_is_unchanged(self) -> None:
         self.assertEqual(_sha256(SOURCE_PATH), self.module.EXPECTED_SOURCE_SHA256)
@@ -357,8 +360,19 @@ class RagRetrievalQualityEvaluationTests(unittest.TestCase):
             self.assertGreaterEqual(width, 800)
             self.assertGreaterEqual(height, 500)
 
-    def test_30_app_py_is_unchanged(self) -> None:
-        self.assertEqual(_sha256(APP_PATH), self.module.EXPECTED_APP_SHA256)
+    def test_30_app_sha_is_versioned_by_evaluation_manifest(self) -> None:
+        self.assertEqual(
+            self.postfix_manifest["baseline_app_sha256"],
+            self.module.EXPECTED_APP_SHA256,
+        )
+        self.assertEqual(
+            _sha256(APP_PATH),
+            self.postfix_manifest["postfix_app_sha256"],
+        )
+        self.assertEqual(
+            self.postfix_manifest["evaluation_type"],
+            "post-fix regression evaluation",
+        )
 
     def test_31_vector_database_logical_snapshot_is_unchanged(self) -> None:
         self.assertEqual(self.integrity.get("db_count_before"), self.integrity.get("db_count_after"))

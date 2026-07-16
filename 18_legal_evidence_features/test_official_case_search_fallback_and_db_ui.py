@@ -220,13 +220,29 @@ class OfficialCaseSearchFallbackAndDbUiTests(unittest.TestCase):
             "작업구역의 안전 표지와 출입문 잠금 상태를 확인하던 중 미끄러져 넘어지는 사고가 "
             "발생했습니다. 전기 작업이나 전원 설비와는 관련이 없는 사례입니다."
         ).replace("전기 작업이나 전원 설비와는 관련이 없는 ", "")
+        electrical_direct = ("감전", "전기설비", "누전")
+        electrical_analogous = (
+            "정비 중 전원 투입", "에너지 차단", "잠금", "표지", "설비 재가동",
+        )
         relation, _ = self.review.classify_public_case_relation(
             generic_lockout,
-            ("감전",),
-            ("누전",),
+            electrical_direct,
+            electrical_analogous,
             "electrical_energy",
         )
         self.assertEqual("", relation)
+        actual_electrical = self.text_safe_case("ACTUAL-ELECTRICAL")
+        actual_electrical["display_accident_summary"] = (
+            "전기설비 정비 중 다른 작업자가 전원을 투입해 작업자가 감전될 위험이 발생했습니다. "
+            "전원 차단과 재투입 방지 조치가 필요한 상황이었습니다."
+        )
+        relation, _ = self.review.classify_public_case_relation(
+            actual_electrical,
+            electrical_direct,
+            electrical_analogous,
+            "electrical_energy",
+        )
+        self.assertIn(relation, {"direct", "analogous"})
 
     def test_14_public_results_are_limited_to_three(self):
         self.assertEqual(3, len(self.ranked([self.text_safe_case(f"T-{i}") for i in range(6)])))

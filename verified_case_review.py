@@ -139,6 +139,11 @@ RISK_FAMILY_TERMS = {
         "떨어짐", "추락", "고소작업", "개구부", "사다리", "작업발판",
     ),
 }
+
+ELECTRICAL_CASE_ANCHOR_TERMS = (
+    "감전", "누전", "전기설비", "전원", "충전부", "전선", "전기",
+    "활선", "접지", "절연", "차단기", "케이블", "배선",
+)
 CONTROLLED_RECOVERY_INDUSTRIES = {
     "건설업", "제조업", "기타업종", "광업", "채석업", "운수업", "서비스업",
 }
@@ -881,10 +886,7 @@ def classify_case_risk_families(case: dict[str, Any]) -> set[str]:
         ):
             continue
         if family == "electrical_energy" and not any(
-            term in searchable
-            for term in (
-                "감전", "누전", "전기설비", "전원", "충전부", "전선", "전기",
-            )
+            term in searchable for term in ELECTRICAL_CASE_ANCHOR_TERMS
         ):
             continue
         families.add(family)
@@ -897,13 +899,23 @@ def classify_public_case_relation(
     analogous_terms: tuple[str, ...] | list[str],
     question_risk_family: str = "",
 ) -> tuple[str, list[str]]:
+    case_risk_families = (
+        classify_case_risk_families(case) if question_risk_family else set()
+    )
     relation_type, matched_terms = classify_case_relation(case, direct_terms, analogous_terms)
     if relation_type:
+        # "잠금"·"표지" 같은 일반 안전용어만 일치한 비전기 사례가
+        # 전기안전 유사 사례로 노출되지 않도록 실제 전기 문맥을 재확인한다.
+        if (
+            question_risk_family == "electrical_energy"
+            and question_risk_family not in case_risk_families
+        ):
+            return "", []
         return relation_type, matched_terms
     if (
         effective_public_case_tier(case) == TEXT_SAFE_FALLBACK_TIER
         and question_risk_family
-        and question_risk_family in classify_case_risk_families(case)
+        and question_risk_family in case_risk_families
     ):
         searchable = " ".join(
             sanitize_display_text(case.get(field, "")).lower()

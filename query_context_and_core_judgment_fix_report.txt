@@ -1,0 +1,120 @@
+MineSafe AI 질문 세부 상황 보존 및 핵심판단 완결성 수정 보고서
+작성일: 2026-07-16
+
+1. 실행 환경 확인
+- 실행 중인 실제 Streamlit 프로세스는 발견되지 않았다. 프로세스 조회 명령 자체의 PowerShell 프로세스만 검색 조건에 포함됐다.
+- 앱 핵심 의존성과 테스트를 확인한 Python: C:\Users\USER\Desktop\mine_safety_rag\.venv\Scripts\python.exe
+- .venv 모듈 상태: chromadb 1.5.9, streamlit 1.58.0, sentence-transformers 5.6.0 정상 import
+- .venv에 pytest 8.4.2를 설치했다. pip가 필수 의존성 iniconfig 2.3.0과 pluggy 1.6.0도 함께 설치했다. 기존 패키지 업데이트·삭제는 없었다.
+- requirements.txt 및 다른 프로젝트 설정 파일은 수정하지 않았다.
+
+2. 작업 전 전체 테스트 결과
+- 명령: C:\Users\USER\Desktop\mine_safety_rag\.venv\Scripts\python.exe -m pytest -q
+- 결과: 235 passed in 9.58s
+- 실패 0, 오류 0, skip 0
+- 명령: C:\Users\USER\Desktop\mine_safety_rag\.venv\Scripts\python.exe -m py_compile app.py
+- 결과: 통과
+
+3. app.py SHA-256 및 백업
+- 수정 전 SHA-256: 983B80A2C390829BA7750830696BC333E8AEABC1A7A4F7407237995AB4AC2FF2
+- 수정 후 SHA-256: 3D798DA421F8BBE08B16135C85E084ACB85D0ACD16AC8939A647A184A27E4680
+- 백업 파일: app_backup_before_query_context_and_core_judgment_fix_20260716_221525.py
+- 백업 직후 원본과 백업의 크기는 각각 399281바이트였고 SHA-256도 동일했다.
+
+4. 실제 확인한 문제 원인
+- 질문 세부 상황 손실 원인:
+  발파 관련 질문이 BLASTING_MISFIRE_INTENT 하나로 합쳐지고, 검색 확장어와 안정형 답변이 불발공·발파 후 점검 중심으로 고정돼 있었다. 우천·발파 전 단계가 별도 상태로 보존되지 않았다.
+  천반과 유출수가 함께 있는 질문은 낙반/붕락/지보 유형으로 분류될 수 있었지만, 검색 확장과 안정형 조치에 유출수 증가·출수·배수·집수 신호와 관리자 조치 순서를 보존하는 별도 context가 없었다.
+- 핵심판단/하이브리드 끊김 원인:
+  Gemini SDK 결과에서 response.text만 읽고 candidates의 finish_reason을 확인하지 않았다. 비어 있지 않은 문자열이면 성공으로 처리하여 MAX_TOKENS 종료, 프롬프트 조각, 짧거나 닫히지 않은 문장도 사용자 렌더링 경로로 전달될 수 있었다.
+  메인 화면의 split_answer_for_dashboard는 KRAS와 보조 답변의 섹션 경계를 나누지만, '제공된 [안정' 같은 조각을 잘라 만든 원인은 아니었다. make_answer_summary의 길이 제한도 평가 요약용이며 메인 답변 끊김 원인은 아니었다.
+
+5. 질문 세부 위험 신호 추출 방식
+- 원래 질문은 화면·이력용으로 유지하고 검색·분류용 normalized_question을 별도로 만들었다.
+- 허용된 오타만 제한적으로 정규화했다.
+  대처방안 수입 -> 대처방안 수립
+  대처방안을 수입 -> 대처방안을 수립
+  광산안전전관리자 -> 광산안전관리자
+- 우천/강우 계열 + 발파 계열 + 발파 후/불발 표현 없음 조건을 rainy_pre_blasting으로 판정한다.
+- 천반/지보 계열 + 유출수/출수/누수/지하수 유입 계열을 roof_water_increase로 판정한다.
+- 발파 후/불발/불발공/잔류 화약 표현이 있으면 post_blasting_misfire로 유지한다.
+- context에는 큰 위험 유형, 세부 위험 신호, 작업 단계, 요구 답변 형태, 표시 label을 분리해 저장한다.
+
+6. 검색 질의 보강 방식
+- Vector DB와 embedding은 변경하지 않았다.
+- rainy_pre_blasting은 기존 불발공·발파 후 전용 확장어를 사용하지 않고 우천·강우, 낙뢰, 발파공 침수·공내수, 화약류·뇌관·점화설비 습윤·손상, 배수·접근로, 사면·갱구·천반·부석, 작업 연기·중지와 작업 전 점검을 보조 문맥으로 붙인다.
+- roof_water_increase는 천반, 유출수·출수·누수·지하수 유입, 유출량 증가, 균열·박리·부석, 지보재 변형, 배수·집수, 낙반, 작업중지·대피·출입통제와 재개 전 확인을 붙인다.
+- 세부 신호가 있으면 내부 후보 수를 제한적으로 넓히고 해당 신호가 들어간 검색 결과를 우선 재정렬한다. 우천 발파 질문에서는 우천 관련 신호가 전혀 없는 불발 문서의 가중치를 낮춘다.
+
+7. 핵심 요소 누락 판정 및 보완
+- 기존 공식 근거 충분성 판정은 그대로 유지했다. 질문 핵심 요소 반영 상태는 별도의 상태로 분리했다.
+- 상태 문구:
+  질문 핵심 요소 반영 충분
+  질문 핵심 요소 반영 보완 필요
+- 우천 발파 전 질문은 기상·낙뢰, 발파공 내부 물, 화약류·뇌관·점화설비 습윤·손상, 배수·접근로, 사면·갱구·천반·부석, 작업 연기·중지, 책임자 확인·기록을 검사한다.
+- 천반 유출수 증가는 작업중지, 대피, 출입통제, 보고, 천반·지보·출수·배수 점검, 균열·박리·부석·지보 변형 확인, 개선조치, 재개 확인, 기록의 존재와 순서를 검사한다.
+- 부족하면 완결된 규칙 기반 '질문 세부 위험 보완'을 답변에 한 번 붙이고 다시 검사한다.
+- 화면에는 세부 질문 유형 label과 핵심 요소 반영 상태를 작은 caption으로 표시하도록 연결했다.
+
+8. 미완성 답변 재시도 및 fallback 방식
+- 빈 문자열, 지나치게 짧은 문자열, '제공된 [안정' 등 프롬프트 조각, 닫히지 않은 대괄호, 콜론·쉼표·접속 표현·빈 목록 뒤의 갑작스러운 종료, 필수 제목 누락을 검사한다.
+- SDK candidates[0].finish_reason을 읽고 MAX_TOKENS, LENGTH, SAFETY, RECITATION, MALFORMED 종료를 미완성으로 처리한다.
+- 정상적인 여러 줄 한국어 목록은 마침표가 없다는 이유만으로 실패 처리하지 않는다.
+- 미완성이면 원래 긴 프롬프트를 반복하지 않고 질문 context, 안정형 핵심조치와 검색 근거만 담은 짧은 구조화 프롬프트로 정확히 한 번 재생성한다.
+- 두 번째 결과도 미완성이거나 API가 실패하면 부분 문자열을 버리고 기존 안정형 답변으로 fallback한다.
+- 개발자 상태에는 completion_retry_used, generation_calls와 fallback 여부만 남기며 미완성 원문을 사용자 답변으로 반환하지 않는다.
+- 핵심판단 요약은 '즉시 판단' 또는 '핵심 판단' 섹션에서 완결된 내용을 사용하고, 조치는 실제 '우선 조치' 또는 '조치별 설명' 항목을 우선 사용한다.
+
+9. 수정 및 생성 파일
+- 수정한 기존 파일:
+  app.py
+- 생성한 파일:
+  app_backup_before_query_context_and_core_judgment_fix_20260716_221525.py
+  test_query_context_signal_guardrail.py
+  test_core_judgment_completion_guardrail.py
+  query_context_and_core_judgment_fix_report.txt
+- whitelist 밖 파일은 수정하지 않았다.
+
+10. 신규 테스트 목록과 결과
+- test_query_context_signal_guardrail.py: 8개
+  우천 발파 전 분리, 검색·답변 핵심개념, 제한 정규화, 천반 유출수 context, 조치 순서, 일반 낙반과 구분, 기존 불발 대응, 범위 밖 차단을 검사한다.
+- test_core_judgment_completion_guardrail.py: 9개
+  프롬프트 조각, 정상 목록 오판 방지, MAX_TOKENS, 1회 재생성 성공, 2회 미완성, 안정형 fallback, 기존 API 실패 fallback, 완결된 핵심판단, 최대 2회 생성 호출을 검사한다.
+- 명령: C:\Users\USER\Desktop\mine_safety_rag\.venv\Scripts\python.exe -m pytest -q test_query_context_signal_guardrail.py test_core_judgment_completion_guardrail.py
+- 결과: 17 passed in 1.53s
+
+11. 세 예시 질문 기대 동작 확인
+- Q1 우천 시 발파 작업 전 + '대처방안을 수입'
+  내부적으로 '대처방안을 수립'으로 정규화됨.
+  signal=rainy_pre_blasting, label=발파/불발 · 우천 작업 전 점검.
+  첫 조치는 기상·강우·낙뢰 확인, 마지막 조치는 책임자 확인과 기록이며 핵심 요소 반영 충분.
+- Q2 갱내 천반 유출수 증가 + '광산안전전관리자'
+  내부적으로 '광산안전관리자'로 정규화됨.
+  signal=roof_water_increase, label=낙반/붕락/지보 · 천반 유출수 증가.
+  작업중지부터 대피·통제·보고·점검·개선·재개 확인·기록 순서이며 핵심 요소 반영 충분.
+- Q3 발파 작업 후 불발공 의심
+  signal=post_blasting_misfire, label=발파/불발 · 발파 후 불발 의심.
+  기존 임의 접근 금지, 출입통제, 발파 책임자 확인과 기록 대응을 유지함.
+
+12. 작업 후 전체 회귀 테스트 결과
+- 명령: C:\Users\USER\Desktop\mine_safety_rag\.venv\Scripts\python.exe -m pytest -q
+- 결과: 251 passed, 1 failed in 11.83s
+- 실패:
+  18_legal_evidence_features/test_rag_retrieval_quality_evaluation.py::RagRetrievalQualityEvaluationTests::test_30_app_py_is_unchanged
+- 정확한 원인:
+  이 테스트는 EXPECTED_APP_SHA256을 수정 전 값 983B80A2...로 고정하고 app.py가 바뀌지 않았는지 검사한다. 이번 작업은 app.py 수정이 목적이므로 기능 테스트와 무관하게 반드시 실패한다.
+- 현재 whitelist에는 위 기존 테스트 파일이 없으므로 수정하지 않았다. 해당 고정 해시 계약을 새 app.py 해시로 갱신하려면 18_legal_evidence_features/test_rag_retrieval_quality_evaluation.py에 대한 별도 수정 허용이 필요하다.
+- 최종 app.py 문법 검사: 통과
+
+13. 남은 한계 및 수동 확인 항목
+- 전체 회귀는 기능 실패가 아닌 기존 고정 SHA 검사 1건 때문에 완전 통과 상태가 아니다.
+- 실행 중 Streamlit 프로세스가 없어 실제 브라우저 화면 렌더링은 확인하지 못했다.
+- 실제 Vector DB 검색 결과와 Gemini 실응답은 보호 경로 및 외부 API 무호출 원칙 때문에 수동 실행하지 않았다.
+- 화면에서 세부 질문 유형 caption, 핵심 요소 반영 상태, 우천 발파 전 답변의 불발 편향 여부, 천반 유출수 조치 순서, 미완성 응답 fallback 개발자 상태를 확인해야 한다.
+
+14. 보호 범위 및 Git 수행 여부
+- .env, API Key, Client Secret 내용을 열거나 출력하지 않았다.
+- 08_chunks, 기존 Vector DB, 공식 사고사례 DB, OCR 결과, 원본 PDF, 평가 xlsx/tsv/csv의 내용을 열거나 변경하지 않았다.
+- 기존 관련 없는 변경 파일은 수정·복구·삭제하지 않았다.
+- stage, commit, push를 수행하지 않았다.
+- 허용된 읽기 전용 Git 상태·diff 확인 외 Git 상태 변경 명령은 실행하지 않았다.

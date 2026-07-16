@@ -2230,6 +2230,153 @@ def clean_text(text: str) -> str:
     return " ".join(text.split())
 
 
+QUERY_TEXT_NORMALIZATIONS = {
+    "대처방안 수입": "대처방안 수립",
+    "대처방안을 수입": "대처방안을 수립",
+    "광산안전전관리자": "광산안전관리자",
+}
+
+RAIN_CONTEXT_KEYWORDS = [
+    "우천", "강우", "폭우", "장마", "빗물", "비가", "비 오는", "비온",
+]
+BLASTING_CONTEXT_KEYWORDS = ["발파", "폭약", "장약", "뇌관", "점화"]
+BLASTING_POST_MISFIRE_KEYWORDS = [
+    "발파 후", "불발", "불발공", "잔류 화약", "잔류화약", "미폭발", "미폭",
+]
+ROOF_CONTEXT_KEYWORDS = ["천반", "갱도 천장", "갱내 천장", "지보", "부석"]
+ROOF_WATER_CONTEXT_KEYWORDS = [
+    "유출수", "출수", "누수", "지하수", "유입수", "물 유입", "갱내수",
+]
+WATER_INCREASE_KEYWORDS = ["증가", "늘어", "많아", "급증", "커져", "불어나"]
+
+RAINY_PRE_BLASTING_SEARCH_TERMS = [
+    "우천", "강우", "기상 확인", "낙뢰", "발파공 침수", "공내수",
+    "화약류 습윤", "뇌관 습윤", "점화설비 손상", "배수 상태", "접근로 상태",
+    "사면", "갱구", "천반", "부석", "작업 연기", "작업중지", "작업 전 점검",
+]
+ROOF_WATER_INCREASE_SEARCH_TERMS = [
+    "천반", "유출수", "출수", "누수", "지하수 유입", "유출량 증가", "이상징후",
+    "천반 균열", "박리", "부석", "지보재 변형", "배수", "집수", "낙반 위험",
+    "작업중지", "대피", "출입통제", "작업 재개 전 확인",
+]
+
+QUERY_CORE_STATUS_SUFFICIENT = "sufficient"
+QUERY_CORE_STATUS_NEEDS_SUPPLEMENT = "needs_supplement"
+QUERY_CORE_STATUS_LABELS = {
+    QUERY_CORE_STATUS_SUFFICIENT: "질문 핵심 요소 반영 충분",
+    QUERY_CORE_STATUS_NEEDS_SUPPLEMENT: "질문 핵심 요소 반영 보완 필요",
+}
+
+
+def normalize_query_question(question: str) -> str:
+    """검색·분류용 질문에만 허용된 명백한 오타를 제한적으로 바로잡습니다."""
+    normalized = str(question or "")
+    for wrong_text, corrected_text in QUERY_TEXT_NORMALIZATIONS.items():
+        normalized = normalized.replace(wrong_text, corrected_text)
+    return normalized
+
+
+def contains_any_keyword(text: str, keywords: list[str]) -> bool:
+    return any(keyword in text for keyword in keywords)
+
+
+def extract_query_context_signals(question: str) -> dict[str, Any]:
+    """큰 유형과 별도로 답변에 보존해야 할 현장 조건을 추출합니다."""
+    original_question = str(question or "")
+    normalized_question = clean_text(normalize_query_question(original_question))
+    text = normalized_question.lower()
+
+    has_blasting = contains_any_keyword(text, BLASTING_CONTEXT_KEYWORDS)
+    has_rain = contains_any_keyword(text, RAIN_CONTEXT_KEYWORDS)
+    has_post_misfire = contains_any_keyword(text, BLASTING_POST_MISFIRE_KEYWORDS)
+    has_roof = contains_any_keyword(text, ROOF_CONTEXT_KEYWORDS)
+    has_roof_water = contains_any_keyword(text, ROOF_WATER_CONTEXT_KEYWORDS)
+    has_water_increase = contains_any_keyword(text, WATER_INCREASE_KEYWORDS)
+
+    detail_signal = ""
+    major_risk_type = "일반 광산 안전"
+    detail_risk_signals: list[str] = []
+    work_stage = "질문에서 확인 필요"
+    requested_answer_form = "안전조치 안내"
+    display_label = ""
+    search_context_terms: list[str] = []
+    rerank_keywords: list[str] = []
+
+    if has_blasting and has_rain and not has_post_misfire:
+        detail_signal = "rainy_pre_blasting"
+        major_risk_type = "발파"
+        detail_risk_signals = [
+            "우천·강우와 낙뢰",
+            "발파공 침수·공내수",
+            "화약류·뇌관·점화설비의 습윤·손상",
+            "배수·접근로와 사면·갱구·천반·부석 상태",
+        ]
+        work_stage = "발파 작업 전"
+        requested_answer_form = (
+            "위험 확인사항과 대처방안"
+            if contains_any_keyword(text, ["확인", "대처", "방안", "수립"])
+            else "작업 전 안전조치"
+        )
+        display_label = "발파/불발 · 우천 작업 전 점검"
+        search_context_terms = list(RAINY_PRE_BLASTING_SEARCH_TERMS)
+        rerank_keywords = [
+            "우천", "강우", "낙뢰", "침수", "공내수", "습윤", "배수", "발파 전",
+        ]
+    elif has_roof and has_roof_water:
+        detail_signal = "roof_water_increase"
+        major_risk_type = "낙반/붕락/지보"
+        detail_risk_signals = [
+            "천반 유출수·출수·누수 또는 지하수 유입",
+            "유출량 증가와 지반 이상징후",
+            "천반 균열·박리·부석과 지보재 변형",
+            "배수·집수 상태와 낙반 위험",
+        ]
+        work_stage = "작업 중 이상징후 발견" if has_water_increase else "천반 출수 발견"
+        requested_answer_form = (
+            "안전관리자의 조치 순서"
+            if contains_any_keyword(text, ["순서", "먼저", "조치해야"])
+            else "이상징후 대응조치"
+        )
+        display_label = "낙반/붕락/지보 · 천반 유출수 증가"
+        search_context_terms = list(ROOF_WATER_INCREASE_SEARCH_TERMS)
+        rerank_keywords = [
+            "천반", "유출수", "출수", "누수", "지하수", "균열", "박리", "지보", "배수",
+        ]
+    elif has_blasting and has_post_misfire:
+        detail_signal = "post_blasting_misfire"
+        major_risk_type = "발파"
+        detail_risk_signals = ["발파 후 불발·잔류 화약류 의심"]
+        work_stage = "발파 작업 후"
+        requested_answer_form = "불발 의심 대응조치"
+        display_label = "발파/불발 · 발파 후 불발 의심"
+
+    return {
+        "original_question": original_question,
+        "normalized_question": normalized_question,
+        "major_risk_type": major_risk_type,
+        "detail_signal": detail_signal,
+        "detail_risk_signals": detail_risk_signals,
+        "work_stage": work_stage,
+        "requested_answer_form": requested_answer_form,
+        "display_label": display_label,
+        "search_context_terms": search_context_terms,
+        "rerank_keywords": rerank_keywords,
+    }
+
+
+def format_query_context_for_prompt(question_context: dict[str, Any]) -> str:
+    detail_signals = question_context.get("detail_risk_signals", [])
+    detail_text = ", ".join(str(item) for item in detail_signals) or "추가 세부 신호 없음"
+    return "\n".join(
+        [
+            f"- 큰 위험 유형: {question_context.get('major_risk_type', '일반 광산 안전')}",
+            f"- 세부 위험 신호: {detail_text}",
+            f"- 작업 단계: {question_context.get('work_stage', '질문에서 확인 필요')}",
+            f"- 요구 답변 형태: {question_context.get('requested_answer_form', '안전조치 안내')}",
+        ]
+    )
+
+
 def format_distance(distance: Any) -> str:
     if isinstance(distance, (float, int)):
         return f"{distance:.4f}"
@@ -2265,7 +2412,10 @@ def is_timeout_error(error_message: str) -> bool:
 
 
 def classify_question_type(question: str) -> str:
-    text = clean_text(question).lower()
+    question_context = extract_query_context_signals(question)
+    if question_context["detail_signal"] == "rainy_pre_blasting":
+        return BLASTING_QUESTION_TYPE
+    text = clean_text(normalize_query_question(question)).lower()
 
     if any(keyword in text for keyword in COMPLEX_RISK_KEYWORDS):
         return COMPLEX_RISK_QUESTION_TYPE
@@ -2630,7 +2780,16 @@ GENERAL_EXPLANATION_INTENTS = {
 }
 
 def detect_question_intent(question: str) -> str:
-    text = clean_text(question).lower()
+    question_context = extract_query_context_signals(question)
+    if question_context["detail_signal"] in {
+        "rainy_pre_blasting",
+        "post_blasting_misfire",
+    }:
+        return BLASTING_MISFIRE_INTENT
+    if question_context["detail_signal"] == "roof_water_increase":
+        return ROOF_FALL_INTENT
+
+    text = clean_text(normalize_query_question(question)).lower()
     if not text:
         return GENERAL_MINE_SAFETY_INTENT
 
@@ -2703,18 +2862,26 @@ def detect_ppe_item(question: str) -> str:
 
 
 def expand_search_query(question: str, intent: str | None = None) -> str:
-    intent = intent or detect_question_intent(question)
+    question_context = extract_query_context_signals(question)
+    normalized_question = question_context["normalized_question"]
+    intent = intent or detect_question_intent(normalized_question)
     if intent == OUT_OF_SCOPE_INTENT:
-        return question
+        return normalized_question
 
     expansions = list(INTENT_SEARCH_EXPANSIONS.get(intent, []))
-    ppe_item = detect_ppe_item(question)
+    if question_context["detail_signal"] == "rainy_pre_blasting":
+        # 발파 후·불발 전용 확장을 제거하고 우천 중 발파 전 점검 문맥으로 교체합니다.
+        expansions = list(question_context["search_context_terms"])
+    elif question_context["detail_signal"] == "roof_water_increase":
+        expansions.extend(question_context["search_context_terms"])
+
+    ppe_item = detect_ppe_item(normalized_question)
     if ppe_item in PPE_ITEM_EXPANSIONS:
         expansions.extend(PPE_ITEM_EXPANSIONS[ppe_item])
     unique_terms = list(dict.fromkeys(term for term in expansions if term))
     if not unique_terms:
-        return question
-    return " ".join([question, *unique_terms])
+        return normalized_question
+    return " ".join([normalized_question, *unique_terms])
 
 
 def map_intent_to_situation_type(intent: str, question: str = "") -> str:
@@ -3231,8 +3398,13 @@ def rerank_search_results(
 ) -> list[dict[str, Any]]:
     question_type = classify_question_type(question)
     question_intent = detect_question_intent(question)
+    question_context = extract_query_context_signals(question)
     config = RERANK_TYPE_CONFIGS.get(question_type)
-    reranking_applied = config is not None
+    contextual_reranking = question_context["detail_signal"] in {
+        "rainy_pre_blasting",
+        "roof_water_increase",
+    }
+    reranking_applied = config is not None or contextual_reranking
     question_text = clean_text(question).lower()
     if config:
         active_keywords = [
@@ -3240,6 +3412,9 @@ def rerank_search_results(
             if keyword in question_text
         ]
         reranking_label = config["label"]
+    elif contextual_reranking:
+        active_keywords = list(question_context["rerank_keywords"])
+        reranking_label = "질문의 세부 현장 위험 신호 우선 정렬 적용"
     else:
         active_keywords = []
         reranking_label = "기본 벡터 유사도 정렬 적용"
@@ -3266,6 +3441,18 @@ def rerank_search_results(
 
             keyword_hits = sum(keyword in text for keyword in active_keywords)
             score -= min(keyword_hits, 6) * config["keyword_weight"]
+
+        if contextual_reranking:
+            context_hits = sum(
+                keyword in text for keyword in question_context["rerank_keywords"]
+            )
+            score -= min(context_hits, 6) * 0.10
+            if (
+                question_context["detail_signal"] == "rainy_pre_blasting"
+                and "불발" in text
+                and context_hits == 0
+            ):
+                score += 0.20
 
         if question_type == BLASTING_QUESTION_TYPE:
             if "불발" in question and "불발" in text:
@@ -3380,7 +3567,8 @@ def search_vector_db(question: str, top_k: int = 5):
     if error:
         return [], error
 
-    intent = detect_question_intent(question)
+    question_context = extract_query_context_signals(question)
+    intent = detect_question_intent(question_context["normalized_question"])
     expanded_question = expand_search_query(question, intent)
     if intent != OUT_OF_SCOPE_INTENT:
         top_k = max(top_k, 5)
@@ -3400,6 +3588,11 @@ def search_vector_db(question: str, top_k: int = 5):
             top_k,
             int(rerank_config["internal_count"]),
         )
+    elif question_context["detail_signal"] in {
+        "rainy_pre_blasting",
+        "roof_water_increase",
+    }:
+        internal_count = max(top_k, 20)
     try:
         internal_count = min(internal_count, collection.count())
     except Exception:
@@ -3892,7 +4085,9 @@ def build_prompt(
     official_cases: list[dict[str, Any]] | None = None,
 ) -> str:
     context = build_context(results)
-    intent = intent or detect_question_intent(question)
+    question_context = extract_query_context_signals(question)
+    prompt_question_context = format_query_context_for_prompt(question_context)
+    intent = intent or detect_question_intent(question_context["normalized_question"])
     intent_guidance = worker_easy_intent_guidance(intent)
     reference_case_context = format_reference_cases_for_prompt(intent, reference_cases or [])
     live_news_context = format_live_news_cases_for_prompt(live_news_cases or [])
@@ -3911,6 +4106,10 @@ def build_prompt(
 [질문 유형]
 {intent}
 {intent_guidance}
+
+[질문 세부 상황]
+{prompt_question_context}
+- 답변에서 세부 위험 신호와 작업 단계를 일반적인 유형 문구로 대체하거나 생략하지 마세요.
 
 {evidence_guardrail}
 
@@ -3992,7 +4191,9 @@ def build_hybrid_prompt(
     official_cases: list[dict[str, Any]] | None = None,
 ) -> str:
     context = build_context(results)
-    intent = intent or detect_question_intent(question)
+    question_context = extract_query_context_signals(question)
+    prompt_question_context = format_query_context_for_prompt(question_context)
+    intent = intent or detect_question_intent(question_context["normalized_question"])
     intent_guidance = gemini_intent_guidance(intent)
     reference_case_context = format_reference_cases_for_prompt(intent, reference_cases or [])
     live_news_context = format_live_news_cases_for_prompt(live_news_cases or [])
@@ -4007,6 +4208,10 @@ def build_hybrid_prompt(
 [질문 유형]
 {intent}
 {intent_guidance}
+
+[질문 세부 상황]
+{prompt_question_context}
+- 안정형 초안의 세부 위험 신호와 조치 순서를 빠뜨리거나 일반 문장으로 바꾸지 마세요.
 
 {evidence_guardrail}
 
@@ -4397,6 +4602,230 @@ def build_check_items(situation_type: str) -> list[str]:
         "점검표, 사진, 교육기록, 작업허가서 등 남겨야 할 증빙자료가 무엇인지",
         "최신 법령·지침 또는 내부 안전관리 기준 확인이 필요한지",
     ]
+
+
+def build_contextual_immediate_judgment(
+    question_context: dict[str, Any],
+    situation_type: str,
+) -> str:
+    detail_signal = question_context.get("detail_signal")
+    if detail_signal == "rainy_pre_blasting":
+        return (
+            "이 질문은 발파 후 불발 대응이 아니라 우천 중 발파 작업 전 점검이 중심입니다. "
+            "기상·낙뢰, 발파공 내부 물·공내수, 화약류·뇌관·점화설비의 습윤·손상, "
+            "배수와 접근로·사면·갱구·천반·부석 상태를 확인하고 위험하면 작업을 "
+            "연기하거나 중지한 뒤 책임자가 확인해야 합니다."
+        )
+    if detail_signal == "roof_water_increase":
+        return (
+            "천반 유출수·출수 증가를 지반 이상징후로 보고 해당 구간 작업을 중지해야 합니다. "
+            "작업자 대피와 출입통제 후 안전한 위치에서 천반·지보·출수·배수 상태를 점검하고, "
+            "위험 제거와 책임자 확인 전에는 작업을 재개하지 않아야 합니다."
+        )
+    return build_immediate_judgment(situation_type)
+
+
+def build_contextual_priority_actions(
+    question_context: dict[str, Any],
+    situation_type: str,
+) -> list[str]:
+    detail_signal = question_context.get("detail_signal")
+    if detail_signal == "rainy_pre_blasting":
+        return [
+            "기상과 강우 상태를 확인하고 낙뢰 위험 여부를 확인합니다.",
+            "발파공 내부 물, 발파공 침수와 공내수 상태를 확인합니다.",
+            "화약류·뇌관·점화설비의 습윤, 손상과 정상 작동 여부를 확인합니다.",
+            "작업장 배수 상태와 장비·작업자 접근로의 침수·미끄럼·통행 상태를 확인합니다.",
+            "사면·갱구·천반·부석의 이완, 낙석과 붕괴 위험을 확인합니다.",
+            "낙뢰, 침수, 습윤·손상 또는 지반 위험이 있으면 발파 작업을 연기하거나 중지합니다.",
+            "발파 책임자 또는 안전관리자가 점검 결과를 확인하고 조치·작업 판단 내용을 기록합니다.",
+        ]
+    if detail_signal == "roof_water_increase":
+        return [
+            "해당 구간 작업을 즉시 중지합니다.",
+            "작업자를 낙반 위험이 없는 안전한 장소로 대피시킵니다.",
+            "위험구역을 설정하고 관계자 외 출입을 통제합니다.",
+            "현장 책임자 또는 광산안전관리자에게 천반 유출수 증가를 보고합니다.",
+            "안전한 위치에서 천반·지보·출수량·유출수와 배수 상태를 점검합니다.",
+            "천반 균열·박리·부석과 지보재 변형·손상을 확인합니다.",
+            "배수·집수·차수 또는 지보 보강 등 필요한 개선조치를 현장 조건에 따라 검토합니다.",
+            "위험 제거와 책임자 확인 후에만 작업 재개 여부를 판단합니다.",
+            "발견·대피·점검·개선조치·작업 재개 승인 내용을 기록합니다.",
+        ]
+    return build_priority_actions(situation_type)
+
+
+def build_contextual_check_items(
+    question_context: dict[str, Any],
+    situation_type: str,
+) -> list[str]:
+    detail_signal = question_context.get("detail_signal")
+    if detail_signal == "rainy_pre_blasting":
+        return [
+            "우천·강우와 낙뢰 예보·현장 기상 상태",
+            "발파공 침수·공내수와 배수 가능 상태",
+            "화약류·뇌관·점화설비의 습윤·손상 여부",
+            "작업장 배수와 작업자·장비 접근로 상태",
+            "사면·갱구·천반·부석 상태와 낙석·붕괴 징후",
+            "작업 연기·중지 판단, 책임자 확인과 점검 결과 기록",
+        ]
+    if detail_signal == "roof_water_increase":
+        return [
+            "천반 유출수·출수 위치와 양의 증가 또는 변화",
+            "천반 균열·박리·부석과 낙반 징후",
+            "지보재의 변형·손상과 보강 필요성",
+            "배수로·집수 상태와 추가 지하수 유입 가능성",
+            "대피·출입통제·보고와 위험 제거 후 작업 재개 승인 기록",
+        ]
+    return build_check_items(situation_type)
+
+
+def build_contextual_priority_summary(
+    question_context: dict[str, Any],
+    situation_type: str,
+) -> str:
+    detail_signal = question_context.get("detail_signal")
+    if detail_signal == "rainy_pre_blasting":
+        return "기상·낙뢰와 발파공 침수·화약류 습윤을 점검하고 위험하면 작업 연기·중지"
+    if detail_signal == "roof_water_increase":
+        return "작업중지 · 대피 · 출입통제 · 보고 후 천반·지보·출수·배수 점검"
+    return get_priority_action(situation_type)
+
+
+def _all_keyword_groups_present(text: str, groups: list[list[str]]) -> bool:
+    return all(contains_any_keyword(text, group) for group in groups)
+
+
+def _sequence_keywords_present(text: str, ordered_groups: list[list[str]]) -> bool:
+    cursor = 0
+    for group in ordered_groups:
+        positions = [
+            text.find(keyword, cursor)
+            for keyword in group
+            if text.find(keyword, cursor) >= 0
+        ]
+        if not positions:
+            return False
+        cursor = min(positions) + 1
+    return True
+
+
+def assess_query_core_element_coverage(question: str, answer: str) -> dict[str, Any]:
+    question_context = extract_query_context_signals(question)
+    detail_signal = question_context.get("detail_signal", "")
+    text = clean_text(str(answer or "")).lower()
+    checks: dict[str, bool] = {}
+    ordered = True
+
+    if detail_signal == "rainy_pre_blasting":
+        checks = {
+            "기상과 낙뢰 확인": _all_keyword_groups_present(
+                text,
+                [["기상", "우천", "강우"], ["낙뢰"]],
+            ),
+            "발파공 내부 물 또는 침수": _all_keyword_groups_present(
+                text,
+                [["발파공"], ["내부 물", "침수", "공내수"]],
+            ),
+            "화약류·뇌관·점화설비 습윤·손상": _all_keyword_groups_present(
+                text,
+                [["화약류", "뇌관", "점화설비"], ["습윤", "젖", "손상"]],
+            ),
+            "배수 및 접근로 상태": _all_keyword_groups_present(
+                text,
+                [["배수"], ["접근로", "통행로"]],
+            ),
+            "사면·갱구·천반·부석 상태": contains_any_keyword(
+                text,
+                ["사면", "갱구", "천반", "부석"],
+            ),
+            "작업 연기·중지": contains_any_keyword(text, ["작업 연기", "연기하거나", "작업중지", "작업을 중지"]),
+            "책임자 확인과 기록": _all_keyword_groups_present(
+                text,
+                [["책임자", "안전관리자"], ["기록"]],
+            ),
+        }
+    elif detail_signal == "roof_water_increase":
+        ordered_groups = [
+            ["작업중지", "작업을 즉시 중지", "작업을 중지"],
+            ["대피"],
+            ["출입통제", "출입을 통제"],
+            ["보고"],
+            ["천반·지보·출수", "천반", "출수량", "유출수"],
+            ["균열", "박리", "부석", "지보재 변형"],
+            ["개선조치", "집수", "차수", "지보 보강"],
+            ["작업 재개", "재개 여부", "재개 승인"],
+            ["기록"],
+        ]
+        labels = [
+            "작업중지", "대피", "출입통제", "보고", "천반·지보·출수·배수 점검",
+            "균열·박리·부석·지보 변형 확인", "개선조치 검토", "재개 확인", "기록",
+        ]
+        checks = {
+            label: contains_any_keyword(text, keywords)
+            for label, keywords in zip(labels, ordered_groups)
+        }
+        checks["천반·지보·출수·배수 점검"] = _all_keyword_groups_present(
+            text,
+            [["천반"], ["지보"], ["출수", "유출수", "누수"], ["배수", "집수"]],
+        )
+        checks["균열·박리·부석·지보 변형 확인"] = (
+            contains_any_keyword(text, ["균열", "박리", "부석"])
+            and contains_any_keyword(text, ["지보재 변형", "지보 변형", "지보재의 변형"])
+        )
+        ordered = _sequence_keywords_present(text, ordered_groups)
+
+    applicable = bool(checks)
+    missing = [label for label, present in checks.items() if not present]
+    sufficient = not applicable or (not missing and ordered)
+    status = (
+        QUERY_CORE_STATUS_SUFFICIENT
+        if sufficient
+        else QUERY_CORE_STATUS_NEEDS_SUPPLEMENT
+    )
+    return {
+        "applicable": applicable,
+        "status": status,
+        "label": QUERY_CORE_STATUS_LABELS[status],
+        "missing": missing,
+        "ordered": ordered,
+        "detail_signal": detail_signal,
+    }
+
+
+def build_query_context_supplement(question: str) -> str:
+    question_context = extract_query_context_signals(question)
+    detail_signal = question_context.get("detail_signal")
+    if detail_signal == "rainy_pre_blasting":
+        actions = build_contextual_priority_actions(question_context, BLASTING_QUESTION_TYPE)
+        return "\n".join(
+            [
+                "## 질문 세부 위험 보완",
+                "- 우천 중 발파 작업 전 점검을 중심으로 확인합니다. 불발공 대응은 발파 후 불발이 의심될 때의 별도 절차입니다.",
+                *[f"{index}. {item}" for index, item in enumerate(actions, start=1)],
+            ]
+        )
+    if detail_signal == "roof_water_increase":
+        actions = build_contextual_priority_actions(question_context, "낙반/붕락")
+        return "\n".join(
+            [
+                "## 질문 세부 위험 보완",
+                "- 천반 유출수 증가를 지반 이상징후로 보고 다음 순서로 조치합니다.",
+                *[f"{index}. {item}" for index, item in enumerate(actions, start=1)],
+            ]
+        )
+    return ""
+
+
+def ensure_query_core_elements(question: str, answer: str) -> tuple[str, dict[str, Any]]:
+    coverage = assess_query_core_element_coverage(question, answer)
+    if not coverage["applicable"] or coverage["status"] == QUERY_CORE_STATUS_SUFFICIENT:
+        return answer, coverage
+
+    supplement = build_query_context_supplement(question)
+    if supplement and "## 질문 세부 위험 보완" not in answer:
+        answer = "\n\n".join([answer.strip(), supplement]).strip()
+    return answer, assess_query_core_element_coverage(question, answer)
 
 
 def infer_risk_level_for_kras(
@@ -5522,9 +5951,25 @@ def build_risk_response_answer(
     situation_type: str,
     evidence_assessment: dict[str, Any] | None = None,
 ) -> str:
-    immediate_judgment = build_immediate_judgment(situation_type)
-    priority_actions = [f"{idx}. {item}" for idx, item in enumerate(build_priority_actions(situation_type), start=1)]
-    check_items = [f"{idx}. {item}" for idx, item in enumerate(build_check_items(situation_type), start=1)]
+    question_context = extract_query_context_signals(question)
+    immediate_judgment = build_contextual_immediate_judgment(
+        question_context,
+        situation_type,
+    )
+    priority_actions = [
+        f"{idx}. {item}"
+        for idx, item in enumerate(
+            build_contextual_priority_actions(question_context, situation_type),
+            start=1,
+        )
+    ]
+    check_items = [
+        f"{idx}. {item}"
+        for idx, item in enumerate(
+            build_contextual_check_items(question_context, situation_type),
+            start=1,
+        )
+    ]
     evidence_lines = format_evidence_lines(results)
     source_lines = format_source_lines(results)
     kras_section = build_kras_risk_assessment_section(question, results, situation_type)
@@ -5750,6 +6195,141 @@ def generate_local_fallback_answer(
     )
 
 
+class GeminiResponseText(str):
+    """기존 문자열 계약을 유지하면서 SDK 종료 사유를 함께 전달합니다."""
+
+    def __new__(cls, value: str, finish_reason: str = ""):
+        instance = super().__new__(cls, value)
+        instance.finish_reason = finish_reason
+        return instance
+
+
+def extract_gemini_finish_reason(response: Any) -> str:
+    candidates = getattr(response, "candidates", None)
+    if not candidates:
+        return ""
+    first_candidate = candidates[0]
+    finish_reason = getattr(first_candidate, "finish_reason", "")
+    reason_name = getattr(finish_reason, "name", "")
+    return str(reason_name or finish_reason or "").strip()
+
+
+def generated_answer_incomplete_reason(
+    answer: str,
+    finish_reason: str = "",
+    required_headings: list[str] | None = None,
+) -> str:
+    text = str(answer or "").strip()
+    normalized_finish_reason = str(finish_reason or "").strip().upper()
+    if any(
+        marker in normalized_finish_reason
+        for marker in ["MAX_TOKENS", "LENGTH", "SAFETY", "RECITATION", "MALFORMED"]
+    ):
+        return f"비정상 종료 사유: {normalized_finish_reason}"
+    if not text:
+        return "빈 응답"
+    if len(clean_text(text)) < 40:
+        return "지나치게 짧은 응답"
+
+    prompt_fragments = [
+        "제공된 [안정",
+        "아래 [안정형 조치 초안]",
+        "[반드시 아래 구조로 출력]",
+        "[검색된 근거 문서]는",
+    ]
+    if any(fragment in text for fragment in prompt_fragments):
+        return "프롬프트 조각 노출"
+    if text.count("[") > text.count("]"):
+        return "닫히지 않은 대괄호"
+
+    required_headings = required_headings or []
+    missing_headings = [heading for heading in required_headings if heading not in text]
+    if missing_headings:
+        return "필수 제목 누락: " + ", ".join(missing_headings)
+
+    non_empty_lines = [line.strip() for line in text.splitlines() if line.strip()]
+    last_line = non_empty_lines[-1] if non_empty_lines else ""
+    abrupt_suffixes = (
+        ":", ",", "，", ";", "그리고", "그러나", "따라서", "때문에",
+        "위하여", "하면서", "또는", " 및", "-", "•", "→",
+    )
+    if last_line.endswith(abrupt_suffixes):
+        return "문장 또는 목록의 갑작스러운 종료"
+    if last_line.startswith(("-", "*", "•")) and len(last_line.lstrip("-*• ").strip()) < 3:
+        return "비어 있는 목록 항목"
+    return ""
+
+
+def is_generated_answer_incomplete(
+    answer: str,
+    finish_reason: str = "",
+    required_headings: list[str] | None = None,
+) -> bool:
+    return bool(
+        generated_answer_incomplete_reason(
+            answer,
+            finish_reason,
+            required_headings,
+        )
+    )
+
+
+def required_headings_for_prompt_kind(prompt_kind: str) -> list[str]:
+    if prompt_kind == "hybrid":
+        return ["핵심 판단", "조치별 설명"]
+    return ["지금 바로 해야 할 일", "왜 위험한가요?", "작업을 다시 시작하기 전에"]
+
+
+def build_completion_retry_prompt(
+    question: str,
+    results: list[dict[str, Any]],
+    prompt_kind: str,
+    stable_draft: str = "",
+) -> str:
+    question_context = extract_query_context_signals(question)
+    context_guidance = format_query_context_for_prompt(question_context)
+    evidence_context = build_context(results)
+    stable_core = stable_draft.split("### KRAS식 위험성평가 기록 초안", 1)[0].strip()
+    if prompt_kind == "hybrid":
+        structure = """## 핵심 판단
+- 완결된 1~2문장
+
+## 조치별 설명
+1. 작업중지
+2. 대피 또는 출입통제
+3. 현장 점검과 개선
+4. 책임자 확인, 작업 재개 판단과 기록"""
+    else:
+        structure = """### 지금 바로 해야 할 일
+- 완결된 조치 목록
+
+### 왜 위험한가요?
+- 완결된 이유 설명
+
+### 작업을 다시 시작하기 전에
+- 점검, 책임자 확인과 기록"""
+    return f"""
+MineSafe AI 안전 답변을 짧고 완결된 한국어로 다시 작성하세요.
+프롬프트 문구를 답변에 옮기지 말고, 문장과 목록 항목을 끝까지 완성하세요.
+확인되지 않은 법령 조항·수치·시간 기준은 만들지 마세요.
+
+[질문]
+{normalize_query_question(question)}
+
+[질문 세부 상황]
+{context_guidance}
+
+[안정형 핵심조치]
+{stable_core or build_query_context_supplement(question)}
+
+[검색 근거]
+{evidence_context}
+
+[출력 구조]
+{structure}
+""".strip()
+
+
 def call_gemini_with_timeout(
     client,
     prompt: str,
@@ -5788,7 +6368,10 @@ def call_gemini_with_timeout(
     cleaned_text = text.strip()
     if not cleaned_text:
         raise RuntimeError("Gemini 응답이 비어 있습니다.")
-    return cleaned_text
+    return GeminiResponseText(
+        cleaned_text,
+        extract_gemini_finish_reason(response),
+    )
 
 
 def execute_gemini_request(
@@ -5833,12 +6416,14 @@ def execute_gemini_request(
             )
             if not answer or not answer.strip():
                 raise RuntimeError("Gemini 응답이 비어 있습니다.")
+            finish_reason = str(getattr(answer, "finish_reason", "") or "")
             return {
                 "called": True,
                 "success": True,
                 "status": "success",
                 "message": "Gemini 응답 생성에 성공했습니다.",
-                "answer": answer,
+                "answer": str(answer),
+                "finish_reason": finish_reason,
                 "attempts": attempt,
                 "model": model_name,
                 "used_fallback": False,
@@ -5863,11 +6448,69 @@ def execute_gemini_request(
         "status": last_status,
         "message": get_gemini_failure_message(last_status, last_error),
         "answer": "",
+        "finish_reason": "",
         "attempts": attempts_used,
         "model": model_name,
         "used_fallback": False,
         "error": summarize_gemini_error(last_error),
         "elapsed": time.monotonic() - start_time,
+    }
+
+
+def execute_gemini_with_completion_guardrail(
+    primary_prompt: str,
+    retry_prompt: str,
+    model_name: str,
+    required_headings: list[str] | None = None,
+) -> dict[str, Any]:
+    """미완성 생성에 대해서만 짧은 프롬프트로 최대 한 번 재생성합니다."""
+    first_result = execute_gemini_request(primary_prompt, model_name)
+    first_result["generation_calls"] = 1
+    first_result["completion_retry_used"] = False
+    if not first_result.get("success"):
+        return first_result
+
+    first_reason = generated_answer_incomplete_reason(
+        str(first_result.get("answer", "")),
+        str(first_result.get("finish_reason", "")),
+        required_headings,
+    )
+    if not first_reason:
+        return first_result
+
+    retry_result = execute_gemini_request(retry_prompt, model_name)
+    total_attempts = int(first_result.get("attempts", 0) or 0) + int(
+        retry_result.get("attempts", 0) or 0
+    )
+    retry_result["attempts"] = total_attempts
+    retry_result["generation_calls"] = 2
+    retry_result["completion_retry_used"] = True
+    retry_result["first_incomplete_reason"] = first_reason
+    if retry_result.get("success"):
+        retry_reason = generated_answer_incomplete_reason(
+            str(retry_result.get("answer", "")),
+            str(retry_result.get("finish_reason", "")),
+            required_headings,
+        )
+        if not retry_reason:
+            return retry_result
+    else:
+        retry_reason = str(
+            retry_result.get("message")
+            or retry_result.get("error")
+            or "재생성 실패"
+        )
+
+    return {
+        **retry_result,
+        "success": False,
+        "status": "incomplete",
+        "message": "Gemini 답변이 완결되지 않아 안정형 답변으로 전환했습니다.",
+        "answer": "",
+        "error": "미완성 응답 fallback",
+        "incomplete_reason": retry_reason,
+        "generation_calls": 2,
+        "completion_retry_used": True,
     }
 
 
@@ -5933,7 +6576,18 @@ def generate_gemini_answer(
             official_cases or [],
         )
 
-    result = execute_gemini_request(prompt, model_name)
+    retry_prompt = build_completion_retry_prompt(
+        question,
+        results,
+        prompt_kind,
+        stable_draft,
+    )
+    result = execute_gemini_with_completion_guardrail(
+        prompt,
+        retry_prompt,
+        model_name,
+        required_headings_for_prompt_kind(prompt_kind),
+    )
 
     if result.get("success"):
         answer = str(result.get("answer", "")).strip()
@@ -5941,6 +6595,7 @@ def generate_gemini_answer(
             answer = "\n\n".join(["### 근로자 쉬운 설명", answer])
         if prompt_kind == "hybrid" and "하이브리드 답변" not in answer:
             answer = "\n\n".join(["### 하이브리드 답변", answer])
+        answer, core_coverage = ensure_query_core_elements(question, answer)
         if "KRAS식 위험성평가 기록 초안" not in answer:
             answer = "\n\n".join(
                 [
@@ -5950,6 +6605,9 @@ def generate_gemini_answer(
             )
         status = build_legacy_gemini_status(result, fallback_used=False)
         status["prompt_kind"] = prompt_kind
+        status["query_core_coverage"] = core_coverage
+        status["query_core_status"] = core_coverage["status"]
+        status["query_core_label"] = core_coverage["label"]
         return answer, status
 
     fallback_answer = generate_local_fallback_answer(
@@ -5959,8 +6617,15 @@ def generate_gemini_answer(
         detect_question_intent(question),
         evidence_assessment=evidence_assessment,
     )
+    fallback_answer, core_coverage = ensure_query_core_elements(
+        question,
+        fallback_answer,
+    )
     status = build_legacy_gemini_status(result, fallback_used=True)
     status["prompt_kind"] = prompt_kind
+    status["query_core_coverage"] = core_coverage
+    status["query_core_status"] = core_coverage["status"]
+    status["query_core_label"] = core_coverage["label"]
     return fallback_answer, status
 
 # ==============================
@@ -8250,7 +8915,8 @@ def run_rag_flow(
     answer_mode: str,
     selected_model: str = GEMINI_MODEL_NAME,
 ):
-    intent = detect_question_intent(question_text)
+    question_context = extract_query_context_signals(question_text)
+    intent = detect_question_intent(question_context["normalized_question"])
     if intent == OUT_OF_SCOPE_INTENT:
         stable_answer = generate_local_fallback_answer(
             question_text,
@@ -8310,6 +8976,10 @@ def run_rag_flow(
         stable_answer,
         evidence_assessment,
     )
+    stable_answer, query_core_coverage = ensure_query_core_elements(
+        question_text,
+        stable_answer,
+    )
     reference_cases = match_reference_cases(question_text, intent, max_cases=2)
     live_news_cases = get_live_reference_cases(question_text, intent, max_cases=3)
     official_case_diagnostic: dict[str, Any] = {}
@@ -8328,6 +8998,8 @@ def run_rag_flow(
         "selected_model": selected_model,
         "model": selected_model,
         "question_intent": intent,
+        "question_context": question_context,
+        "question_context_label": question_context.get("display_label", ""),
         "expanded_search_query": expand_search_query(question_text, intent),
         "official_cases": official_cases,
         "official_case_diagnostic": official_case_diagnostic,
@@ -8337,6 +9009,9 @@ def run_rag_flow(
         "evidence_status": evidence_assessment["status"],
         "evidence_label": evidence_assessment["label"],
         "evidence_reason": evidence_assessment["reason"],
+        "query_core_coverage": query_core_coverage,
+        "query_core_status": query_core_coverage["status"],
+        "query_core_label": query_core_coverage["label"],
     }
 
     if answer_mode == STABLE_MODE:
@@ -8552,6 +9227,29 @@ def strip_markdown_prefix(text: str) -> str:
     return " ".join(cleaned_lines)
 
 
+def extract_complete_action_items(markdown_text: str, limit: int = 6) -> list[str]:
+    action_section = extract_markdown_section(markdown_text, "우선 조치")
+    if not action_section:
+        action_section = extract_markdown_section(markdown_text, "조치별 설명")
+    items: list[str] = []
+    for line in action_section.splitlines():
+        cleaned = line.strip()
+        if not cleaned:
+            continue
+        while cleaned.startswith(("- ", "* ", "• ")):
+            cleaned = cleaned[2:].strip()
+        prefix, separator, remainder = cleaned.partition(". ")
+        if separator and prefix.isdigit():
+            cleaned = remainder.strip()
+        if cleaned.startswith(("이유:", "현장 적용:")):
+            continue
+        if cleaned and len(cleaned) >= 4 and not cleaned.endswith((":", ",", "-", "•", "→")):
+            items.append(cleaned)
+        if len(items) >= limit:
+            break
+    return items
+
+
 def build_dashboard_summary(
     core_answer: str,
     situation_type: str,
@@ -8560,9 +9258,13 @@ def build_dashboard_summary(
         extract_markdown_section(core_answer, "즉시 판단")
     )
     if not immediate_text:
+        immediate_text = strip_markdown_prefix(
+            extract_markdown_section(core_answer, "핵심 판단")
+        )
+    if not immediate_text:
         immediate_text = build_immediate_judgment(situation_type)
 
-    action_items: list[str] = []
+    action_items = extract_complete_action_items(core_answer)
     for item in build_priority_actions(situation_type) + build_check_items(situation_type):
         normalized = clean_text(str(item))
         if normalized and normalized not in action_items:
@@ -8946,7 +9648,13 @@ def render_rag_result(
     )
     situation_type = resolve_display_situation_type(question_type, answer)
     risk_level, risk_accent = get_risk_level(situation_type)
-    priority_action = get_priority_action(situation_type)
+    question_context = answer_status.get("question_context", {})
+    if not isinstance(question_context, dict):
+        question_context = {}
+    priority_action = build_contextual_priority_summary(
+        question_context,
+        situation_type,
+    )
     selected_model = str(
         answer_status.get(
             "model",
@@ -9030,6 +9738,12 @@ def render_rag_result(
         )
     else:
         st.caption("기본 벡터 유사도 정렬 적용")
+    context_label = str(answer_status.get("question_context_label", "")).strip()
+    core_context_label = str(answer_status.get("query_core_label", "")).strip()
+    if context_label:
+        st.caption(f"질문 유형: {context_label}")
+    if core_context_label and question_context.get("detail_signal"):
+        st.caption(core_context_label)
 
     render_gemini_runtime_status(answer_status, selected_model, mode_name)
     render_rag_evidence_guardrail(evidence_assessment)

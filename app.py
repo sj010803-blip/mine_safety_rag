@@ -4,6 +4,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import csv
 import gc
+import importlib
 from io import BytesIO
 import json
 import uuid
@@ -33,6 +34,58 @@ from google.genai import types
 from sentence_transformers import SentenceTransformer
 
 import verified_case_review as verified_review
+
+
+VERIFIED_REVIEW_REQUIRED_ATTRIBUTES = (
+    "AUTO_SCREENED_PUBLIC_TIER",
+    "AUTO_SCREENED_STATUS",
+    "HIDDEN_PUBLIC_TIER",
+    "ReviewWorkflowBlocked",
+    "TEXT_SAFE_FALLBACK_TIER",
+    "VERIFIED_PUBLIC_TIER",
+    "classify_public_case_relation",
+    "detect_corrupted_ocr_text",
+    "effective_public_case_tier",
+    "generate_priority_card_images",
+    "initialize_review_store",
+    "is_public_display_safe_case",
+    "load_review_records",
+    "priority_review_candidates",
+    "rank_public_official_cases",
+    "rebuild_auto_screened_case_db",
+    "rebuild_text_safe_case_db",
+    "rebuild_verified_case_db",
+    "review_status_counts",
+    "sanitize_display_case",
+    "save_review_update",
+)
+
+
+def ensure_verified_review_contract(module: Any) -> Any:
+    """Validate and refresh the local review module after a Streamlit hot reload."""
+    expected_path = Path(__file__).resolve().with_name("verified_case_review.py")
+    module_file = getattr(module, "__file__", "")
+    loaded_path = Path(module_file).resolve() if module_file else None
+    if loaded_path != expected_path:
+        raise ImportError("로컬 verified_case_review 모듈 경로를 확인할 수 없습니다.")
+
+    missing = [
+        name for name in VERIFIED_REVIEW_REQUIRED_ATTRIBUTES if not hasattr(module, name)
+    ]
+    if missing:
+        importlib.invalidate_caches()
+        module = importlib.reload(module)
+        missing = [
+            name for name in VERIFIED_REVIEW_REQUIRED_ATTRIBUTES if not hasattr(module, name)
+        ]
+    if missing:
+        raise ImportError(
+            "verified_case_review 공개 계약 누락: " + ", ".join(sorted(missing))
+        )
+    return module
+
+
+verified_review = ensure_verified_review_contract(verified_review)
 
 
 # ==============================

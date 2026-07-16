@@ -1,0 +1,68 @@
+MineSafe AI verified_case_review 공개 상수 계약 긴급 수정 보고서
+
+1. 오류 메시지
+Streamlit RAG 답변 생성 중 AttributeError: module 'verified_case_review' has no attribute 'AUTO_SCREENED_PUBLIC_TIER'가 보고되었다.
+
+2. 오류 발생 파일과 코드 위치
+오류 보고 시점의 app.py line 3591에서 verified_review.AUTO_SCREENED_PUBLIC_TIER를 참조하는 경로였다. 공식 사고사례 collection을 조회하고 공개 등급을 검사하는 과정에서 사용되는 상수다.
+
+3. 실제 로드된 모듈 경로
+fresh Python 프로세스의 일반 import 결과는 C:\Users\USER\Desktop\mine_safety_rag\verified_case_review.py였다. 다른 경로의 동명 모듈 충돌은 재현되지 않았다.
+
+4. 누락 또는 불일치한 상수 이름
+현재 디스크 소스에는 AUTO_SCREENED_PUBLIC_TIER가 존재한다. 오류는 해당 상수가 추가되기 전부터 실행 중이던 Streamlit 프로세스가 이전 verified_case_review 모듈 객체를 메모리에 유지한 상황과 일치한다.
+
+5. 실제 canonical 상수 이름과 값
+- VERIFIED_PUBLIC_TIER = "verified"
+- AUTO_SCREENED_STATUS = "auto_screened"
+- AUTO_SCREENED_PUBLIC_TIER = AUTO_SCREENED_STATUS = "auto_screened"
+- TEXT_SAFE_FALLBACK_TIER = "text_safe_fallback"
+- HIDDEN_PUBLIC_TIER = "hidden"
+- PUBLIC_CASE_TIERS = ("verified", "auto_screened", "text_safe_fallback", "hidden")
+
+6. 적용한 수정 방식
+app.py 시작부에 verified_case_review 공개 계약 검사 함수를 추가했다. 로드 경로가 프로젝트 로컬 파일인지 먼저 확인하고, 앱이 사용하는 21개 속성 중 누락이 있으면 import 캐시를 무효화한 뒤 로컬 모듈을 한 번만 reload한다. reload 후에도 누락이 있으면 누락 이름을 포함한 명확한 ImportError로 중단한다.
+
+7. alias 사용 여부
+verified_case_review.py에 이미 존재하는 canonical 하위 호환 alias AUTO_SCREENED_PUBLIC_TIER = AUTO_SCREENED_STATUS를 그대로 사용했다. 상수 값이나 DB 상태값을 새로 추측하거나 변경하지 않았다.
+
+8. app.py가 참조하는 모듈 속성 전체 검사 결과
+AST로 verified_review.<속성> 고유 21개를 수집했다. fresh/runtime 모듈에서 누락 0개, 호출 대상의 비호출 가능 속성 0개였다. 신규 테스트는 앞으로 app.py 참조가 늘어나면 필수 계약 목록과 자동 비교한다.
+
+9. 신규 계약 테스트 결과
+test_verified_case_review_module_contract.py 10/10 통과. fresh 일반 import 경로, 전체 속성 존재, 공개 등급 값, 상태값과 공개 등급의 관계, 외부 API·Vector DB 비호출 import, 비밀값 비출력 구조를 확인했다. AUTO_SCREENED_PUBLIC_TIER를 런타임에서 임시 제거한 stale module 상황도 재현하고 reload로 "auto_screened"가 복구됨을 확인했다.
+
+10. 기존 전체 테스트 결과
+기존 190/190 통과, 실패·오류·skip 0. 신규 10개를 포함한 최종 전체 테스트는 200/200 통과, 실패·오류·skip 0이다.
+
+11. Streamlit HTTP 결과
+포트 8511에서 HTTP 200을 확인했다. 실제 브라우저에서 "장비가 후진할 때 신호수는 왜 필요해?"를 안정성 모드로 실행해 공식 근거 5건, 공식 근거 충분 상태, 공식 사례 카드와 DB 진단을 확인했다. 최근 뉴스 참고 → 공식 재해사례 → 핵심 주의사항 순서도 유지됐다. 브라우저 오류는 0건이었다.
+
+기본 파일 감시 모드에서는 Streamlit watcher가 선택 패키지 torchvision을 탐색하며 비치명적 ModuleNotFoundError 로그를 반복했지만 앱 실행과 RAG 결과에는 영향을 주지 않았다. 파일 감시를 끈 재검증에서는 HTTP 200, traceback 0, AttributeError 0이었다. 새 패키지는 설치하지 않았다.
+
+12. AttributeError 재발 여부
+fresh 직접 import, stale module 재현 테스트, Streamlit 기동과 실제 RAG 답변 경로 모두에서 AUTO_SCREENED_PUBLIC_TIER AttributeError는 재발하지 않았다.
+
+13. app.py 수정 여부
+수정했다. 작업 전 크기 397,512 bytes, SHA-256 1137FC1717BC6DDCD5CA9E73138C0F7A0574EDBEFEB3B37CCD867D58197EB663이었다. 작업 후 크기 399,281 bytes, SHA-256 983B80A2C390829BA7750830696BC333E8AEABC1A7A4F7407237995AB4AC2FF2다.
+
+14. verified_case_review.py 수정 여부
+수정하지 않았다. canonical 상수와 alias가 이미 올바르게 정의되어 있었다.
+
+15. DB 및 JSONL 변경 여부
+기존 법령·사고사례·verified·auto_screened·text_safe Vector DB와 OCR·사례·검수 JSONL을 수정하지 않았다. 실제 RAG 화면 검증 중 앱의 정상 자동 저장으로 생성된 테스트 대화 이력 한 행은 해당 테스트 ID만 정확히 제거해 작업 전 상태로 복원했다.
+
+16. 생성 백업
+C:\Users\USER\Desktop\mine_safety_rag\app_backup_before_public_tier_attribute_fix_20260716_181619.py. 원본과 백업의 크기 및 SHA-256 일치를 확인했으며 Git ignore 상태다.
+
+17. Git stage 목록
+예정 whitelist는 app.py, 18_legal_evidence_features/test_verified_case_review_module_contract.py, 18_legal_evidence_features/verified_case_review_attribute_fix_report.txt다. 실제 stage 목록은 커밋 직전 개별 경로로 확인한다.
+
+18. commit SHA
+보고서 자체를 포함하는 커밋 SHA는 파일 안에 자기 자신의 최종 SHA를 확정해 기록할 수 없으므로 커밋 완료 후 최종 작업 보고에 기록한다.
+
+19. push 결과
+안전 조건, staged whitelist, 미푸시 커밋을 확인한 뒤 실행하며 최종 작업 보고에 기록한다.
+
+20. 기존 관련 없는 변경 파일 보호 여부
+작업 시작과 최종 확인의 관련 없는 변경 파일 수는 52개로 같고, 정렬 상태 지문 SHA-256은 E253460B3944497E884FFE36E08FFE9B50631AC57047984CCF4351D8ECA37ADB로 동일하다. 기존 변경을 stage·삭제·복구하지 않았다.

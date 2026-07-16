@@ -1,0 +1,216 @@
+MineSafe AI 30문항 RAG 검색 적합성 평가 보고서
+
+1. 연구 목적
+기존 110문항 질문 시나리오에서 균형 있게 고정한 30문항을 이용해, 사용자 질문에 적합한 공식 문서가 현재 운영 RAG 검색 결과의 상위 순위에 포함되는지 평가한다.
+
+2. 기존 평가와 이번 평가의 차이
+기능 회귀 테스트는 코드 구조와 기존 기능 유지를 검사한다. RAG 검색 적합성 평가는 기대 공식 문서가 Top K에 포함되는지를 검사한다. 답변 정확성 평가는 최종 생성 답변의 법적·현장 타당성을 확인하는 별도 연구 대상이다.
+
+3. 110문항 원본 정보
+- 파일: 02_질문시나리오/question_scenarios_110.tsv
+- 행 수: 110
+- 작업 전 SHA-256: 544888A7717DD31CB0AF5099128D8493DE7AD50EB38F9ACE90FEFA2AFD72277A
+- 작업 후 SHA-256: 544888A7717DD31CB0AF5099128D8493DE7AD50EB38F9ACE90FEFA2AFD72277A
+
+4. 30문항 선정 방식
+10개 목표 유형별 3문항을 고정 seed 20260716와 명시적 고정 선정 계획으로 선택했다. 원본 난이도는 하 1·중 92·상 17이므로 유형별 하·중·상 1개씩 구성할 수 없었다. 컨베이어 직접 문항이 1건뿐이어서 정비 전 에너지 차단·잠금표지 인접 문항 2건을 보충했고 사유를 gold set에 기록했다. 검색 결과를 보기 전에 gold set을 저장·동결했다.
+
+5. 유형별 문항 수
+- 낙반·붕락·지보: 3문항
+- 발파·불발: 3문항
+- 분진·호흡보호·보호구: 3문항
+- 사고보고·응급조치: 3문항
+- 위험성평가·KRAS·TBM: 3문항
+- 장비·운반·차량: 3문항
+- 전기안전·에너지 차단: 3문항
+- 중대재해처벌법·증빙자료: 3문항
+- 컨베이어·끼임: 3문항
+- 환기·메탄·유해가스·산소부족: 3문항
+
+6. 난이도별 문항 수
+- 상: 8문항
+- 중: 21문항
+- 하: 1문항
+
+7. gold set SHA-256
+F950A1505743A4B3607F0EC3BC60D8ED477FB6C3627F14FCD156BF7C81B7D076
+
+8. 기존 RAG 설정
+- app.py를 import하지 않고 AST로 운영 검색 순수 함수·상수를 추출했다.
+- 질문 의도 판정 → 검색어 확장 → normalized embedding → 내부 후보 검색 → 일부 유형의 선호 문서 후보 추가 → 운영 휴리스틱 재정렬·문서 다양화 → Top 5 순서를 그대로 사용했다.
+- normalize_embeddings=True
+
+9. DB 경로와 collection
+- 경로: 10_vector_db_with_major_accident_docs
+- collection: mine_safety_docs
+
+10. collection count
+작업 전 820개, 작업 후 820개다.
+
+11. embedding 모델과 차원
+- 모델: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+- 차원: 384
+- sentence-transformers: 5.6.0
+- ChromaDB: 1.5.9
+
+12. Top K
+질문별 최종 Top 5를 평가했다. 유형별 운영 rerank가 있는 경우 내부 후보 수는 app.py 운영 설정을 따랐다.
+
+13. 기대 문서 매칭 규칙
+확장자·선행 번호·공백·밑줄·하이픈을 정규화한 제목 포함 일치와 75% 이상 핵심 제목 토큰 일치를 사용했다. 광산 안전 지침, 위험성평가 안내서, 중대재해처벌법의 공식 제목 alias만 명시적으로 허용했다. 느슨한 fuzzy match는 사용하지 않았다.
+
+14. 핵심 요소 포함률 규칙
+원본 핵심 요소를 구분자로 분리하고, 원본에 존재하는 요소에 대해서만 작업중지·전원 차단·잠금표지 등 제한된 표현 alias를 허용했다. 의미 이해가 아닌 규칙 기반 핵심 용어 포함률이다.
+
+15. Document Hit@1
+0.4000
+
+16. Document Hit@3
+0.5333. 이는 30문항 중 이 비율에서 기대 문서가 상위 3개 검색 결과 안에 포함됐다는 의미이며 법적 정확도를 뜻하지 않는다.
+
+17. Document Hit@5
+0.5667
+
+18. MRR
+0.4639. 기대 문서가 검색 결과의 앞 순위에 배치되는 정도를 나타낸다.
+
+19. Element Coverage@1
+0.1135
+
+20. Element Coverage@3
+0.2294
+
+21. Element Coverage@5
+0.2856. 기대 안전조치 용어가 검색된 chunk 안에 포함된 비율을 나타내는 규칙 기반 보조 지표다.
+
+22. 유형별 결과
+- 낙반·붕락·지보: n=3, Hit@3=0.333, MRR=0.333, Coverage@3=0.114
+- 발파·불발: n=3, Hit@3=0.667, MRR=0.667, Coverage@3=0.067
+- 분진·호흡보호·보호구: n=3, Hit@3=1.000, MRR=0.778, Coverage@3=0.339
+- 사고보고·응급조치: n=3, Hit@3=0.333, MRR=0.167, Coverage@3=0.458
+- 위험성평가·KRAS·TBM: n=3, Hit@3=0.667, MRR=0.667, Coverage@3=0.333
+- 장비·운반·차량: n=3, Hit@3=0.333, MRR=0.194, Coverage@3=0.194
+- 전기안전·에너지 차단: n=3, Hit@3=0.333, MRR=0.333, Coverage@3=0.157
+- 중대재해처벌법·증빙자료: n=3, Hit@3=0.333, MRR=0.333, Coverage@3=0.267
+- 컨베이어·끼임: n=3, Hit@3=0.333, MRR=0.167, Coverage@3=0.153
+- 환기·메탄·유해가스·산소부족: n=3, Hit@3=1.000, MRR=1.000, Coverage@3=0.211
+
+23. 난이도별 결과
+- 상: n=8, Hit@3=0.875, MRR=0.844, Coverage@3=0.172
+- 중: n=21, Hit@3=0.381, MRR=0.325, Coverage@3=0.242
+- 하: n=1, Hit@3=1.000, MRR=0.333, Coverage@3=0.429
+
+24. 문서별 검색 빈도
+- 09_광산안전기술기준_제10차개정_2024-12-19.txt: 30회
+- 10_광산안전업무_처리지침_2025-35_latest.txt: 18회
+- 11_안전보건관리체계_구축_가이드북.txt: 16회
+- 08_광산안전법_시행규칙.txt: 15회
+- 중대재해처벌법_해설서.pdf: 14회
+- 03_산업안전보건법.txt: 12회
+- 05_산업안전보건법_시행규칙.txt: 11회
+- 13_2023_새로운_위험성평가_안내서.txt: 10회
+- 07_광산안전법_시행령.txt: 9회
+- 04_산업안전보건법_시행령.txt: 6회
+
+25. metadata 완전성
+Top 5의 문서명·chunk_id·source·page 필드 기준 평균 0.7500다. 없는 page 정보는 임의 보완하지 않았다.
+
+26. 수동 검토 필요 문항
+28문항: R001, R002, R003, R004, R005, R006, R008, R010, R011, R012, R013, R014, R015, R016, R017, R018, R019, R020, R021, R022, R023, R024, R025, R026, R027, R028, R029, R030
+
+27. 검색 실패 문항 목록
+0문항: 없음
+
+28. 검색이 강한 질문 유형
+환기·메탄·유해가스·산소부족 (Hit@3=1.000, MRR=1.000)
+
+29. 검색이 약한 질문 유형
+사고보고·응급조치 (Hit@3=0.333, MRR=0.167)
+
+30. 자동평가의 한계
+기대 문서명과 DB 제목 차이, 다른 공식 문서의 직접 근거 가능성, 제목은 맞지만 chunk 내용이 다른 경우, 동의어 표현을 자동 규칙만으로 완전히 판정할 수 없다. V1 핵심 요소 파서에서 가운데점은 원본 요구에 따라 구분자로 동결되어 '잠금·표지' 같은 복합 표현이 분리될 수 있으며, 결과를 본 뒤 gold set을 바꾸지 않기 위해 이 한계를 그대로 기록한다. 결과는 수동 검토 전 1차 평가이며 30문항을 전체 광산 안전 질문으로 일반화하지 않는다.
+
+31. 법적 정확도 지표가 아닌 이유
+Hit@K·MRR은 문서 검색 순위를, Element Coverage는 용어 출현을 측정할 뿐 법령 해석·현장 사실관계·최종 답변의 타당성을 평가하지 않는다. ChromaDB distance도 정확도 확률로 변환하지 않았다.
+
+32. 기존 200개 회귀 테스트와의 차이
+기존 200개 테스트는 앱 기능·코드 계약의 회귀 여부를 검사했다. 이번 평가는 별도 동결 gold set을 사용해 기대 문서의 실제 검색 순위를 측정한다.
+
+33. 개선이 필요한 검색 영역
+유형별 Hit@3와 수동 검토 대상 문항을 기준으로 후속 실험 후보를 정하되, 이번 baseline 실행 중에는 query expansion·Top K·distance·embedding·DB·gold set을 튜닝하지 않았다.
+
+34. 향후 수동 검토 방법
+rag_retrieval_manual_review_30.xlsx에서 각 질문의 Top 5를 블라인드로 읽고 human_relevance(2/1/0), human_document_match(Y/N/REVIEW), human_comment를 사람이 직접 입력한다. 자동 칸은 최종 전문가 판정이 아니다.
+
+35. 생성 파일
+- run_rag_retrieval_quality_evaluation.py
+- rag_retrieval_eval_questions_30.tsv
+- rag_retrieval_eval_results_30.tsv
+- rag_retrieval_eval_results_30.xlsx
+- rag_retrieval_manual_review_30.xlsx
+- rag_retrieval_summary.xlsx
+- rag_retrieval_hit_at_k.png
+- rag_retrieval_category_hit3.png
+- rag_retrieval_difficulty_hit3.png
+- rag_retrieval_quality_report.txt
+- test_rag_retrieval_quality_evaluation.py
+
+36. 기존 파일 무결성 결과
+- app.py 작업 전/후 SHA-256: 983B80A2C390829BA7750830696BC333E8AEABC1A7A4F7407237995AB4AC2FF2 / 983B80A2C390829BA7750830696BC333E8AEABC1A7A4F7407237995AB4AC2FF2
+- 원본 질문 작업 전/후 SHA-256: 544888A7717DD31CB0AF5099128D8493DE7AD50EB38F9ACE90FEFA2AFD72277A / 544888A7717DD31CB0AF5099128D8493DE7AD50EB38F9ACE90FEFA2AFD72277A
+- DB 논리 count: 820 / 820
+- DB ID SHA-256: 53180E445B05917FC93D7E6616D251F46A27741399092013073E0CB0C812E39D / 53180E445B05917FC93D7E6616D251F46A27741399092013073E0CB0C812E39D
+- DB 물리 metadata 지문: 943F3B07FE1D714101A8D530E7D7067EF3A56A7A2504BFD70EF8C5BD09EAA805 / B1BDB12B286B6D512FC5EBFD98DEA6E451782780AE8D57814E0FFF268F93F9FD
+Chroma 조회가 SQLite·인덱스 파일의 수정시각을 갱신할 수 있어 물리 metadata 지문은 진단값으로만 기록하고, 논리 count와 ID 목록 동일 여부를 데이터 무결성 기준으로 사용했다.
+
+37. 신규 테스트 결과
+35/35 통과, 실패 0, 오류 0, skip 0
+
+38. 전체 테스트 결과
+작업 전 200/200 통과; 신규 포함 최종 235/235 통과, 실패 0, 오류 0, skip 0
+
+39. Git whitelist
+사용자가 지정한 평가 폴더 파일 10개와 18_legal_evidence_features/test_rag_retrieval_quality_evaluation.py만 허용한다.
+
+40. Git 제외 파일
+app.py, 질문 원본, 기존 평가 파일, 기존 DB, chunks, 인증정보, 백업 및 관련 없는 변경 파일은 stage하지 않는다.
+
+41. commit SHA
+보고서 자체를 포함하는 최종 커밋 SHA는 자기참조 때문에 파일 안에 확정할 수 없으며 최종 완료 보고에 기록한다.
+
+42. push 결과
+전체 테스트·무결성·whitelist 검증 후 실행하며 최종 완료 보고에 기록한다.
+
+43. 교수님 설명용 문구
+기존 자동 테스트는 앱의 기능과 코드 구조가 유지되는지를 검증하는 회귀 테스트였습니다. 이번에는 별도로 30문항의 검색 적합성 평가 세트를 구축하고, 기존 질문 시나리오에 기록된 기대 검색 문서를 기준으로 관련 공식 문서가 검색 결과 상위 1개, 3개, 5개 안에 포함되는지를 Hit@K와 MRR로 평가했습니다. 또한 기대 안전조치 용어가 검색된 문서에 포함되는지를 규칙 기반 핵심 요소 포함률로 분석했습니다. 이 결과는 법적 정확도나 최종 답변 정확도가 아니라 현재 공식 문서 RAG의 검색 성능을 나타내는 평가입니다.
+
+재현성 정보
+- 실행 시각: 2026-07-16T19:28:09+09:00
+- Python: 3.14.6
+- ChromaDB: 1.5.9
+- sentence-transformers: 5.6.0
+- embedding 모델: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+- embedding 차원: 384
+- normalize_embeddings: True
+- DB 경로: C:\Users\USER\Desktop\mine_safety_rag\10_vector_db_with_major_accident_docs
+- collection: mine_safety_docs
+- collection count: 820
+- Top K: 5
+- 원본 SHA-256: 544888A7717DD31CB0AF5099128D8493DE7AD50EB38F9ACE90FEFA2AFD72277A
+- gold set SHA-256: F950A1505743A4B3607F0EC3BC60D8ED477FB6C3627F14FCD156BF7C81B7D076
+- 평가 스크립트 SHA-256: E1390BE2038384B24A53387AA1DAB648909958772266BD5AE50D20432CA92142
+- random seed: 20260716
+
+[INTEGRITY]
+source_questions_before_sha256=544888A7717DD31CB0AF5099128D8493DE7AD50EB38F9ACE90FEFA2AFD72277A
+source_questions_after_sha256=544888A7717DD31CB0AF5099128D8493DE7AD50EB38F9ACE90FEFA2AFD72277A
+app_before_sha256=983B80A2C390829BA7750830696BC333E8AEABC1A7A4F7407237995AB4AC2FF2
+app_after_sha256=983B80A2C390829BA7750830696BC333E8AEABC1A7A4F7407237995AB4AC2FF2
+db_count_before=820
+db_count_after=820
+db_ids_sha256_before=53180E445B05917FC93D7E6616D251F46A27741399092013073E0CB0C812E39D
+db_ids_sha256_after=53180E445B05917FC93D7E6616D251F46A27741399092013073E0CB0C812E39D
+db_tree_sha256_before=943F3B07FE1D714101A8D530E7D7067EF3A56A7A2504BFD70EF8C5BD09EAA805
+db_tree_sha256_after=B1BDB12B286B6D512FC5EBFD98DEA6E451782780AE8D57814E0FFF268F93F9FD
+gold_set_sha256=F950A1505743A4B3607F0EC3BC60D8ED477FB6C3627F14FCD156BF7C81B7D076
+evaluation_script_sha256=E1390BE2038384B24A53387AA1DAB648909958772266BD5AE50D20432CA92142

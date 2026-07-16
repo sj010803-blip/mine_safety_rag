@@ -1,0 +1,135 @@
+MineSafe AI 발표 우선 공식 사고사례 품질 복구 보고서
+작성일: 2026-07-16
+
+1. 작업 목적
+기존 auto_screened 사례가 0건이던 원인을 품질 기준을 낮추지 않고 분석하고, 이미 선정된 발표 우선 검수 대상 12건만 원본 PDF 카드와 다시 대조했다. 신뢰할 수 있는 원본 카드 연결과 metadata 복구에 성공한 사례만 auto_screened로 전환하고 별도 ChromaDB에 저장했다. 깨진 OCR 문장은 추측하거나 재작성하지 않았다.
+
+2. 작업 전 상태
+- 브랜치: main
+- local main과 origin/main: 동일
+- ahead/behind: 0/0
+- staged 파일: 0개
+- 기존 관련 없는 변경: 52개
+- 기존 변경 상태 지문: E253460B3944497E884FFE36E08FFE9B50631AC57047984CCF4351D8ECA37ADB
+- 기존 전체 테스트: 147/147 통과, 실패·오류·skip 0
+- 작업 시작 당시 verified 0건, auto_screened 0건
+
+3. 발표 우선 검수 대상
+최초 선정된 다음 12건을 고정 대상으로 사용했다. metadata가 바뀐 뒤에도 대상 ID가 다시 계산되어 바뀌지 않도록 priority_review_group 기록을 우선 재사용한다.
+- KOSHA-SIREN-2025-BOOK-0012
+- KOSHA-SIREN-2025-BOOK-0038
+- KOSHA-SIREN-2025-BOOK-0082
+- KOSHA-SIREN-2025-BOOK-0167
+- KOSHA-SIREN-2025-BOOK-0289
+- KOSHA-SIREN-2025-BOOK-0305
+- KOSHA-SIREN-2025-BOOK-0306
+- KOSHA-SIREN-2025-BOOK-0307
+- KOSHA-SIREN-2025-BOOK-0327
+- KOSHA-SIREN-2025-BOOK-0328
+- KOSHA-SIREN-2025-BOOK-0346
+- KOSHA-SIREN-2026-03-CONSTRUCTION-0013
+
+4. 원본 이미지 연결과 metadata 복구
+- 기존 우선 대상 이미지 파일: 12건 모두 존재
+- 원본 PDF의 정확한 단일 사고 카드로 다시 crop하고 연결한 사례: 5건
+- source_document, source_period, source_file, page, industry, accident_date, accident_type을 신뢰 가능한 공식 원문 범위에서 복구한 사례: 5건
+- case_id는 변경하지 않음
+- 공식 원문에 명시되지 않은 원인과 예방사항은 생성하지 않음
+
+복구 사례:
+- KOSHA-SIREN-2025-BOOK-0082: 2025-01-13, 건설업, 부딪힘, 82쪽
+- KOSHA-SIREN-2025-BOOK-0289: 2025-07-19, 기타업종, 끼임, 251쪽
+- KOSHA-SIREN-2025-BOOK-0305: 2025-03-25, 기타업종, 매몰, 266쪽
+- KOSHA-SIREN-2025-BOOK-0306: 2025-05-13, 기타업종, 감전, 267쪽
+- KOSHA-SIREN-2025-BOOK-0307: 2025-08-10, 기타업종, 감전, 267쪽
+
+5. 계속 제외한 7건
+- 문자 깨짐 유지 3건: BOOK-0012, BOOK-0038, 2026-03-CONSTRUCTION-0013
+  사유: 비정상 숫자·기호 연속이 남아 display 안전검사 실패
+- BOOK-0167: 한 페이지의 두 사고 카드가 혼재되어 단일 사례 연결을 확정할 수 없음
+- BOOK-0327: 단일 사고 카드가 아닌 일반 안전수칙 페이지
+- BOOK-0328: 단일 사고 카드가 아닌 일반 예방자료 페이지
+- BOOK-0346: 단일 사고 카드가 아닌 자료 활용사례 페이지
+위 7건은 unverified 상태를 유지했다. 품질 기준을 완화하거나 자동 승인하지 않았다.
+
+6. 최종 품질 상태
+- verified: 0건
+- auto_screened: 5건
+- unverified: 70건
+- manual_review: 0건
+- rejected: 0건
+- auto_screened 5건의 깨진 display 문자열 잔여: 0건
+- case_id 중복: 0건
+- content_hash 중복: 0건
+- embedding ID 중복: 0건
+- 기존 기준값 유지: text_quality_score 80 이상, reading_order_score 80 이상, metadata_quality_score 70 이상, display 사고 개요 40~450자
+
+7. auto_screened 전용 DB
+- 경로: 23_auto_screened_official_accident_case_vector_db
+- collection: mine_auto_screened_official_accident_cases
+- 저장 수: 5건
+- verified, 기존 미검증 사고사례, 기존 법령 collection과 분리함
+- verified 결과가 있으면 auto_screened보다 먼저 표시하는 기존 검색 우선순위를 유지함
+- DB, 원본 카드 이미지, 검수 상태/감사 데이터는 Git 제외 상태임
+
+8. 대표 검색 결과
+- 컨베이어·끼임: 품질 통과 직접/유사 사례 없음
+- 차량 후진·충돌: 직접 관련 2건(BOOK-0082, BOOK-0289)
+- 낙반·붕괴: 유사 위험 1건(BOOK-0305)
+- 전기·감전: 직접 관련 2건(BOOK-0306, BOOK-0307)
+- 산소부족·유해가스: 품질 통과 직접/유사 사례 없음
+- 발파·불발공: 품질 통과 직접/유사 사례 없음
+검색 결과가 없는 유형에는 관련 사례를 억지로 반환하지 않는다. 일반적인 끼임 단어 하나만으로 컨베이어 사례로, 굴착기 단어 하나만으로 후진 사례로 오인하지 않도록 관계 판정을 보수적으로 보완했다.
+
+9. UI 및 검수 화면 확인
+- app.py는 수정하지 않음
+- 기존 탭 순서 유지: 최근 뉴스 참고 → 공식 재해사례 → 핵심 주의사항
+- 공개 카드는 display_* 필드만 사용하는 기존 구조 유지
+- raw OCR은 현장관리자 기본 카드에 표시하지 않는 기존 구조 유지
+- 관리자/개발자 모드에서 공식 사고사례 검수 메뉴, 총 75건, unverified 70건, auto_screened 5건, verified 0건, 우선 대상 12건, 원본 이미지 영역, 수정 저장/수동 검토/사용 제외/검증 완료 기능을 브라우저에서 확인함
+- 브라우저 콘솔 오류: 0건
+- 실제 외부 Gemini·뉴스 API 호출은 수행하지 않음
+
+10. 테스트 및 실행 결과
+- 신규 발표 사례 복구 테스트: 13/13 통과
+- 최종 전체 테스트: 160/160 통과
+- 실패·오류·skip: 0
+- app.py, verified_case_review.py 및 파이프라인 문법 검사: 통과
+- Streamlit 포트 8509: HTTP 200
+- 파일 감시 비활성화 최종 실행: traceback 0, ModuleNotFoundError 0, 치명 오류 0
+- 기본 파일 감시 실행에서 transformers 선택 모듈을 탐색하며 torchvision 부재 진단 로그가 발생했으나 앱은 HTTP 200 및 정상 화면을 유지했다. 새 패키지는 설치하지 않았고, 파일 감시를 끈 검증으로 앱 자체 오류가 아님을 구분했다.
+
+11. 수정·생성 파일
+수정:
+- verified_case_review.py
+
+생성:
+- 18_legal_evidence_features/test_presentation_case_recovery.py
+- 18_legal_evidence_features/presentation_case_recovery_report.txt
+
+로컬 실행 데이터(커밋 제외):
+- 25_verified_case_review/presentation_case_recovery_plan.json
+- 25_verified_case_review/presentation_case_recovery_audit.jsonl
+- 25_verified_case_review/card_images/presentation_recovered/
+- 23_auto_screened_official_accident_case_vector_db/
+
+12. 보호 범위
+- app.py 수정 없음
+- 기존 법령 DB 접근·변경 없음
+- 기존 미검증 사례 DB 접근·변경 없음
+- 원본 PDF 수정 없음
+- .env, API Key, Client Secret, 인증정보 접근 없음
+- 기존 백업 파일 접근·수정 없음
+- 관련 없는 기존 52개 변경 파일 수정·stage·복구·삭제 없음
+
+13. Git whitelist
+- verified_case_review.py
+- 18_legal_evidence_features/test_presentation_case_recovery.py
+- 18_legal_evidence_features/presentation_case_recovery_report.txt
+
+데이터 DB, 카드 이미지, 검수 데이터, 백업, 평가 파일은 stage하지 않는다. commit SHA와 push 최종 결과는 커밋 후 작업 완료 보고에서 기록한다.
+
+14. 남은 한계
+- 사람 원문 대조 verified 사례는 아직 0건이다. 현재 5건은 엄격한 자동 품질검사를 통과한 사례이며 사람 검수 완료 사례와 구분된다.
+- 7건은 신뢰 가능한 단일 사고 카드 연결 또는 깨끗한 문자열을 확보하지 못해 계속 제외했다.
+- 컨베이어, 산소부족, 발파 유형은 이번 12건 안에서 공개 가능한 사례를 확보하지 못했다.

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import csv
 import gc
+import hashlib
 import io
 import json
 import re
@@ -40,6 +41,14 @@ ORIGINAL_OCR_JSONL_PATH = (
     / "page_text"
     / "official_siren_ocr_pages.jsonl"
 )
+SOURCE_MANIFEST_PATH = (
+    ROOT_DIR
+    / "21_official_accident_case_pipeline"
+    / "official_siren_source_manifest.json"
+)
+PRESENTATION_RECOVERY_PLAN_PATH = REVIEW_DIR / "presentation_case_recovery_plan.json"
+PRESENTATION_RECOVERY_AUDIT_PATH = REVIEW_DIR / "presentation_case_recovery_audit.jsonl"
+PRESENTATION_RECOVERED_CARD_DIR = CARD_IMAGE_DIR / "presentation_recovered"
 
 LAW_COLLECTION_NAME = "mine_safety_docs"
 SOURCE_CASE_COLLECTION_NAME = "mine_official_accident_cases"
@@ -83,6 +92,21 @@ PUBLIC_RANK_ORDER = {
     ("direct", AUTO_SCREENED_STATUS): 1,
     ("analogous", "verified"): 2,
     ("analogous", AUTO_SCREENED_STATUS): 3,
+}
+CONTROLLED_RECOVERY_INDUSTRIES = {
+    "건설업", "제조업", "기타업종", "광업", "채석업", "운수업", "서비스업",
+}
+CONTROLLED_ACCIDENT_TYPE_PATTERNS = {
+    "끼임": (r"끼임", r"끼어"),
+    "부딪힘": (r"부딪힘", r"부딪혀", r"충돌"),
+    "깔림": (r"깔림", r"깔려"),
+    "떨어짐": (r"떨어짐", r"떨어져", r"추락"),
+    "무너짐": (r"무너짐", r"무너지"),
+    "매몰": (r"매몰",),
+    "감전": (r"감전",),
+    "질식": (r"질식",),
+    "폭발": (r"폭발",),
+    "화재": (r"화재",),
 }
 
 
@@ -225,6 +249,32 @@ def priority_review_candidates(records: list[dict[str, Any]]) -> list[dict[str, 
     )
     selected: list[dict[str, Any]] = []
     used: set[str] = set()
+    group_counts = {group_name: 0 for group_name, _keywords, _types in groups}
+
+    # Once the presentation set has been selected and its source images were
+    # prepared, keep that exact set stable across later metadata corrections.
+    persisted = sorted(
+        (
+            record
+            for record in records
+            if str(record.get("priority_review_group", "")) in group_counts
+            and str(record.get("case_id", "")).strip()
+            and record.get("verification_status") != "rejected"
+        ),
+        key=lambda record: (
+            tuple(group_counts).index(str(record.get("priority_review_group", ""))),
+            str(record.get("case_id", "")),
+        ),
+    )
+    for record in persisted:
+        case_id = str(record.get("case_id", "")).strip()
+        group_name = str(record.get("priority_review_group", ""))
+        if case_id in used or group_counts[group_name] >= PRIORITY_GROUP_LIMIT:
+            continue
+        selected.append(dict(record))
+        used.add(case_id)
+        group_counts[group_name] += 1
+
     for group_name, keywords, accident_types in groups:
         candidates: list[tuple[int, dict[str, Any]]] = []
         for record in records:
@@ -240,11 +290,13 @@ def priority_review_candidates(records: list[dict[str, Any]]) -> list[dict[str, 
             if score > 0:
                 candidates.append((score, record))
         candidates.sort(key=lambda item: (-item[0], str(item[1].get("case_id", ""))))
-        for _score, record in candidates[:PRIORITY_GROUP_LIMIT]:
+        remaining = PRIORITY_GROUP_LIMIT - group_counts[group_name]
+        for _score, record in candidates[:remaining]:
             item = dict(record)
             item["priority_review_group"] = group_name
             selected.append(item)
             used.add(str(record.get("case_id", "")))
+            group_counts[group_name] += 1
     return selected
 
 
@@ -274,7 +326,7 @@ def display_text_corruption_reasons(text: Any) -> list[str]:
         value,
     ):
         reasons.append("html_json_or_python_literal")
-    if re.search(r"[\ufffd\u0080-\u00a0\u00a2-\u00ff]", value):
+    if re.search(r"[\ufffd\u0080-\u00a0\u00a2-\u00b6\u00b8-\u00ff]", value):
         reasons.append("invalid_or_latin1_artifact")
     if re.search(r"[ㄱ-ㅎㅏ-ㅣ]{1,}|(?:\b[가-힣]\s+){3,}[가-힣]\b", value):
         reasons.append("broken_korean_spacing_or_jamo")
@@ -563,6 +615,24 @@ def classify_case_relation(
         )
     ).lower()
     direct_matches = [term for term in direct_terms if term.lower() in searchable]
+    direct_term_set = {term.lower() for term in direct_terms}
+    if "컨베이어" in direct_term_set and direct_matches:
+        conveyor_specific = (
+            "컨베이어", "벨트", "말림", "회전체", "정비 중 재가동",
+            "청소 중 기계 작동", "방호장치", "에너지 차단", "전원 미차단",
+        )
+        if not any(term in searchable for term in conveyor_specific):
+            direct_matches = []
+    if "후진" in direct_term_set and direct_matches:
+        vehicle_motion_terms = (
+            "후진", "신호수", "덤프트럭", "지게차", "차량 충돌",
+            "사각지대", "작업자 충돌",
+        )
+        excavator_motion = "굴착기" in searchable and any(
+            term in searchable for term in ("후진", "충돌", "부딪힘", "깔림", "사각지대")
+        )
+        if not any(term in searchable for term in vehicle_motion_terms) and not excavator_motion:
+            direct_matches = []
     if direct_matches:
         return "direct", direct_matches
     analogous_matches = [term for term in analogous_terms if term.lower() in searchable]
@@ -835,6 +905,310 @@ def generate_priority_card_images(records: list[dict[str, Any]]) -> dict[str, An
     }
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as input_file:
+        for chunk in iter(lambda: input_file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def load_official_source_manifest_index(
+    manifest_path: Path = SOURCE_MANIFEST_PATH,
+) -> dict[str, dict[str, Any]]:
+    """Load only the exact official manifest and index it by saved filename."""
+    payload = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    if not isinstance(payload, list):
+        raise ReviewWorkflowBlocked("공식 출처 manifest 형식이 올바르지 않습니다.")
+    index: dict[str, dict[str, Any]] = {}
+    for row in payload:
+        if not isinstance(row, dict):
+            continue
+        filename = str(row.get("saved_filename", "")).strip()
+        if not filename or filename in index:
+            raise ReviewWorkflowBlocked("공식 출처 manifest 파일명이 없거나 중복됐습니다.")
+        index[filename] = dict(row)
+    return index
+
+
+def official_industry_from_manifest(
+    source_file: str,
+    manifest_entry: dict[str, Any],
+) -> str:
+    """Infer industry only when an exact category-specific source file proves it."""
+    if str(manifest_entry.get("saved_filename", "")).strip() != str(source_file).strip():
+        return ""
+    source_id = str(manifest_entry.get("source_id", "")).upper()
+    suffix_map = {
+        "-CONSTRUCTION": "건설업",
+        "-MANUFACTURING": "제조업",
+        "-OTHER": "기타업종",
+    }
+    return next((industry for suffix, industry in suffix_map.items() if source_id.endswith(suffix)), "")
+
+
+def source_period_from_manifest(manifest_entry: dict[str, Any]) -> str:
+    start = str(manifest_entry.get("coverage_start", "")).strip()
+    end = str(manifest_entry.get("coverage_end", "")).strip()
+    if re.fullmatch(r"\d{4}-01-01", start) and end == f"{start[:4]}-12-31":
+        return start[:4]
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", start) and end.startswith(start[:7]):
+        return start[:7]
+    return str(manifest_entry.get("source_period", "")).strip() or start[:7]
+
+
+def explicit_accident_type_for_recovery(text: str, requested_type: str = "") -> str:
+    """Return a controlled type only when its source wording is explicit in display text."""
+    value = sanitize_display_text(text)
+    matches = {
+        accident_type
+        for accident_type, patterns in CONTROLLED_ACCIDENT_TYPE_PATTERNS.items()
+        if any(re.search(pattern, value) for pattern in patterns)
+    }
+    requested = str(requested_type).strip()
+    if requested:
+        return requested if requested in matches else ""
+    return next(iter(matches)) if len(matches) == 1 else ""
+
+
+def load_presentation_recovery_plan(
+    plan_path: Path = PRESENTATION_RECOVERY_PLAN_PATH,
+) -> list[dict[str, Any]]:
+    payload = json.loads(plan_path.read_text(encoding="utf-8-sig"))
+    cases = payload.get("cases", []) if isinstance(payload, dict) else []
+    if not isinstance(cases, list) or len(cases) > PRIORITY_GROUP_LIMIT * 4:
+        raise ReviewWorkflowBlocked("발표 우선 복구 계획은 최대 12건이어야 합니다.")
+    case_ids = [str(case.get("case_id", "")).strip() for case in cases if isinstance(case, dict)]
+    if not case_ids or any(not case_id for case_id in case_ids) or len(case_ids) != len(set(case_ids)):
+        raise ReviewWorkflowBlocked("발표 우선 복구 계획의 case_id가 없거나 중복됐습니다.")
+    return [dict(case) for case in cases if isinstance(case, dict)]
+
+
+def _normalized_crop_box(value: Any) -> tuple[float, float, float, float] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != 4:
+        return None
+    try:
+        left, top, right, bottom = (float(part) for part in value)
+    except (TypeError, ValueError):
+        return None
+    if not (0 <= left < right <= 1 and 0 <= top < bottom <= 1):
+        return None
+    if (right - left) < 0.25 or (bottom - top) < 0.5:
+        return None
+    return left, top, right, bottom
+
+
+def _summary_contains_iso_date(summary: str, iso_date: str) -> bool:
+    match = re.fullmatch(r"(20\d{2})-(\d{2})-(\d{2})", str(iso_date).strip())
+    if not match:
+        return False
+    year, month, day = (int(part) for part in match.groups())
+    compact = re.sub(r"\s+", "", summary)
+    return f"{year}년{month}월{day}일" in compact
+
+
+def write_presentation_recovery_audit(rows: list[dict[str, Any]]) -> None:
+    REVIEW_DIR.mkdir(parents=True, exist_ok=True)
+    temporary = PRESENTATION_RECOVERY_AUDIT_PATH.with_suffix(".jsonl.tmp")
+    with temporary.open("w", encoding="utf-8", newline="\n") as output:
+        for row in rows:
+            output.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    temporary.replace(PRESENTATION_RECOVERY_AUDIT_PATH)
+
+
+def recover_presentation_priority_cases(
+    records: list[dict[str, Any]],
+    recovery_specs: list[dict[str, Any]],
+    *,
+    manifest_index: dict[str, dict[str, Any]] | None = None,
+    output_dir: Path = PRESENTATION_RECOVERED_CARD_DIR,
+    pdftoppm_path: Path | None = None,
+    persist_events: bool = True,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Recover only explicitly listed priority cases from exact official card images."""
+    if len(recovery_specs) > PRIORITY_GROUP_LIMIT * 4:
+        raise ReviewWorkflowBlocked("발표 우선 복구 대상은 최대 12건입니다.")
+    manifest_index = manifest_index or load_official_source_manifest_index()
+    priority_ids = {
+        str(record.get("case_id", "")).strip()
+        for record in priority_review_candidates(records)
+    }
+    by_id = {str(record.get("case_id", "")).strip(): dict(record) for record in records}
+    spec_ids = [str(spec.get("case_id", "")).strip() for spec in recovery_specs]
+    if any(not case_id for case_id in spec_ids) or len(spec_ids) != len(set(spec_ids)):
+        raise ReviewWorkflowBlocked("발표 우선 복구 대상 case_id가 없거나 중복됐습니다.")
+    renderer = pdftoppm_path or _find_pdftoppm()
+    if not renderer:
+        raise ReviewWorkflowBlocked("공식 PDF 페이지 렌더러를 찾지 못했습니다.")
+
+    from PIL import Image
+
+    successes: list[str] = []
+    audit_rows: list[dict[str, Any]] = []
+    rendered_pages: dict[tuple[str, int], Path] = {}
+    verified_pdf_hashes: set[str] = set()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="minesafe_presentation_recovery_") as temp_name:
+        temporary_dir = Path(temp_name)
+        for spec in recovery_specs:
+            case_id = str(spec.get("case_id", "")).strip()
+            reason = ""
+            record = by_id.get(case_id)
+            if case_id not in priority_ids:
+                reason = "not_presentation_priority_case"
+            elif record is None:
+                reason = "case_id_not_found"
+            elif str(record.get("verification_status", DEFAULT_VERIFICATION_STATUS)) in {
+                "verified", "manual_review", "rejected"
+            }:
+                reason = "protected_verification_status"
+
+            source_file = str(spec.get("source_file", "")).strip()
+            try:
+                page_number = int(spec.get("page_start", 0))
+            except (TypeError, ValueError):
+                page_number = 0
+            manifest_entry = manifest_index.get(source_file, {})
+            pdf_path = SOURCE_PDF_DIR / source_file
+            crop_box = _normalized_crop_box(spec.get("crop_box"))
+            if not reason and (
+                source_file != str(record.get("source_file", "")).strip()
+                or page_number != int(record.get("page_start") or 0)
+            ):
+                reason = "source_or_page_mismatch"
+            if not reason and not manifest_entry:
+                reason = "manifest_source_not_found"
+            if not reason and not (1 <= page_number <= int(manifest_entry.get("page_count", 0))):
+                reason = "page_out_of_manifest_range"
+            if not reason and (not pdf_path.is_file() or not crop_box):
+                reason = "source_pdf_or_crop_missing"
+            if not reason and source_file not in verified_pdf_hashes:
+                expected_hash = str(manifest_entry.get("sha256", "")).lower()
+                if not expected_hash or _sha256_file(pdf_path).lower() != expected_hash:
+                    reason = "source_pdf_hash_mismatch"
+                else:
+                    verified_pdf_hashes.add(source_file)
+
+            summary = sanitize_display_text(spec.get("display_accident_summary", ""))
+            summary_length = len(re.sub(r"\s+", "", summary))
+            corruption_reasons = display_text_corruption_reasons(summary)
+            if not reason and not AUTO_SCREENED_MIN_DISPLAY_CHARS <= summary_length <= AUTO_SCREENED_MAX_DISPLAY_CHARS:
+                reason = "display_summary_length_out_of_range"
+            if not reason and corruption_reasons:
+                reason = f"corrupted_display_summary_{corruption_reasons[0]}"
+
+            manifest_industry = official_industry_from_manifest(source_file, manifest_entry)
+            planned_industry = str(spec.get("industry", "")).strip()
+            if manifest_industry:
+                industry = manifest_industry
+                if planned_industry and planned_industry != manifest_industry:
+                    reason = reason or "industry_conflicts_with_manifest"
+            elif str(spec.get("industry_source", "")) == "original_card_image":
+                industry = planned_industry
+            else:
+                industry = ""
+            if not reason and industry not in CONTROLLED_RECOVERY_INDUSTRIES:
+                reason = "industry_not_officially_confirmed"
+
+            accident_date = str(spec.get("accident_date", "")).strip()
+            accident_type = explicit_accident_type_for_recovery(
+                summary,
+                str(spec.get("accident_type", "")).strip(),
+            )
+            if not reason and not _summary_contains_iso_date(summary, accident_date):
+                reason = "accident_date_not_explicit_in_summary"
+            if not reason and not accident_type:
+                reason = "accident_type_not_explicit_in_summary"
+
+            if reason:
+                audit_rows.append({"case_id": case_id, "status": "excluded", "reason": reason})
+                continue
+
+            page_key = (source_file, page_number)
+            if page_key not in rendered_pages:
+                page_image = temporary_dir / f"page_{len(rendered_pages) + 1}.png"
+                _render_page_image(pdf_path, page_number, page_image, renderer)
+                rendered_pages[page_key] = page_image
+            page_image = rendered_pages[page_key]
+            with Image.open(page_image) as image:
+                left, top, right, bottom = crop_box
+                pixel_box = (
+                    round(image.width * left),
+                    round(image.height * top),
+                    round(image.width * right),
+                    round(image.height * bottom),
+                )
+                card = image.crop(pixel_box)
+                if card.width < 600 or card.height < 900 or card.getbbox() is None:
+                    audit_rows.append({"case_id": case_id, "status": "excluded", "reason": "invalid_card_crop"})
+                    continue
+                output_path = output_dir / f"{case_id}_page_{page_number}.png"
+                temporary_output = temporary_dir / output_path.name
+                card.save(temporary_output)
+                shutil.copyfile(temporary_output, output_path)
+
+            updated = dict(record)
+            updated.update(
+                {
+                    "source_document": str(manifest_entry.get("title", "")).strip(),
+                    "source_period": source_period_from_manifest(manifest_entry),
+                    "source_file": source_file,
+                    "source_page_url": str(manifest_entry.get("source_page_url", "")).strip(),
+                    "publisher": str(manifest_entry.get("publisher", "")).strip(),
+                    "page_start": page_number,
+                    "page_end": page_number,
+                    "original_page_number": page_number,
+                    "original_page_image": output_path.relative_to(ROOT_DIR).as_posix(),
+                    "industry": industry,
+                    "accident_date": accident_date,
+                    "accident_year": int(accident_date[:4]),
+                    "accident_month": int(accident_date[5:7]),
+                    "accident_type": accident_type,
+                    "display_accident_summary": summary,
+                    "display_cause_summary": "",
+                    "display_prevention_summary": "",
+                    "text_quality_score": 100,
+                    "reading_order_score": 100,
+                    "metadata_quality_score": 100,
+                    "needs_reocr": False,
+                    "needs_manual_review": False,
+                    "mixed_case_detected": False,
+                    "quality_reasons": [],
+                    "extraction_engine": "official_pdf_card_crop_exact_transcription",
+                    "extraction_quality": "presentation_source_recovered_unverified",
+                    "review_updated_at": _now_iso(),
+                }
+            )
+            if auto_screened_exclusion_reason(updated) not in {"", "missing_original_page_image"}:
+                audit_rows.append(
+                    {
+                        "case_id": case_id,
+                        "status": "excluded",
+                        "reason": auto_screened_exclusion_reason(updated),
+                    }
+                )
+                output_path.unlink(missing_ok=True)
+                continue
+            by_id[case_id] = updated
+            successes.append(case_id)
+            audit_rows.append({"case_id": case_id, "status": "recovered_unverified", "reason": ""})
+            if persist_events:
+                _append_review_event(updated, "presentation_source_recovered_unverified")
+
+    write_presentation_recovery_audit(audit_rows)
+    return (
+        sorted(by_id.values(), key=lambda item: str(item.get("case_id", ""))),
+        {
+            "priority_case_count": len(priority_ids),
+            "planned_case_count": len(recovery_specs),
+            "recovered_case_count": len(successes),
+            "recovered_case_ids": successes,
+            "excluded_count": len(recovery_specs) - len(successes),
+            "audit_rows": audit_rows,
+        },
+    )
+
+
 def save_review_update(
     case_id: str,
     edited_fields: dict[str, Any],
@@ -978,7 +1352,9 @@ def rebuild_verified_case_db(records: list[dict[str, Any]]) -> dict[str, Any]:
     payload = collection.get(include=["metadatas"])
     if any(metadata.get("verification_status") != "verified" for metadata in payload.get("metadatas", [])):
         raise ReviewWorkflowBlocked("미검증 사례가 verified candidate DB에 포함됐습니다.")
-    del collection, client
+    del collection
+    client.close()
+    del client
     gc.collect()
 
     backup_path = ""
@@ -1094,7 +1470,9 @@ def rebuild_auto_screened_case_db(records: list[dict[str, Any]]) -> dict[str, An
         raise ReviewWorkflowBlocked("auto_screened 이외 상태가 candidate DB에 포함됐습니다.")
     if any(not is_display_safe_case(metadata) for metadata in metadatas):
         raise ReviewWorkflowBlocked("문자열 안전검사를 통과하지 못한 candidate 사례가 있습니다.")
-    del collection, client
+    del collection
+    client.close()
+    del client
     gc.collect()
 
     backup_path = ""

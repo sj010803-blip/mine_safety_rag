@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import csv
+import gc
 from io import BytesIO
 import json
 import uuid
@@ -46,6 +47,9 @@ OFFICIAL_CASE_VECTOR_DB_DIR = ROOT_DIR / "23_verified_official_accident_case_vec
 AUTO_SCREENED_OFFICIAL_CASE_VECTOR_DB_DIR = (
     ROOT_DIR / "23_auto_screened_official_accident_case_vector_db"
 )
+TEXT_SAFE_OFFICIAL_CASE_VECTOR_DB_DIR = (
+    ROOT_DIR / "23_text_safe_official_accident_case_vector_db"
+)
 SCENARIO_PATH = ROOT_DIR / "02_질문시나리오" / "question_scenarios_30.tsv"
 SCENARIO_PATH_65 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_65.tsv"
 SCENARIO_PATH_100 = ROOT_DIR / "02_질문시나리오" / "question_scenarios_100.tsv"
@@ -75,6 +79,7 @@ COLLECTION_NAME = "mine_safety_docs"
 UNVERIFIED_OFFICIAL_CASE_COLLECTION_NAME = "mine_official_accident_cases"
 OFFICIAL_CASE_COLLECTION_NAME = "mine_verified_official_accident_cases"
 AUTO_SCREENED_OFFICIAL_CASE_COLLECTION_NAME = "mine_auto_screened_official_accident_cases"
+TEXT_SAFE_OFFICIAL_CASE_COLLECTION_NAME = "mine_text_safe_official_accident_cases"
 OFFICIAL_CASE_TOP_K = 3
 OFFICIAL_CASE_INTERNAL_SEARCH_COUNT = 75
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -1447,6 +1452,15 @@ def inject_dashboard_css() -> None:
             margin: 0.16rem 0;
         }
 
+        .db-path-detail {
+            color: #d9e3f0;
+            font-size: 0.74rem;
+            line-height: 1.45;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-all;
+        }
+
         .major-law-badge-row {
             display: flex;
             flex-wrap: wrap;
@@ -1977,6 +1991,7 @@ def load_official_case_collection():
         COLLECTION_NAME,
         UNVERIFIED_OFFICIAL_CASE_COLLECTION_NAME,
         AUTO_SCREENED_OFFICIAL_CASE_COLLECTION_NAME,
+        TEXT_SAFE_OFFICIAL_CASE_COLLECTION_NAME,
     }:
         return None, "verified_collection_conflict"
     if not OFFICIAL_CASE_VECTOR_DB_DIR.exists():
@@ -1996,8 +2011,9 @@ def load_auto_screened_case_collection():
         UNVERIFIED_OFFICIAL_CASE_COLLECTION_NAME,
         OFFICIAL_CASE_COLLECTION_NAME,
         AUTO_SCREENED_OFFICIAL_CASE_COLLECTION_NAME,
+        TEXT_SAFE_OFFICIAL_CASE_COLLECTION_NAME,
     }
-    if len(collection_names) != 4:
+    if len(collection_names) != 5:
         return None, "auto_screened_collection_conflict"
     if not AUTO_SCREENED_OFFICIAL_CASE_VECTOR_DB_DIR.exists():
         return None, "auto_screened_not_created_zero_cases"
@@ -2007,6 +2023,27 @@ def load_auto_screened_case_collection():
         return collection, None
     except Exception:
         return None, "auto_screened_db_unavailable"
+
+
+@st.cache_resource(show_spinner=False)
+def load_text_safe_case_collection():
+    collection_names = {
+        COLLECTION_NAME,
+        UNVERIFIED_OFFICIAL_CASE_COLLECTION_NAME,
+        OFFICIAL_CASE_COLLECTION_NAME,
+        AUTO_SCREENED_OFFICIAL_CASE_COLLECTION_NAME,
+        TEXT_SAFE_OFFICIAL_CASE_COLLECTION_NAME,
+    }
+    if len(collection_names) != 5:
+        return None, "text_safe_collection_conflict"
+    if not TEXT_SAFE_OFFICIAL_CASE_VECTOR_DB_DIR.exists():
+        return None, "text_safe_not_created_zero_cases"
+    try:
+        client = chromadb.PersistentClient(path=str(TEXT_SAFE_OFFICIAL_CASE_VECTOR_DB_DIR))
+        collection = client.get_collection(name=TEXT_SAFE_OFFICIAL_CASE_COLLECTION_NAME)
+        return collection, None
+    except Exception:
+        return None, "text_safe_db_unavailable"
 
 
 def get_gemini_api_key() -> str | None:
@@ -3455,6 +3492,73 @@ def official_case_relation_terms(question_type: str) -> dict[str, tuple[str, ...
     return mapping.get(question_type, {"direct": (), "analogous": ()})
 
 
+def official_case_risk_family(question_type: str) -> str:
+    mapping = {
+        CONVEYOR_ROTATING_INTENT: "mechanical_entanglement",
+        BACKING_SIGNAL_INTENT: "vehicle_transport",
+        EQUIPMENT_TRANSPORT_INTENT: "vehicle_transport",
+        ROOF_FALL_INTENT: "collapse_falling",
+        ELECTRICAL_SAFETY_INTENT: "electrical_energy",
+        VENTILATION_GAS_INTENT: "asphyxiation_gas",
+        VENTILATION_EQUIPMENT_INTENT: "asphyxiation_gas",
+        GAS_DETECTOR_INTENT: "asphyxiation_gas",
+        BLASTING_MISFIRE_INTENT: "fire_explosion",
+        FIRE_EMERGENCY_INTENT: "fire_explosion",
+        HOT_WORK_INTENT: "fire_explosion",
+        HEIGHT_WORK_INTENT: "fall_from_height",
+    }
+    return mapping.get(question_type, "")
+
+
+def initialize_official_case_search_diagnostic(
+    question_type: str,
+    expanded_query_terms: list[str],
+) -> dict[str, Any]:
+    return {
+        "status": "not_started",
+        "active_collection_name": "",
+        "active_collection_names": [],
+        "collection_total_count": 0,
+        "collection_counts": {},
+        "raw_query_result_count": 0,
+        "after_duplicate_filter_count": 0,
+        "after_text_safety_filter_count": 0,
+        "after_verification_tier_filter_count": 0,
+        "after_relation_filter_count": 0,
+        "final_result_count": 0,
+        "result_count": 0,
+        "question_type": question_type,
+        "expanded_query_terms": list(expanded_query_terms),
+        "direct_candidate_count": 0,
+        "analogous_candidate_count": 0,
+        "broad_family_candidate_count": 0,
+        "removal_reasons": {},
+        "embedding_model": EMBEDDING_MODEL_NAME,
+        "query_embedding_dimension": 0,
+    }
+
+
+def public_case_text_is_safe_for_search(case: dict[str, Any]) -> bool:
+    sanitized = verified_review.sanitize_display_case(case)
+    summary = str(sanitized.get("display_accident_summary", ""))
+    compact_length = len("".join(summary.split()))
+    if not 40 <= compact_length <= 450:
+        return False
+    if not str(case.get("source_document", "")).strip():
+        return False
+    if case.get("original_page_number") in (None, "") and case.get("page_start") in (None, ""):
+        return False
+    for field in (
+        "display_accident_summary",
+        "display_cause_summary",
+        "display_prevention_summary",
+    ):
+        value = str(sanitized.get(field, ""))
+        if value and verified_review.detect_corrupted_ocr_text(value):
+            return False
+    return True
+
+
 def search_official_siren_cases(
     question: str,
     question_type: str,
@@ -3462,41 +3566,62 @@ def search_official_siren_cases(
     diagnostic: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     diagnostic = diagnostic if isinstance(diagnostic, dict) else {}
-    if question_type == OUT_OF_SCOPE_INTENT:
-        diagnostic.update({"status": "skipped_out_of_scope", "result_count": 0})
-        return []
     relation_terms = official_case_relation_terms(question_type)
     direct_terms = relation_terms.get("direct", ())
     analogous_terms = relation_terms.get("analogous", ())
     query_terms = list(dict.fromkeys((*direct_terms, *analogous_terms)))
-    if not direct_terms and not analogous_terms:
-        diagnostic.update({"status": "no_supported_case_type", "result_count": 0})
+    diagnostic.clear()
+    diagnostic.update(
+        initialize_official_case_search_diagnostic(question_type, query_terms)
+    )
+    if question_type == OUT_OF_SCOPE_INTENT:
+        diagnostic.update({"status": "skipped_out_of_scope"})
         return []
+    if not direct_terms and not analogous_terms:
+        diagnostic.update({"status": "no_supported_case_type"})
+        return []
+    risk_family = official_case_risk_family(question_type)
 
     verified_collection, verified_db_status = load_official_case_collection()
     auto_collection, auto_db_status = load_auto_screened_case_collection()
+    text_safe_collection, text_safe_db_status = load_text_safe_case_collection()
     available_collections = [
-        ("verified", verified_collection),
-        (verified_review.AUTO_SCREENED_STATUS, auto_collection),
+        ("verified", OFFICIAL_CASE_COLLECTION_NAME, verified_collection),
+        (
+            verified_review.AUTO_SCREENED_PUBLIC_TIER,
+            AUTO_SCREENED_OFFICIAL_CASE_COLLECTION_NAME,
+            auto_collection,
+        ),
+        (
+            verified_review.TEXT_SAFE_FALLBACK_TIER,
+            TEXT_SAFE_OFFICIAL_CASE_COLLECTION_NAME,
+            text_safe_collection,
+        ),
     ]
-    available_collections = [item for item in available_collections if item[1] is not None]
+    available_collections = [item for item in available_collections if item[2] is not None]
+    diagnostic.update(
+        {
+            "verified_db_status": verified_db_status or "ready",
+            "auto_screened_db_status": auto_db_status or "ready",
+            "text_safe_db_status": text_safe_db_status or "ready",
+            "active_collection_names": [item[1] for item in available_collections],
+            "active_collection_name": " + ".join(item[1] for item in available_collections),
+        }
+    )
     if not available_collections:
         actual_errors = [
             status
-            for status in (verified_db_status, auto_db_status)
+            for status in (verified_db_status, auto_db_status, text_safe_db_status)
             if status and ("db_unavailable" in status or "conflict" in status)
         ]
         diagnostic.update(
             {
                 "status": "db_unavailable" if actual_errors else "no_quality_screened_cases",
-                "verified_db_status": verified_db_status,
-                "auto_screened_db_status": auto_db_status,
-                "result_count": 0,
             }
         )
         return []
 
-    query_payloads: list[tuple[str, Any, dict[str, Any]]] = []
+    query_payloads: list[tuple[str, str, dict[str, Any]]] = []
     search_errors: list[str] = []
     try:
         model = load_embedding_model()
@@ -3506,15 +3631,18 @@ def search_official_siren_cases(
             normalize_embeddings=True,
             show_progress_bar=False,
         ).tolist()
+        diagnostic["query_embedding_dimension"] = (
+            len(query_embedding[0]) if query_embedding and query_embedding[0] else 0
+        )
     except Exception:
-        diagnostic.update({"status": "search_failed", "result_count": 0})
+        diagnostic.update({"status": "search_failed"})
         return []
 
     collection_counts: dict[str, int] = {}
-    for expected_status, collection in available_collections:
+    for expected_tier, collection_name, collection in available_collections:
         try:
             collection_count = int(collection.count())
-            collection_counts[expected_status] = collection_count
+            collection_counts[expected_tier] = collection_count
             if collection_count <= 0:
                 continue
             payload = collection.query(
@@ -3525,13 +3653,14 @@ def search_official_siren_cases(
                 ),
                 include=["documents", "metadatas", "distances"],
             )
-            query_payloads.append((expected_status, collection, payload))
+            query_payloads.append((expected_tier, collection_name, payload))
         except Exception:
-            search_errors.append(expected_status)
+            search_errors.append(expected_tier)
+    diagnostic["collection_counts"] = collection_counts
+    diagnostic["collection_total_count"] = sum(collection_counts.values())
 
-    candidates: list[dict[str, Any]] = []
-    safety_rejected_count = 0
-    for expected_status, _collection, payload in query_payloads:
+    raw_rows: list[dict[str, Any]] = []
+    for expected_tier, collection_name, payload in query_payloads:
         documents = payload.get("documents", [[]])[0]
         metadatas = payload.get("metadatas", [[]])[0]
         distances = payload.get("distances", [[]])[0]
@@ -3541,66 +3670,140 @@ def search_official_siren_cases(
                 if index < len(metadatas) and isinstance(metadatas[index], dict)
                 else {}
             )
-            case_id = str(metadata.get("case_id", "")).strip()
-            if not case_id or metadata.get("official_case") is not True:
-                continue
-            status = str(metadata.get("verification_status", ""))
-            if status != "verified" and status != verified_review.AUTO_SCREENED_STATUS:
-                continue
-            if status != expected_status:
-                continue
-            if str(metadata.get("mine_relevance", "")) not in {"high", "medium"}:
-                continue
-            if (
-                status == verified_review.AUTO_SCREENED_STATUS
-                and str(metadata.get("ocr_quality_status", "")) != "pass"
-            ):
-                continue
-            relation_type, matched_terms = verified_review.classify_case_relation(
-                metadata,
-                direct_terms,
-                analogous_terms,
-            )
-            if relation_type not in {"direct", "analogous"}:
-                continue
-            distance = distances[index] if index < len(distances) else None
-            item = verified_review.sanitize_display_case(metadata)
-            item.update(
+            raw_rows.append(
                 {
-                    "text": str(document or ""),
-                    "distance": distance,
-                    "matched_terms": matched_terms,
-                    "relation_type": relation_type,
-                    "source_grade": (
-                        "원문 대조 검증 완료 공식 사고사례"
-                        if status == "verified"
-                        else "자동 품질검사 통과 공식 사고사례"
-                    ),
+                    "expected_tier": expected_tier,
+                    "collection_name": collection_name,
+                    "document": str(document or ""),
+                    "metadata": metadata,
+                    "distance": distances[index] if index < len(distances) else None,
                 }
             )
-            if not verified_review.is_display_safe_case(item):
-                safety_rejected_count += 1
-                continue
-            candidates.append(item)
+    diagnostic["raw_query_result_count"] = len(raw_rows)
+    removal_reasons: Counter[str] = Counter()
+
+    duplicate_filtered: list[dict[str, Any]] = []
+    seen_query_rows: set[tuple[str, str]] = set()
+    for row in raw_rows:
+        metadata = row["metadata"]
+        case_id = str(metadata.get("case_id", "")).strip()
+        if not case_id:
+            removal_reasons["missing_case_id"] += 1
+            continue
+        duplicate_key = (str(row["expected_tier"]), case_id)
+        if duplicate_key in seen_query_rows:
+            removal_reasons["duplicate_case_id_in_collection"] += 1
+            continue
+        seen_query_rows.add(duplicate_key)
+        duplicate_filtered.append(row)
+    diagnostic["after_duplicate_filter_count"] = len(duplicate_filtered)
+
+    text_safe_rows: list[dict[str, Any]] = []
+    for row in duplicate_filtered:
+        if not public_case_text_is_safe_for_search(row["metadata"]):
+            removal_reasons["display_text_safety_failed"] += 1
+            continue
+        text_safe_rows.append(row)
+    diagnostic["after_text_safety_filter_count"] = len(text_safe_rows)
+
+    tier_filtered_rows: list[dict[str, Any]] = []
+    for row in text_safe_rows:
+        metadata = row["metadata"]
+        expected_tier = str(row["expected_tier"])
+        verification_status = str(metadata.get("verification_status", ""))
+        if metadata.get("official_case") is not True:
+            removal_reasons["not_official_case"] += 1
+            continue
+        if expected_tier == "verified" and verification_status != "verified":
+            removal_reasons["verified_tier_mismatch"] += 1
+            continue
+        if (
+            expected_tier == verified_review.AUTO_SCREENED_PUBLIC_TIER
+            and verification_status != verified_review.AUTO_SCREENED_STATUS
+        ):
+            removal_reasons["auto_screened_tier_mismatch"] += 1
+            continue
+        if (
+            expected_tier == verified_review.TEXT_SAFE_FALLBACK_TIER
+            and verified_review.effective_public_case_tier(metadata)
+            != verified_review.TEXT_SAFE_FALLBACK_TIER
+        ):
+            removal_reasons["text_safe_tier_mismatch"] += 1
+            continue
+        if (
+            expected_tier in {"verified", verified_review.AUTO_SCREENED_PUBLIC_TIER}
+            and str(metadata.get("mine_relevance", "")) not in {"high", "medium"}
+        ):
+            removal_reasons["mine_relevance_not_eligible"] += 1
+            continue
+        if not verified_review.is_public_display_safe_case(metadata):
+            removal_reasons["public_tier_safety_failed"] += 1
+            continue
+        tier_filtered_rows.append(row)
+    diagnostic["after_verification_tier_filter_count"] = len(tier_filtered_rows)
+
+    candidates: list[dict[str, Any]] = []
+    direct_candidate_count = 0
+    analogous_candidate_count = 0
+    broad_family_candidate_count = 0
+    for row in tier_filtered_rows:
+        metadata = row["metadata"]
+        relation_type, matched_terms = verified_review.classify_public_case_relation(
+            metadata,
+            direct_terms,
+            analogous_terms,
+            risk_family,
+        )
+        if relation_type not in {"direct", "analogous", "broad_family"}:
+            removal_reasons["relation_mismatch"] += 1
+            continue
+        if relation_type == "direct":
+            direct_candidate_count += 1
+        elif relation_type == "analogous":
+            analogous_candidate_count += 1
+        else:
+            broad_family_candidate_count += 1
+        item = verified_review.sanitize_display_case(metadata)
+        public_tier = verified_review.effective_public_case_tier(item)
+        item.update(
+            {
+                "distance": row["distance"],
+                "matched_terms": matched_terms,
+                "relation_type": relation_type,
+                "public_case_tier": public_tier,
+                "source_grade": {
+                    "verified": "원문 대조 검증 완료 공식 사고사례",
+                    verified_review.AUTO_SCREENED_PUBLIC_TIER: "엄격 자동 품질검사 통과 공식 사고사례",
+                    verified_review.TEXT_SAFE_FALLBACK_TIER: "문자 품질검사 통과 공식 사고사례",
+                }.get(public_tier, "공개 제외 공식 사고사례"),
+            }
+        )
+        candidates.append(item)
+
+    diagnostic.update(
+        {
+            "after_relation_filter_count": len(candidates),
+            "direct_candidate_count": direct_candidate_count,
+            "analogous_candidate_count": analogous_candidate_count,
+            "broad_family_candidate_count": broad_family_candidate_count,
+        }
+    )
 
     selected = verified_review.rank_public_official_cases(
         candidates,
         max_results=max(1, min(int(top_k), OFFICIAL_CASE_TOP_K)),
     )
-    if search_errors and not query_payloads:
-        final_status = "search_failed"
-    elif selected:
-        final_status = "ready"
-    else:
-        final_status = "no_search_results"
+    final_status = "search_failed" if search_errors and not query_payloads else (
+        "ready" if selected else "no_search_results"
+    )
     diagnostic.update(
         {
             "status": final_status,
-            "verified_db_status": verified_db_status or "ready",
-            "auto_screened_db_status": auto_db_status or "ready",
-            "collection_counts": collection_counts,
             "search_error_sources": search_errors,
-            "safety_rejected_count": safety_rejected_count,
+            "safety_rejected_count": removal_reasons.get("display_text_safety_failed", 0)
+            + removal_reasons.get("public_tier_safety_failed", 0),
+            "removal_reasons": dict(sorted(removal_reasons.items())),
+            "final_result_count": len(selected),
             "result_count": len(selected),
         }
     )
@@ -6076,16 +6279,17 @@ def format_official_cases_for_prompt(official_cases: list[dict[str, Any]]) -> st
         return "현재 질문과 직접 관련된 공식 사고사례 검색 결과 없음."
     blocks: list[str] = []
     for case in official_cases[:2]:
-        status_label = (
-            "원문 대조 검증 완료"
-            if str(case.get("verification_status", "")) == "verified"
-            else "자동 품질검사 통과"
-        )
-        relation_label = (
-            "직접 관련"
-            if str(case.get("relation_type", "")) == "direct"
-            else "유사 위험"
-        )
+        public_tier = verified_review.effective_public_case_tier(case)
+        status_label = {
+            verified_review.VERIFIED_PUBLIC_TIER: "원문 대조 검증 완료",
+            verified_review.AUTO_SCREENED_PUBLIC_TIER: "엄격 자동 품질검사 통과",
+            verified_review.TEXT_SAFE_FALLBACK_TIER: "문자 품질검사 통과",
+        }.get(public_tier, "공개 제외")
+        relation_label = {
+            "direct": "직접 관련",
+            "analogous": "유사 위험",
+            "broad_family": "같은 위험군",
+        }.get(str(case.get("relation_type", "")), "관련성 미확인")
         summary = make_preview(
             clean_text(str(case.get("display_accident_summary", ""))),
             350,
@@ -6119,17 +6323,19 @@ def official_case_warning_points(
     safe_cases = [
         verified_review.sanitize_display_case(case)
         for case in official_cases
-        if verified_review.is_display_safe_case(case)
+        if verified_review.is_public_display_safe_case(case)
     ]
     priority_steps = (
-        ("verified", "display_prevention_summary"),
-        (verified_review.AUTO_SCREENED_STATUS, "display_prevention_summary"),
-        ("verified", "display_cause_summary"),
-        (verified_review.AUTO_SCREENED_STATUS, "display_cause_summary"),
+        (verified_review.VERIFIED_PUBLIC_TIER, "display_prevention_summary"),
+        (verified_review.AUTO_SCREENED_PUBLIC_TIER, "display_prevention_summary"),
+        (verified_review.TEXT_SAFE_FALLBACK_TIER, "display_prevention_summary"),
+        (verified_review.VERIFIED_PUBLIC_TIER, "display_cause_summary"),
+        (verified_review.AUTO_SCREENED_PUBLIC_TIER, "display_cause_summary"),
+        (verified_review.TEXT_SAFE_FALLBACK_TIER, "display_cause_summary"),
     )
-    for status, field in priority_steps:
+    for public_tier, field in priority_steps:
         for case in safe_cases:
-            if str(case.get("verification_status", "")) != status:
+            if verified_review.effective_public_case_tier(case) != public_tier:
                 continue
             value = make_preview(
                 clean_text(str(case.get(field, ""))),
@@ -6142,8 +6348,12 @@ def official_case_warning_points(
             ):
                 source_label = (
                     "원문 대조 검증 사례 기반"
-                    if status == "verified"
-                    else "자동 품질검사 통과 사례 기반"
+                    if public_tier == verified_review.VERIFIED_PUBLIC_TIER
+                    else (
+                        "엄격 자동 품질검사 통과 사례 기반"
+                        if public_tier == verified_review.AUTO_SCREENED_PUBLIC_TIER
+                        else "문자 품질검사 통과 사례 기반"
+                    )
                 )
                 points.append({"text": value, "source": source_label})
             if len(points) >= 3:
@@ -6201,10 +6411,14 @@ def summarize_reference_cases_for_history(reference_cases: list[dict[str, Any]])
 
 def render_official_siren_case_card(case: dict[str, Any]) -> None:
     verification_status = str(case.get("verification_status", ""))
-    if verification_status != "verified" and verification_status != verified_review.AUTO_SCREENED_STATUS:
+    public_tier = verified_review.effective_public_case_tier(case)
+    if (
+        verification_status != "verified"
+        and public_tier == verified_review.HIDDEN_PUBLIC_TIER
+    ):
         return
     case = verified_review.sanitize_display_case(case)
-    if not verified_review.is_display_safe_case(case):
+    if not verified_review.is_public_display_safe_case(case):
         return
     accident_type = str(case.get("accident_type", "") or "정보 없음")
     accident_date = str(
@@ -6236,7 +6450,11 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
         360,
     )
     relation_type = str(case.get("relation_type", ""))
-    relation_label = "직접 관련 사례" if relation_type == "direct" else "유사 위험 사례"
+    relation_label = {
+        "direct": "직접 관련 사례",
+        "analogous": "유사 위험 사례",
+        "broad_family": "같은 위험군의 참고 사례",
+    }.get(relation_type, "관련성 확인 사례")
     source_document = str(case.get("source_document", "") or "출처 정보 없음")
     source_period = str(case.get("source_period", "") or "기간 정보 없음")
     page_start = str(
@@ -6246,19 +6464,25 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
     )
     case_id = str(case.get("case_id", "") or "사례 ID 없음")
     with st.container(border=True):
-        if verification_status == "verified":
+        if public_tier == verified_review.VERIFIED_PUBLIC_TIER:
             st.success("✓ 원본 PDF와 대조하여 내용 검증이 완료된 공식 사고사례입니다.")
-        else:
+        elif public_tier == verified_review.AUTO_SCREENED_PUBLIC_TIER:
             st.info(
-                "자동 품질검사 통과 · 공식 원문에서 자동 추출한 뒤 문자 깨짐·혼합 문장·"
+                "엄격 자동 품질검사 통과 · 공식 원문에서 자동 추출한 뒤 문자 깨짐·혼합 문장·"
                 "출처 정보에 대한 품질검사를 통과한 사례입니다. "
                 "사람의 원문 대조 검수는 아직 완료되지 않았습니다."
             )
+        else:
+            st.info(
+                "문자 품질검사 통과 · 공식 자료에서 추출한 사례로, 화면 문장과 출처 정보에 대한 "
+                "문자 품질검사를 통과했습니다. 날짜·업종 등 일부 metadata는 아직 원문 대조 검수가 "
+                "완료되지 않았을 수 있습니다."
+            )
         st.caption(f"관련성: {relation_label}")
-        if relation_type == "analogous":
+        if relation_type in {"analogous", "broad_family"}:
             st.warning(
                 "동일한 작업이나 설비의 사고가 아니라, 사고 발생 원리와 위험요인이 "
-                "유사한 공식 사례입니다."
+                "유사한 공식 사례입니다. 같은 위험 유형의 참고 사례일 수 있습니다."
             )
         header_cols = st.columns(3)
         header_cols[0].markdown(f"**사고 유형**  \n{accident_type}")
@@ -6272,7 +6496,7 @@ def render_official_siren_case_card(case: dict[str, Any]) -> None:
             f"기간: {source_period} · 페이지: {page_start} · case_id: {case_id}"
         )
         original_image = ROOT_DIR / str(case.get("original_page_image", ""))
-        if verification_status == "verified" and original_image.is_file():
+        if public_tier == verified_review.VERIFIED_PUBLIC_TIER and original_image.is_file():
             with st.expander("원문 이미지 확인", expanded=False):
                 st.image(str(original_image), caption=f"{source_document} · {page_start}쪽")
 
@@ -6284,11 +6508,13 @@ def render_official_siren_cases(
     public_cases = [
         case
         for case in official_cases
-        if str(case.get("verification_status", "")) in verified_review.PUBLIC_CASE_STATUSES
-        and verified_review.is_display_safe_case(case)
+        if verified_review.effective_public_case_tier(case)
+        != verified_review.HIDDEN_PUBLIC_TIER
+        and verified_review.is_public_display_safe_case(case)
     ]
     st.caption(
-        "원본 PDF 대조 검증 사례를 우선하고, 없으면 엄격한 자동 품질검사를 통과한 공식 사고사례를 표시합니다. "
+        "원본 PDF 대조 검증 사례와 엄격 자동검사 사례를 우선하고, 없으면 문자 품질검사를 통과한 "
+        "같은 위험군의 공식 사고사례를 표시합니다. "
         "사고의 발생 상황과 예방사항을 이해하기 위한 참고자료이며, "
         "개별 광산의 법령 위반 여부를 확정하는 근거는 아닙니다."
     )
@@ -6305,11 +6531,71 @@ def render_official_siren_cases(
             "auto_screened_collection_conflict": "auto_screened collection 설정 충돌",
             "ready": "auto_screened DB 준비됨",
         }.get(str(diagnostic.get("auto_screened_db_status", "")), "auto_screened DB 상태 확인 필요")
+        text_safe_db_label = {
+            "text_safe_not_created_zero_cases": "문자 안전 사례 0건으로 미생성",
+            "text_safe_db_unavailable": "문자 안전 사례 DB 연결 오류",
+            "text_safe_collection_conflict": "문자 안전 collection 설정 충돌",
+            "ready": "문자 안전 사례 DB 준비됨",
+        }.get(str(diagnostic.get("text_safe_db_status", "")), "문자 안전 사례 DB 상태 확인 필요")
         st.caption(
             "관리자 진단 · "
-            f"{verified_db_label} · {auto_db_label} · "
+            f"{verified_db_label} · {auto_db_label} · {text_safe_db_label} · "
             f"검색 결과: {diagnostic.get('result_count', 0)}건"
         )
+        with st.expander("검색 단계별 진단 보기", expanded=False):
+            diagnostic_status_label = {
+                "ready": "검색 정상",
+                "no_search_results": "관련 결과 0건",
+                "no_quality_screened_cases": "공개 가능 사례 DB 미생성",
+                "search_failed": "사례 검색 연결 오류",
+                "db_unavailable": "사례 DB 연결 오류",
+            }.get(str(diagnostic.get("status", "")), "검색 상태 확인 필요")
+            st.write(f"검색 상태: {diagnostic_status_label}")
+            st.write(f"사용 collection: {diagnostic.get('active_collection_name') or '없음'}")
+            st.write(f"collection 저장 수: {diagnostic.get('collection_total_count', 0)}건")
+            st.write(f"원시 검색 결과: {diagnostic.get('raw_query_result_count', 0)}건")
+            st.write(f"중복 제거 후: {diagnostic.get('after_duplicate_filter_count', 0)}건")
+            st.write(f"문자 안전검사 후: {diagnostic.get('after_text_safety_filter_count', 0)}건")
+            st.write(f"공개 등급검사 후: {diagnostic.get('after_verification_tier_filter_count', 0)}건")
+            st.write(f"위험 관련성검사 후: {diagnostic.get('after_relation_filter_count', 0)}건")
+            st.write(f"최종 표시 결과: {diagnostic.get('final_result_count', 0)}건")
+            st.write(
+                "관련성 후보: "
+                f"직접 {diagnostic.get('direct_candidate_count', 0)}건 · "
+                f"유사 {diagnostic.get('analogous_candidate_count', 0)}건 · "
+                f"같은 위험군 {diagnostic.get('broad_family_candidate_count', 0)}건"
+            )
+            failed_sources = diagnostic.get("search_error_sources", [])
+            if isinstance(failed_sources, list) and failed_sources:
+                failed_labels = {
+                    "verified": "검증 완료 사례",
+                    verified_review.AUTO_SCREENED_PUBLIC_TIER: "엄격 자동검사 사례",
+                    verified_review.TEXT_SAFE_FALLBACK_TIER: "문자 안전 사례",
+                }
+                st.write(
+                    "검색 연결 실패 대상: "
+                    + ", ".join(
+                        failed_labels.get(str(source), "사례 DB")
+                        for source in failed_sources
+                    )
+                )
+            removal_reasons = diagnostic.get("removal_reasons", {})
+            if isinstance(removal_reasons, dict) and removal_reasons:
+                st.write("제거 사유별 수:")
+                reason_labels = {
+                    "missing_case_id": "사례 ID 누락",
+                    "duplicate_case_id_in_collection": "동일 사례 중복",
+                    "display_text_safety_failed": "문자 안전검사 미통과",
+                    "not_official_case": "공식 사례 표시 누락",
+                    "verified_tier_mismatch": "검증 완료 등급 불일치",
+                    "auto_screened_tier_mismatch": "엄격 자동검사 등급 불일치",
+                    "text_safe_tier_mismatch": "문자 안전 등급 불일치",
+                    "mine_relevance_not_eligible": "광산 위험 관련성 기준 미충족",
+                    "public_tier_safety_failed": "공개 등급 안전조건 미충족",
+                    "relation_mismatch": "질문 위험 유형과 불일치",
+                }
+                for reason, count in sorted(removal_reasons.items()):
+                    st.write(f"- {reason_labels.get(reason, '기타 안전조건 미충족')}: {count}건")
     if not public_cases:
         st.info("현재 질문과 관련해 품질검사를 통과한 공식 사고사례가 없습니다.")
         return
@@ -6511,19 +6797,31 @@ def render_verified_official_case_review_page() -> None:
                 verified_fields,
                 rejection_reason,
             )
+            load_official_case_collection.clear()
+            load_auto_screened_case_collection.clear()
+            load_text_safe_case_collection.clear()
+            gc.collect()
             updated_records = verified_review.load_review_records()
             db_result = verified_review.rebuild_verified_case_db(updated_records)
             auto_db_result = verified_review.rebuild_auto_screened_case_db(updated_records)
+            text_safe_db_result = verified_review.rebuild_text_safe_case_db(updated_records)
             load_official_case_collection.clear()
             load_auto_screened_case_collection.clear()
+            load_text_safe_case_collection.clear()
             st.success(
                 f"검수 상태를 저장했습니다. verified DB 상태: "
                 f"{db_result.get('status', '확인 필요')} · auto_screened DB 상태: "
-                f"{auto_db_result.get('status', '확인 필요')}"
+                f"{auto_db_result.get('status', '확인 필요')} · text_safe DB 상태: "
+                f"{text_safe_db_result.get('status', '확인 필요')}"
             )
             st.rerun()
         except verified_review.ReviewWorkflowBlocked as error:
             st.error(str(error))
+        except OSError:
+            st.error(
+                "사례 DB 파일이 다른 프로세스에서 사용 중이어서 갱신하지 못했습니다. "
+                "실행 중인 검색을 마친 뒤 다시 시도해 주세요."
+            )
 
 
 def render_latest_reference_cases(
@@ -7447,6 +7745,141 @@ def render_notice_guidance_page() -> None:
     )
 
 
+def _case_database_state(
+    collection: Any,
+    internal_status: str | None,
+    zero_status: str,
+) -> dict[str, Any]:
+    if collection is not None:
+        try:
+            count = int(collection.count())
+            return {"state": "ready", "count": count}
+        except Exception:
+            return {"state": "error", "count": 0}
+    if internal_status == zero_status:
+        return {"state": "zero_not_created", "count": 0}
+    return {"state": "error", "count": 0}
+
+
+def build_database_status_view_model(
+    law_collection: Any,
+    law_error: str | None,
+    verified_collection: Any,
+    verified_status: str | None,
+    auto_collection: Any,
+    auto_status: str | None,
+    text_safe_collection: Any,
+    text_safe_status: str | None,
+) -> dict[str, Any]:
+    try:
+        law_count = int(law_collection.count()) if law_collection is not None else 0
+        law_state = "ready" if law_error is None and law_collection is not None else "error"
+    except Exception:
+        law_count = 0
+        law_state = "error"
+    verified_state = _case_database_state(
+        verified_collection,
+        verified_status,
+        "verified_not_created_zero_cases",
+    )
+    auto_state = _case_database_state(
+        auto_collection,
+        auto_status,
+        "auto_screened_not_created_zero_cases",
+    )
+    text_safe_state = _case_database_state(
+        text_safe_collection,
+        text_safe_status,
+        "text_safe_not_created_zero_cases",
+    )
+    searchable_case_count = sum(
+        int(item["count"])
+        for item in (verified_state, auto_state, text_safe_state)
+        if item["state"] == "ready"
+    )
+    return {
+        "law": {"state": law_state, "count": law_count},
+        "verified": verified_state,
+        "auto_screened": auto_state,
+        "text_safe": text_safe_state,
+        "official_case_connected": any(
+            item["state"] == "ready"
+            for item in (verified_state, auto_state, text_safe_state)
+        ),
+        "searchable_case_count": searchable_case_count,
+    }
+
+
+def database_state_label(name: str, state: dict[str, Any]) -> str:
+    state_name = str(state.get("state", "error"))
+    count = int(state.get("count", 0) or 0)
+    if state_name == "ready":
+        return f"{name}: 정상 · {count}건"
+    if state_name == "zero_not_created":
+        return f"{name}: 대상 사례 0건으로 미생성"
+    return f"{name}: 연결 오류"
+
+
+def render_sidebar_database_status(
+    is_admin: bool,
+    law_collection: Any,
+    law_error: str | None,
+) -> dict[str, Any]:
+    verified_collection, verified_status = load_official_case_collection()
+    auto_collection, auto_status = load_auto_screened_case_collection()
+    text_safe_collection, text_safe_status = load_text_safe_case_collection()
+    model = build_database_status_view_model(
+        law_collection,
+        law_error,
+        verified_collection,
+        verified_status,
+        auto_collection,
+        auto_status,
+        text_safe_collection,
+        text_safe_status,
+    )
+    if is_admin:
+        st.sidebar.markdown("#### DB 연결 상태")
+        law_label = (
+            f"법령 DB: 정상 · {model['law']['count']}건"
+            if model["law"]["state"] == "ready"
+            else "법령 DB: 연결 오류"
+        )
+        st.sidebar.write(law_label)
+        st.sidebar.write(database_state_label("검증 완료 사례 DB", model["verified"]))
+        st.sidebar.write(database_state_label("엄격 자동검사 사례 DB", model["auto_screened"]))
+        st.sidebar.write(database_state_label("문자 안전 사례 DB", model["text_safe"]))
+        with st.sidebar.expander("DB 경로 상세 보기", expanded=False):
+            path_rows = (
+                ("법령 DB", VECTOR_DB_DIR),
+                ("검증 완료 사례 DB", OFFICIAL_CASE_VECTOR_DB_DIR),
+                ("엄격 자동검사 사례 DB", AUTO_SCREENED_OFFICIAL_CASE_VECTOR_DB_DIR),
+                ("문자 안전 사례 DB", TEXT_SAFE_OFFICIAL_CASE_VECTOR_DB_DIR),
+            )
+            for label, path in path_rows:
+                st.markdown(
+                    f'<div class="db-path-detail"><strong>{escape(label)}</strong><br>'
+                    f'{escape(str(path))}</div>',
+                    unsafe_allow_html=True,
+                )
+    else:
+        law_connection = "연결됨" if model["law"]["state"] == "ready" else "연결 확인 필요"
+        case_connection = "연결됨" if model["official_case_connected"] else "사용 가능 사례 없음"
+        st.sidebar.markdown(
+            (
+                '<div class="major-law-sidebar-card">'
+                '<div class="major-law-sidebar-title">공식 자료 연결 상태</div>'
+                f'<div class="major-law-sidebar-line">공식 법령 DB: {law_connection}</div>'
+                f'<div class="major-law-sidebar-line">공식 사례 DB: {case_connection}</div>'
+                '<div class="major-law-sidebar-line">공식 사례 검색 가능 수: '
+                f'{model["searchable_case_count"]}건</div>'
+                '</div>'
+            ),
+            unsafe_allow_html=True,
+        )
+    return model
+
+
 # ==============================
 # 사이드바
 # ==============================
@@ -7499,22 +7932,16 @@ else:
 
 chunk_count: int | str = 0
 collection, db_error = load_chroma_collection()
-if db_error:
-    if is_admin_mode:
-        st.sidebar.error("Vector DB · 연결 실패")
-        st.sidebar.write(db_error)
-else:
-    try:
-        chunk_count = collection.count()
-    except Exception as e:
-        chunk_count = "확인 실패"
-        if is_admin_mode:
-            st.sidebar.warning(f"chunk 수 확인 실패: {e}")
-
-    if is_admin_mode:
-        st.sidebar.success("Vector DB · 정상")
-        st.sidebar.write(f"저장된 chunk 수: **{chunk_count}개**")
-        st.sidebar.write(f"DB 폴더: `{VECTOR_DB_DIR.name}`")
+database_status_model = render_sidebar_database_status(
+    is_admin_mode,
+    collection,
+    db_error,
+)
+chunk_count = (
+    int(database_status_model["law"]["count"])
+    if database_status_model["law"]["state"] == "ready"
+    else "확인 실패"
+)
 
 law_badges_sidebar = "".join(
     f'<span class="major-law-mini-badge">{escape(label)}</span>'
@@ -7530,7 +7957,6 @@ if is_admin_mode:
             f'<div class="major-law-badge-row">{law_badges_sidebar}</div>'
             f'<div class="major-law-sidebar-line">통합 chunk 수: {MAJOR_ACCIDENT_DOC_TOTAL_CHUNKS}개</div>'
             f'<div class="major-law-sidebar-line">추가 자료 chunk 수: {MAJOR_ACCIDENT_DOC_ADDED_CHUNKS}개</div>'
-            f'<div class="major-law-sidebar-line">현재 Vector DB: {escape(VECTOR_DB_DIR.name)}</div>'
             "</div>"
         ),
         unsafe_allow_html=True,
@@ -7716,14 +8142,14 @@ with status_col1:
     render_status_card(
         "Vector DB",
         db_status_text,
-        VECTOR_DB_DIR.name,
+        "공식 법령 DB 연결 상태",
         db_status_accent,
     )
 with status_col2:
     render_status_card(
         "문서 Chunk",
         f"{chunk_count}개",
-        COLLECTION_NAME,
+        "공식 문서 검색 대상",
         "#64748b",
     )
 with status_col3:
@@ -8775,7 +9201,7 @@ with direct_tab:
             st.warning("질문을 입력해 주세요.")
         elif db_error:
             st.error("Vector DB를 로드할 수 없어 검색을 진행할 수 없습니다.")
-            st.write(db_error)
+            st.caption("DB 연결 상태를 확인한 뒤 다시 시도해 주세요.")
         else:
             results, answer, answer_status, error = run_rag_flow(
                 question,
@@ -8845,7 +9271,7 @@ with scenario_tab:
         if st.button("선택한 질문으로 테스트 실행", type="primary"):
             if db_error:
                 st.error("Vector DB를 로드할 수 없어 테스트를 진행할 수 없습니다.")
-                st.write(db_error)
+                st.caption("DB 연결 상태를 확인한 뒤 다시 시도해 주세요.")
             else:
                 scenario_question = selected_scenario.get("질문 시나리오", "")
                 results, answer, answer_status, error = run_rag_flow(

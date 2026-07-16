@@ -30,9 +30,14 @@ AUTO_SCREENED_CASE_DB_DIR = ROOT_DIR / "23_auto_screened_official_accident_case_
 AUTO_SCREENED_CASE_DB_CANDIDATE_DIR = (
     ROOT_DIR / "23_auto_screened_official_accident_case_vector_db_candidate"
 )
+TEXT_SAFE_CASE_DB_DIR = ROOT_DIR / "23_text_safe_official_accident_case_vector_db"
+TEXT_SAFE_CASE_DB_CANDIDATE_DIR = (
+    ROOT_DIR / "23_text_safe_official_accident_case_vector_db_candidate"
+)
 REVIEW_DIR = ROOT_DIR / "25_verified_case_review"
 REVIEW_STATUS_PATH = REVIEW_DIR / "official_case_review_status.jsonl"
 AUTO_SCREENING_RESULT_PATH = REVIEW_DIR / "auto_screened_quality_results.jsonl"
+TEXT_SAFE_SCREENING_RESULT_PATH = REVIEW_DIR / "text_safe_quality_results.jsonl"
 CARD_IMAGE_DIR = REVIEW_DIR / "card_images"
 SOURCE_PDF_DIR = ROOT_DIR / "21_official_accident_case_docs"
 ORIGINAL_OCR_JSONL_PATH = (
@@ -54,6 +59,7 @@ LAW_COLLECTION_NAME = "mine_safety_docs"
 SOURCE_CASE_COLLECTION_NAME = "mine_official_accident_cases"
 VERIFIED_CASE_COLLECTION_NAME = "mine_verified_official_accident_cases"
 AUTO_SCREENED_CASE_COLLECTION_NAME = "mine_auto_screened_official_accident_cases"
+TEXT_SAFE_CASE_COLLECTION_NAME = "mine_text_safe_official_accident_cases"
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 VERIFICATION_STATUSES = ("unverified", "verified", "rejected", "manual_review")
@@ -61,6 +67,16 @@ AUTO_SCREENED_STATUS = "auto_screened"
 CASE_STATUSES = (*VERIFICATION_STATUSES, AUTO_SCREENED_STATUS)
 PUBLIC_CASE_STATUSES = ("verified", AUTO_SCREENED_STATUS)
 DEFAULT_VERIFICATION_STATUS = "unverified"
+VERIFIED_PUBLIC_TIER = "verified"
+AUTO_SCREENED_PUBLIC_TIER = AUTO_SCREENED_STATUS
+TEXT_SAFE_FALLBACK_TIER = "text_safe_fallback"
+HIDDEN_PUBLIC_TIER = "hidden"
+PUBLIC_CASE_TIERS = (
+    VERIFIED_PUBLIC_TIER,
+    AUTO_SCREENED_PUBLIC_TIER,
+    TEXT_SAFE_FALLBACK_TIER,
+    HIDDEN_PUBLIC_TIER,
+)
 REQUIRED_VERIFICATION_CHECKS = (
     "summary_matches_source",
     "date_matches_source",
@@ -88,10 +104,40 @@ SAFE_ENGLISH_TOKENS = {
 }
 KNOWN_OCR_NOISE_TOKENS = {"ZOOL", "XSF", "SCHRHON", "PUWBCT"}
 PUBLIC_RANK_ORDER = {
-    ("direct", "verified"): 0,
-    ("direct", AUTO_SCREENED_STATUS): 1,
-    ("analogous", "verified"): 2,
-    ("analogous", AUTO_SCREENED_STATUS): 3,
+    ("direct", VERIFIED_PUBLIC_TIER): 0,
+    ("direct", AUTO_SCREENED_PUBLIC_TIER): 1,
+    ("direct", TEXT_SAFE_FALLBACK_TIER): 2,
+    ("analogous", VERIFIED_PUBLIC_TIER): 3,
+    ("analogous", AUTO_SCREENED_PUBLIC_TIER): 4,
+    ("analogous", TEXT_SAFE_FALLBACK_TIER): 5,
+    ("broad_family", TEXT_SAFE_FALLBACK_TIER): 6,
+}
+RISK_FAMILY_TERMS = {
+    "mechanical_entanglement": (
+        "컨베이어", "벨트", "회전체", "말림", "기계 청소", "방호장치",
+        "에너지 차단", "정비 중 재가동", "기계설비",
+    ),
+    "vehicle_transport": (
+        "후진", "신호수", "사각지대", "덤프트럭", "지게차", "굴착기",
+        "운반장비", "차량", "충돌", "깔림",
+    ),
+    "collapse_falling": (
+        "낙반", "붕락", "붕괴", "매몰", "토사", "암석", "굴착면",
+        "물체 낙하", "무너짐",
+    ),
+    "electrical_energy": (
+        "감전", "누전", "전기설비", "전원 투입", "잠금", "표지",
+        "정비 중 재가동",
+    ),
+    "asphyxiation_gas": (
+        "산소결핍", "질식", "밀폐공간", "유해가스", "환기 불량", "가스 중독",
+    ),
+    "fire_explosion": (
+        "발파", "불발공", "화약", "폭발", "화재", "점화원", "폭발물",
+    ),
+    "fall_from_height": (
+        "떨어짐", "추락", "고소작업", "개구부", "사다리", "작업발판",
+    ),
 }
 CONTROLLED_RECOVERY_INDUSTRIES = {
     "건설업", "제조업", "기타업종", "광업", "채석업", "운수업", "서비스업",
@@ -136,6 +182,7 @@ def default_review_record(case: dict[str, Any]) -> dict[str, Any]:
     record.update(
         {
             "verification_status": DEFAULT_VERIFICATION_STATUS,
+            "public_case_tier": HIDDEN_PUBLIC_TIER,
             "verified_at": "",
             "verification_note": "",
             "verified_fields": [],
@@ -335,6 +382,13 @@ def display_text_corruption_reasons(text: Any) -> list[str]:
     words = re.findall(r"\b[^\W_]+\b", value, flags=re.UNICODE)
     if any(count >= 4 for count in Counter(words).values()):
         reasons.append("repeated_token")
+    sentence_units = [
+        re.sub(r"\s+", "", sentence).strip()
+        for sentence in re.split(r"[.!?\n]+", value)
+        if len(re.sub(r"\s+", "", sentence)) >= 10
+    ]
+    if any(count >= 2 for count in Counter(sentence_units).values()):
+        reasons.append("repeated_sentence")
 
     date_patterns = set(
         match.group(0).replace(" ", "")
@@ -450,6 +504,165 @@ def is_display_safe_case(case: dict[str, Any], require_auto_quality: bool = True
         except (TypeError, ValueError):
             return False
     return True
+
+
+def effective_public_case_tier(case: dict[str, Any]) -> str:
+    """Resolve a public tier without changing the manual verification status."""
+    verification_status = str(case.get("verification_status", "")).strip()
+    if verification_status in {"manual_review", "rejected"}:
+        return HIDDEN_PUBLIC_TIER
+    if verification_status == "verified":
+        return VERIFIED_PUBLIC_TIER
+    if verification_status == AUTO_SCREENED_STATUS:
+        return AUTO_SCREENED_PUBLIC_TIER
+    explicit_tier = str(case.get("public_case_tier", "")).strip()
+    if explicit_tier == TEXT_SAFE_FALLBACK_TIER:
+        return TEXT_SAFE_FALLBACK_TIER
+    return HIDDEN_PUBLIC_TIER
+
+
+def text_safe_fallback_exclusion_reason(
+    case: dict[str, Any],
+    duplicate_case_ids: set[str] | None = None,
+    duplicate_content_hashes: set[str] | None = None,
+) -> str:
+    """Check display text and traceability without requiring optional metadata."""
+    verification_status = str(
+        case.get("verification_status", DEFAULT_VERIFICATION_STATUS)
+    ).strip()
+    if verification_status in {"manual_review", "rejected"}:
+        return f"protected_status_{verification_status}"
+    if verification_status in {"verified", AUTO_SCREENED_STATUS}:
+        return "higher_public_tier"
+    if verification_status != DEFAULT_VERIFICATION_STATUS:
+        return "unsupported_verification_status"
+    if case.get("official_case") is not True:
+        return "not_official_case"
+
+    case_id = str(case.get("case_id", "")).strip()
+    content_hash = str(case.get("content_hash", "")).strip()
+    if not case_id:
+        return "missing_case_id"
+    if not content_hash:
+        return "missing_content_hash"
+    if duplicate_case_ids and case_id in duplicate_case_ids:
+        return "duplicate_case_id"
+    if duplicate_content_hashes and content_hash in duplicate_content_hashes:
+        return "duplicate_content_hash"
+    if not str(case.get("source_document", "")).strip():
+        return "missing_source_document"
+    if case.get("original_page_number") in (None, "") and case.get("page_start") in (None, ""):
+        return "missing_source_page"
+    if str(case.get("ocr_quality_status", "")) != "pass":
+        return "ocr_quality_not_pass"
+    if bool(case.get("mixed_case_detected", False)):
+        return "mixed_case_detected"
+
+    sanitized = sanitize_display_case(case)
+    summary = sanitized["display_accident_summary"]
+    summary_length = len(re.sub(r"\s+", "", summary))
+    if summary_length < AUTO_SCREENED_MIN_DISPLAY_CHARS:
+        return "short_display_summary"
+    if summary_length > AUTO_SCREENED_MAX_DISPLAY_CHARS:
+        return "long_display_summary"
+    for field in (
+        "display_accident_summary",
+        "display_cause_summary",
+        "display_prevention_summary",
+    ):
+        value = sanitized[field]
+        if not value and field != "display_accident_summary":
+            continue
+        reasons = display_text_corruption_reasons(value)
+        if reasons:
+            return f"corrupted_{field}_{reasons[0]}"
+    return ""
+
+
+def screen_text_safe_fallback_candidates(
+    records: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+    """Select only traceable, display-safe fallback records; statuses stay unchanged."""
+    case_id_counts = Counter(str(record.get("case_id", "")).strip() for record in records)
+    hash_counts = Counter(str(record.get("content_hash", "")).strip() for record in records)
+    duplicate_case_ids = {value for value, count in case_id_counts.items() if value and count > 1}
+    duplicate_hashes = {value for value, count in hash_counts.items() if value and count > 1}
+    approved: list[dict[str, Any]] = []
+    exclusions: Counter[str] = Counter()
+    audit_rows: list[dict[str, Any]] = []
+    screened_at = _now_iso()
+    for record in records:
+        reason = text_safe_fallback_exclusion_reason(
+            record,
+            duplicate_case_ids,
+            duplicate_hashes,
+        )
+        case_id = str(record.get("case_id", "")).strip()
+        if reason:
+            exclusions[reason] += 1
+            audit_rows.append(
+                {
+                    "case_id": case_id,
+                    "public_case_tier": HIDDEN_PUBLIC_TIER,
+                    "exclusion_reason": reason,
+                    "screened_at": screened_at,
+                }
+            )
+            continue
+        item = sanitize_display_case(record)
+        item.update(
+            {
+                "public_case_tier": TEXT_SAFE_FALLBACK_TIER,
+                "text_safe_screened_at": screened_at,
+            }
+        )
+        if not is_public_display_safe_case(item):
+            exclusions["final_display_safety_check_failed"] += 1
+            audit_rows.append(
+                {
+                    "case_id": case_id,
+                    "public_case_tier": HIDDEN_PUBLIC_TIER,
+                    "exclusion_reason": "final_display_safety_check_failed",
+                    "screened_at": screened_at,
+                }
+            )
+            continue
+        approved.append(item)
+        audit_rows.append(
+            {
+                "case_id": case_id,
+                "public_case_tier": TEXT_SAFE_FALLBACK_TIER,
+                "exclusion_reason": "",
+                "screened_at": screened_at,
+            }
+        )
+    summary = {
+        "input_count": len(records),
+        "approved_count": len(approved),
+        "excluded_count": len(records) - len(approved),
+        "exclusion_reasons": dict(sorted(exclusions.items())),
+        "duplicate_case_id_count": len(duplicate_case_ids),
+        "duplicate_content_hash_count": len(duplicate_hashes),
+    }
+    return approved, summary, audit_rows
+
+
+def write_text_safe_screening_audit(rows: list[dict[str, Any]]) -> None:
+    REVIEW_DIR.mkdir(parents=True, exist_ok=True)
+    temporary_path = TEXT_SAFE_SCREENING_RESULT_PATH.with_suffix(".jsonl.tmp")
+    with temporary_path.open("w", encoding="utf-8", newline="\n") as output:
+        for row in rows:
+            output.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    temporary_path.replace(TEXT_SAFE_SCREENING_RESULT_PATH)
+
+
+def is_public_display_safe_case(case: dict[str, Any]) -> bool:
+    tier = effective_public_case_tier(case)
+    if tier in {VERIFIED_PUBLIC_TIER, AUTO_SCREENED_PUBLIC_TIER}:
+        return is_display_safe_case(case)
+    if tier == TEXT_SAFE_FALLBACK_TIER:
+        return text_safe_fallback_exclusion_reason(case) == ""
+    return False
 
 
 def auto_screened_exclusion_reason(
@@ -641,6 +854,77 @@ def classify_case_relation(
     return "", []
 
 
+def classify_case_risk_families(case: dict[str, Any]) -> set[str]:
+    """Classify only explicit risk mechanisms found in public display fields."""
+    searchable = " ".join(
+        sanitize_display_text(case.get(field, ""))
+        for field in (
+            "accident_type",
+            "work_type",
+            "equipment",
+            "display_accident_summary",
+            "display_cause_summary",
+            "display_prevention_summary",
+        )
+    ).lower()
+    families: set[str] = set()
+    for family, terms in RISK_FAMILY_TERMS.items():
+        matches = [term for term in terms if term.lower() in searchable]
+        if not matches:
+            continue
+        if family == "vehicle_transport" and not any(
+            term in searchable
+            for term in (
+                "후진", "신호수", "사각지대", "덤프트럭", "지게차",
+                "굴착기", "운반장비", "차량", "중장비",
+            )
+        ):
+            continue
+        if family == "electrical_energy" and not any(
+            term in searchable
+            for term in (
+                "감전", "누전", "전기설비", "전원", "충전부", "전선", "전기",
+            )
+        ):
+            continue
+        families.add(family)
+    return families
+
+
+def classify_public_case_relation(
+    case: dict[str, Any],
+    direct_terms: tuple[str, ...] | list[str],
+    analogous_terms: tuple[str, ...] | list[str],
+    question_risk_family: str = "",
+) -> tuple[str, list[str]]:
+    relation_type, matched_terms = classify_case_relation(case, direct_terms, analogous_terms)
+    if relation_type:
+        return relation_type, matched_terms
+    if (
+        effective_public_case_tier(case) == TEXT_SAFE_FALLBACK_TIER
+        and question_risk_family
+        and question_risk_family in classify_case_risk_families(case)
+    ):
+        searchable = " ".join(
+            sanitize_display_text(case.get(field, "")).lower()
+            for field in (
+                "accident_type",
+                "work_type",
+                "equipment",
+                "display_accident_summary",
+                "display_cause_summary",
+                "display_prevention_summary",
+            )
+        )
+        family_matches = [
+            term
+            for term in RISK_FAMILY_TERMS.get(question_risk_family, ())
+            if term.lower() in searchable
+        ]
+        return "broad_family", family_matches
+    return "", []
+
+
 def rank_public_official_cases(
     cases: list[dict[str, Any]],
     max_results: int = 3,
@@ -648,10 +932,11 @@ def rank_public_official_cases(
     unique: dict[str, dict[str, Any]] = {}
     for case in cases:
         case_id = str(case.get("case_id", "")).strip()
+        public_tier = effective_public_case_tier(case)
         tier = PUBLIC_RANK_ORDER.get(
-            (str(case.get("relation_type", "")), str(case.get("verification_status", "")))
+            (str(case.get("relation_type", "")), public_tier)
         )
-        if not case_id or tier is None or not is_display_safe_case(case):
+        if not case_id or tier is None or not is_public_display_safe_case(case):
             continue
         existing = unique.get(case_id)
         if existing is None:
@@ -660,7 +945,7 @@ def rank_public_official_cases(
         existing_tier = PUBLIC_RANK_ORDER.get(
             (
                 str(existing.get("relation_type", "")),
-                str(existing.get("verification_status", "")),
+                effective_public_case_tier(existing),
             ),
             99,
         )
@@ -670,7 +955,7 @@ def rank_public_official_cases(
         unique.values(),
         key=lambda item: (
             PUBLIC_RANK_ORDER[
-                (str(item.get("relation_type")), str(item.get("verification_status")))
+                (str(item.get("relation_type")), effective_public_case_tier(item))
             ],
             -len(item.get("matched_terms", [])),
             float(item["distance"])
@@ -1312,6 +1597,7 @@ def rebuild_verified_case_db(records: list[dict[str, Any]]) -> dict[str, Any]:
         LAW_COLLECTION_NAME,
         SOURCE_CASE_COLLECTION_NAME,
         AUTO_SCREENED_CASE_COLLECTION_NAME,
+        TEXT_SAFE_CASE_COLLECTION_NAME,
     }:
         raise ReviewWorkflowBlocked("verified collection 이름이 기존 collection과 충돌합니다.")
     if VERIFIED_CASE_DB_CANDIDATE_DIR.exists():
@@ -1416,9 +1702,10 @@ def rebuild_auto_screened_case_db(records: list[dict[str, Any]]) -> dict[str, An
         SOURCE_CASE_COLLECTION_NAME,
         VERIFIED_CASE_COLLECTION_NAME,
         AUTO_SCREENED_CASE_COLLECTION_NAME,
+        TEXT_SAFE_CASE_COLLECTION_NAME,
     }
-    if len(collection_names) != 4:
-        raise ReviewWorkflowBlocked("네 공식 collection 이름은 서로 분리되어야 합니다.")
+    if len(collection_names) != 5:
+        raise ReviewWorkflowBlocked("다섯 공식 collection 이름은 서로 분리되어야 합니다.")
     if AUTO_SCREENED_CASE_DB_CANDIDATE_DIR.exists():
         raise ReviewWorkflowBlocked("auto_screened candidate DB가 이미 있어 덮어쓰지 않습니다.")
 
@@ -1495,6 +1782,111 @@ def rebuild_auto_screened_case_db(records: list[dict[str, Any]]) -> dict[str, An
         "auto_screened_count": len(approved),
         "collection_count": len(approved),
         "db_path": str(AUTO_SCREENED_CASE_DB_DIR),
+        "backup": backup_path,
+        "screening_summary": screening_summary,
+    }
+
+
+def rebuild_text_safe_case_db(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Build a separate DB from display-safe fallback cases without changing statuses."""
+    approved, screening_summary, audit_rows = screen_text_safe_fallback_candidates(records)
+    write_text_safe_screening_audit(audit_rows)
+    if not approved:
+        if TEXT_SAFE_CASE_DB_DIR.exists():
+            backup = TEXT_SAFE_CASE_DB_DIR.with_name(
+                f"23_text_safe_official_accident_case_vector_db_backup_{_timestamp()}"
+            )
+            TEXT_SAFE_CASE_DB_DIR.rename(backup)
+            return {
+                "status": "zero_text_safe_db_archived",
+                "text_safe_count": 0,
+                "backup": str(backup),
+                "screening_summary": screening_summary,
+            }
+        return {
+            "status": "skipped_zero_text_safe",
+            "text_safe_count": 0,
+            "db_created": False,
+            "screening_summary": screening_summary,
+        }
+
+    collection_names = {
+        LAW_COLLECTION_NAME,
+        SOURCE_CASE_COLLECTION_NAME,
+        VERIFIED_CASE_COLLECTION_NAME,
+        AUTO_SCREENED_CASE_COLLECTION_NAME,
+        TEXT_SAFE_CASE_COLLECTION_NAME,
+    }
+    if len(collection_names) != 5:
+        raise ReviewWorkflowBlocked("다섯 공식 collection 이름은 서로 분리되어야 합니다.")
+    if TEXT_SAFE_CASE_DB_CANDIDATE_DIR.exists():
+        raise ReviewWorkflowBlocked("text_safe candidate DB가 이미 있어 덮어쓰지 않습니다.")
+
+    import chromadb
+    from sentence_transformers import SentenceTransformer
+
+    model = SentenceTransformer(EMBEDDING_MODEL_NAME, local_files_only=True)
+    documents = [_auto_screened_document(record) for record in approved]
+    embeddings = model.encode(
+        documents,
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    ).tolist()
+    TEXT_SAFE_CASE_DB_CANDIDATE_DIR.mkdir(parents=True, exist_ok=False)
+    client = chromadb.PersistentClient(path=str(TEXT_SAFE_CASE_DB_CANDIDATE_DIR))
+    collection = client.get_or_create_collection(
+        name=TEXT_SAFE_CASE_COLLECTION_NAME,
+        metadata={"hnsw:space": "cosine", "display_text_safety_required": True},
+    )
+    metadata_fields = (
+        "case_id", "content_hash", "official_case", "ocr_quality_status",
+        "source_document", "source_file", "source_page_url", "source_period",
+        "page_start", "page_end", "original_page_number", "original_page_image",
+        "accident_date", "accident_year", "industry", "industry_detail",
+        "accident_type", "work_type", "equipment", "mine_relevance",
+        "verification_status", "public_case_tier", "text_safe_screened_at",
+        "display_accident_summary", "display_cause_summary",
+        "display_prevention_summary",
+    )
+    collection.add(
+        ids=[str(record["case_id"]) for record in approved],
+        embeddings=embeddings,
+        documents=documents,
+        metadatas=[
+            {field: _safe_metadata_value(record.get(field)) for field in metadata_fields}
+            for record in approved
+        ],
+    )
+    if collection.count() != len(approved):
+        raise ReviewWorkflowBlocked("text_safe candidate DB 건수가 안전 사례 수와 다릅니다.")
+    payload = collection.get(include=["metadatas"])
+    metadatas = payload.get("metadatas", []) or []
+    ids = [str(value) for value in payload.get("ids", []) or []]
+    hashes = [str(metadata.get("content_hash", "")) for metadata in metadatas]
+    if len(ids) != len(set(ids)) or len(hashes) != len(set(hashes)):
+        raise ReviewWorkflowBlocked("text_safe candidate DB에 중복 사례가 있습니다.")
+    if any(effective_public_case_tier(metadata) != TEXT_SAFE_FALLBACK_TIER for metadata in metadatas):
+        raise ReviewWorkflowBlocked("text_safe 이외 등급이 candidate DB에 포함됐습니다.")
+    if any(not is_public_display_safe_case(metadata) for metadata in metadatas):
+        raise ReviewWorkflowBlocked("text_safe candidate DB에 깨진 문자열이 포함됐습니다.")
+    del collection
+    client.close()
+    del client
+    gc.collect()
+
+    backup_path = ""
+    if TEXT_SAFE_CASE_DB_DIR.exists():
+        backup = TEXT_SAFE_CASE_DB_DIR.with_name(
+            f"23_text_safe_official_accident_case_vector_db_backup_{_timestamp()}"
+        )
+        TEXT_SAFE_CASE_DB_DIR.rename(backup)
+        backup_path = str(backup)
+    TEXT_SAFE_CASE_DB_CANDIDATE_DIR.rename(TEXT_SAFE_CASE_DB_DIR)
+    return {
+        "status": "text_safe_db_ready",
+        "text_safe_count": len(approved),
+        "collection_count": len(approved),
+        "db_path": str(TEXT_SAFE_CASE_DB_DIR),
         "backup": backup_path,
         "screening_summary": screening_summary,
     }

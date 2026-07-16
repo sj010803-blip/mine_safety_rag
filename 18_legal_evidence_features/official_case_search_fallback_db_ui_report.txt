@@ -1,0 +1,136 @@
+MineSafe AI 공식 사고사례 검색 fallback 및 DB 상태 UI 개선 보고서
+작성일: 2026-07-16
+
+1. DB 폴더 표시 문제 원인
+사이드바에 보이던 `10_vector_db_with_major_accident_docs` 문자열 분리는 DB 연결 오류가 아니라 좁은 영역에서 긴 내부 폴더명을 직접 표시해 발생한 UI 줄바꿈 문제였다. 실제 법령 collection은 정상 연결되어 820건을 확인했다.
+
+2. 검색 결과 0건이 발생한 정확한 단계
+현재 공개 검색에 연결된 엄격 자동검사 collection에는 5건이 있다. 대표 질문마다 ChromaDB raw 검색은 5건을 반환했고, 중복 제거·문자 안전검사·공개 등급검사 뒤에도 5건이 유지됐다. 결과 0건이 되는 질문은 위험 관련성 필터에서 5건 모두 제거됐다. 따라서 원인은 DB 경로나 embedding 연결 실패가 아니라 현재 안전한 5건 안에 해당 위험군 사례가 없는 것이다.
+
+3. collection별 저장 건수
+- 기존 법령 mine_safety_docs: 820건, 정상
+- 사람 검증 mine_verified_official_accident_cases: verified 0건으로 미생성
+- 엄격 자동검사 mine_auto_screened_official_accident_cases: 5건, 정상
+- 문자 안전 mine_text_safe_official_accident_cases: 신규 후보 0건으로 미생성
+- 기존 미검증 mine_official_accident_cases: 이번 검색에 연결하지 않았고 수정하지 않음
+
+4. 대표 질문별 raw 검색과 최종 결과
+- 컨베이어: raw 5 → 중복 5 → 문자 안전 5 → 공개 등급 5 → 관계 0 → 최종 0
+- 차량 후진: raw 5 → 중복 5 → 문자 안전 5 → 공개 등급 5 → 관계 2 → 최종 2
+- 낙반: raw 5 → 중복 5 → 문자 안전 5 → 공개 등급 5 → 관계 1 → 최종 1
+- 전기: raw 5 → 중복 5 → 문자 안전 5 → 공개 등급 5 → 관계 2 → 최종 2
+- 산소부족: raw 5 → 중복 5 → 문자 안전 5 → 공개 등급 5 → 관계 0 → 최종 0
+- 발파·불발공: raw 5 → 중복 5 → 문자 안전 5 → 공개 등급 5 → 관계 0 → 최종 0
+- 범위 밖 질문: DB를 열기 전에 조기 반환, raw 0, 최종 0
+
+5. 필터별 제거 수
+차량 후진 질문은 관계 불일치 3건, 낙반 질문은 관계 불일치 4건, 전기 질문은 관계 불일치 3건이었다. 컨베이어·산소부족·발파 질문은 각각 관계 불일치 5건이었다. 현재 연결 collection에서는 문자 안전검사와 공개 등급검사 제거가 0건이었다.
+
+6. text_safe_fallback 후보 수
+최신 검수 레코드 75건을 평가했다. 기존 auto_screened 5건은 상위 공개 등급이므로 text_safe 중복 후보에서 제외했다. 나머지 unverified 70건 중 신규 text_safe_fallback 후보는 0건이었다.
+
+7. 최종 text_safe 사례 수
+0건이다. 후보가 없으므로 23_text_safe_official_accident_case_vector_db를 억지로 생성하지 않았다. 후보 감사 결과만 25_verified_case_review/text_safe_quality_results.jsonl에 저장했으며 이 경로는 Git 제외 상태다.
+
+8. 문자 품질검사 결과
+70건은 모두 display 사고 개요에서 하나 이상의 깨짐 사유가 발견됐다. 대표 1차 제외 사유는 비정상 숫자·기호 46건, 한글 자모·띄어쓰기 깨짐 8건, 과도한 잡음 비율 8건, Latin-1 깨짐 4건, 의미 없는 영문 조각 4건이다. 문자 깨짐 기준은 낮추지 않았고 깨진 문장을 추측해 복원하지 않았다.
+
+9. metadata 미확인 사례 처리 방식
+별도 text_safe_fallback 판정에서는 accident_date, industry, industry_detail, accident_type, 원인, 예방사항, 원본 카드 이미지가 없다는 이유만으로 제외하지 않는다. 대신 official_case, case_id, content_hash, source_document, 페이지, OCR pass, 40~450자의 display 사고 개요와 최종 문자 안전검사는 반드시 요구한다. 선택 metadata가 없으면 화면에서 “정보 없음” 또는 공식 원문 미확인 안내를 사용하고 값을 추측하지 않는다.
+
+10. 위험 대분류 연결 방식
+기계·끼임, 차량·운반, 붕괴·낙하, 전기·에너지, 질식·가스, 화재·폭발, 추락의 7개 위험군을 명시적 키워드로 구분했다. 질문과 다른 위험군은 Vector 거리가 가깝더라도 반환하지 않는다. 차량 사례가 단순히 “끼임”이라는 단어를 포함하거나 굴착기가 등장한다는 이유만으로 컨베이어·후진 사례로 오인되지 않도록 기존 보수적 관계 판정을 유지했다.
+
+11. 직접·유사·같은 위험군 검색 방식
+순위는 direct verified → direct auto_screened → direct text_safe_fallback → analogous verified → analogous auto_screened → analogous text_safe_fallback → broad_family text_safe_fallback 순이다. broad_family는 문자 안전 보조 사례에만 허용하며 최대 3건, 동일 case_id 중복 제거 규칙을 적용한다.
+
+12. 대표 질문별 검색 결과
+- 차량 후진: 직접 관련 2건(BOOK-0082, BOOK-0289)
+- 낙반: 유사 위험 1건(BOOK-0305)
+- 전기: 직접 관련 2건(BOOK-0307, BOOK-0306)
+- 컨베이어, 산소부족, 발파: 안전한 같은 위험군 사례 없음
+- 범위 밖 질문: 사례 검색 자체를 실행하지 않음
+
+13. 결과가 없는 질문과 이유
+컨베이어·산소부족·발파 질문에는 현재 품질검사를 통과한 5건 중 같은 위험군 사례가 없다. 다른 위험군 사례를 억지로 표시하지 않았다. text_safe 신규 후보도 0건이므로 이번 데이터만으로 해당 세 질문의 사례 공백을 안전하게 채울 수 없다.
+
+14. DB 상태 UI 변경
+현장관리자 모드는 “공식 법령 DB: 연결됨”, “공식 사례 DB: 연결됨”, “공식 사례 검색 가능 수: 5건”만 표시한다. 관리자 모드는 법령 820건, verified 0건 미생성, auto_screened 5건 정상, text_safe 0건 미생성을 사람이 이해할 수 있는 문구로 구분한다. 내부 상태 코드와 예외 원문은 현장관리자에게 표시하지 않는다.
+직접 질문과 시나리오 실행의 기존 `st.write(db_error)`도 제거해 연결 실패 시 전체 내부 경로나 예외가 노출되지 않도록 했다. 관리자 검수 저장 시에는 사례 DB 캐시를 재구축 전에 해제하고 GC를 수행해 Windows의 열린 SQLite 핸들로 인한 교체 실패를 예방하며, OSError는 친화적인 안내로 처리한다.
+
+15. DB 경로 표시 변경
+현장관리자 화면과 기본 상태 카드에서 raw DB 폴더명을 제거했다. 전체 경로는 관리자 모드의 “DB 경로 상세 보기” expander 안에서만 표시한다. 경로 div에 white-space: normal, overflow-wrap: anywhere, word-break: break-all을 적용하고 inline code pill을 사용하지 않았다.
+
+16. 탭 순서 유지 결과
+최근 뉴스 참고 → 공식 재해사례 → 핵심 주의사항 순서를 유지했으며 각 기존 renderer 연결도 유지했다.
+
+17. 최근 뉴스 기능 유지 결과
+최근 뉴스 탭과 기존 뉴스 renderer 및 캐시 코드는 변경하지 않았다. 외부 네이버 API를 강제로 호출하지 않았다.
+
+18. 공식 사례 표시 결과
+공개 카드에는 display_accident_summary, display_cause_summary, display_prevention_summary만 사용한다. verified, auto_screened, text_safe_fallback 배지와 direct, analogous, broad_family 관련성 표시를 분리했다. raw/full OCR, hash, 내부 진단 JSON은 공개 카드에 표시하지 않는다.
+
+19. 핵심 주의사항 결과
+verified 예방사항 → auto_screened 예방사항 → text_safe 예방사항 → 각 등급 원인 → 기존 로컬 안전규칙 순서를 적용했다. 빈 예방사항을 새로 만들지 않으며 최대 3개의 안전한 항목만 표시한다.
+
+20. 범위 밖 질문 처리
+“오늘 점심 뭐 먹을까?”를 실제 브라우저에서 실행했다. 검색 근거 0건과 범위 밖 안내만 표시됐고 최근 뉴스·공식 재해사례·핵심 주의사항 탭은 각각 0개였다. 법령 RAG, 사례 검색, 뉴스, KRAS, 증빙자료, 근거 패널을 실행하지 않는 기존 조기 반환을 유지했다.
+
+21. 기존 테스트 결과
+작업 전 기존 전체 테스트 160/160 통과, 실패·오류·skip 0.
+
+22. 신규 테스트 결과
+test_official_case_search_fallback_and_db_ui.py 30/30 통과. 검색 진단, 공개 등급, 문자 안전, 위험군, 최대 3건, 중복 제거, UI 경로 보호, 탭·범위 밖·비밀정보 보호를 확인했다.
+
+23. 전체 테스트 결과
+최종 전체 test_*.py 190/190 통과, 실패·오류·skip 0.
+
+24. Streamlit HTTP 결과
+포트 8510에서 HTTP 200, traceback 0, 치명 오류 0을 확인하고 검증 후 프로세스를 종료했다.
+
+25. AppTest 및 브라우저 점검
+AppTest 첫 실행은 exception 0으로 완료됐고 현장관리자 raw 경로 미표시를 확인했다. AppTest의 관리자 모드 재실행은 기존 selectbox format_func 역변환 한계로 list.index 오류가 발생해 실제 앱 오류와 구분했다. 실제 Codex 인앱 브라우저에서는 현장관리자·관리자 모드 전환, DB 상태, 상세 경로 expander, 경로 CSS, 범위 밖 질문을 확인했으며 브라우저 콘솔 오류는 0건이었다. 외부 Gemini·네이버 API는 강제로 호출하지 않았다.
+
+26. app.py 작업 전후 SHA-256
+- 작업 전: 58489DF0BDADF2404A724E76CDF87F901A7B73B1BB6369A4E5DE5899478B5E97
+- 작업 후: 1137FC1717BC6DDCD5CA9E73138C0F7A0574EDBEFEB3B37CCD867D58197EB663
+- 작업 전 크기: 378124 bytes
+- 작업 후 크기: 397512 bytes
+
+27. 수정 파일
+- app.py
+- verified_case_review.py
+- 21_official_accident_case_pipeline/build_official_siren_case_db.py
+- .gitignore
+
+28. 생성 파일
+- 18_legal_evidence_features/test_official_case_search_fallback_and_db_ui.py
+- 18_legal_evidence_features/official_case_search_fallback_db_ui_report.txt
+- 25_verified_case_review/text_safe_quality_results.jsonl (실행 감사 데이터, Git 제외)
+
+29. 생성 백업
+- app_backup_before_official_case_search_fallback_ui_20260716_171206.py
+원본 app.py와 크기 및 SHA-256이 일치함을 확인했으며 Git stage·commit에서 제외한다.
+
+30. Git stage 예정 목록
+- app.py
+- verified_case_review.py
+- 21_official_accident_case_pipeline/build_official_siren_case_db.py
+- .gitignore
+- 18_legal_evidence_features/test_official_case_search_fallback_and_db_ui.py
+- 18_legal_evidence_features/official_case_search_fallback_db_ui_report.txt
+
+31. commit SHA
+커밋 메시지는 `fix: broaden safe official case retrieval and clean DB status UI`이다. SHA는 커밋 객체 생성 후 최종 완료 보고에 기록한다.
+
+32. push 결과
+모든 whitelist·브랜치·기존 변경 보호 조건을 다시 확인한 뒤 수행하며 최종 완료 보고에 기록한다.
+
+33. 기존 관련 없는 변경 보호 여부
+작업 전 기존 관련 없는 변경은 52개, 상태 지문은 E253460B3944497E884FFE36E08FFE9B50631AC57047984CCF4351D8ECA37ADB였다. 구현 완료 시점에도 개수와 지문이 동일함을 확인했다. 해당 파일은 수정·stage·복구·삭제하지 않았다.
+
+34. 남은 한계
+현재 안전한 공개 사례는 기존 auto_screened 5건뿐이고 신규 text_safe 사례는 0건이다. 따라서 차량·낙반·전기는 표시되지만 컨베이어·질식·발파는 관련 사례가 없다. 이 공백을 채우려면 기준 완화가 아니라 해당 위험군 원본 카드의 추가 수동 대조 또는 더 나은 레이아웃 OCR이 필요하다. AppTest의 관리자 모드 재실행 한계는 실제 브라우저 점검으로 보완했다.
+
+35. 교수님 설명용 문구
+기존에는 공식 사례의 날짜·업종·원본 이미지 연결 등 모든 metadata가 완전해야만 검색 결과에 표시되어, 문장은 정상임에도 사례가 제외될 수 있는 구조였습니다. 이를 문자 품질과 metadata 완전성으로 분리하여, 깨지지 않은 사고 개요와 공식 출처·페이지·case_id가 확인되는 사례는 ‘문자 품질검사 통과 사례’로 제공할 수 있도록 개선했습니다. 사람 검증 사례와 엄격 자동검사 사례를 우선하고, 없을 경우 동일 위험군의 유사 공식 사례를 명확한 배지와 안내문과 함께 제공합니다. 다만 현재 데이터에서는 추가 70건 모두 문자 깨짐 검사에 실패했기 때문에 품질 기준을 낮추지 않고 신규 보조 사례를 0건으로 유지했습니다.

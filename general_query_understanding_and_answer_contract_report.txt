@@ -1,0 +1,259 @@
+MineSafe AI 범용 질문 이해 및 답변 계약 개선 작업 보고서
+
+1. 작업 전 기준선
+- 프로젝트 경로: C:\Users\USER\Desktop\mine_safety_rag
+- 사용 Python: C:\Users\USER\Desktop\mine_safety_rag\.venv\Scripts\python.exe
+- 사용 Git: C:\Users\USER\AppData\Local\GitHubDesktop\app-3.6.3\resources\app\git\cmd\git.exe
+- 작업 전 브랜치: main
+- 작업 전 Git HEAD: 8bb9828eb9fc65230c531925faf2499d34ce325b
+- 작업 전 origin/main: 8bb9828eb9fc65230c531925faf2499d34ce325b
+- 작업 전 staged 파일 수: 0
+- 작업 전 전체 테스트: 267 passed, 실패 0, 오류 0, skip 0
+- 작업 전 app.py 문법검사: 통과
+- 작업 전 app.py SHA-256: 3D798DA421F8BBE08B16135C85E084ACB85D0ACD16AC8939A647A184A27E4680
+
+2. app.py 백업
+- 백업 파일: app_backup_before_general_query_understanding_20260717_024718.py
+- 백업 크기: 429,723 bytes
+- 백업 SHA-256: 3D798DA421F8BBE08B16135C85E084ACB85D0ACD16AC8939A647A184A27E4680
+- 백업과 수정 전 app.py 크기·SHA 일치: 예
+- 백업은 Git stage 대상에서 제외함.
+
+3. 기존 질문 이해 구조의 한계
+- 기존 로직은 큰 질문 유형과 단일 intent를 먼저 정하고, 우천 발파 전과 천반 출수 증가 두 사례만 별도 detail_signal로 보완했다.
+- 그 밖의 처음 보는 질문은 세부 위험 신호, 작업 단계, 행동 주체, 여러 요청 항목, 모호성, 사례 요청이 하나의 intent 또는 한 개 확장 검색문으로 축소될 수 있었다.
+- 기존 검색은 원문을 포함한 하나의 확장 질의를 중심으로 실행해 복합 위험의 secondary domain이나 사례·근거·기록 요청을 별도 검색 목적으로 유지하지 못했다.
+- 기존 미완성 답변 안전장치는 생성 종료와 문장 완결성을 검사했지만, 일반 질문별 필수 답변 항목·분야별 조치 순서·근거 없는 수치와 법령을 하나의 계약으로 검사하지는 않았다.
+
+4. 새 QueryUnderstanding 구조
+- 파일: query_understanding.py
+- 표준 라이브러리 중심의 순수 Python dataclass로 구현했다. import만으로 파일·DB·네트워크·Streamlit·Gemini에 접근하지 않는다.
+- 필드: original_query, normalized_query, primary_domain, secondary_domains, hazard_signals, work_stage, actor, requested_outputs, urgency, ambiguity_level, ambiguity_reasons, clarification_question, search_queries, case_search_query, required_concepts, forbidden_dominant_topics, display_label, official_case_requested, in_scope.
+- to_dict()를 통해 JSON 직렬화 가능한 구조를 제공한다.
+- 12개 위험 분야를 지원하며 여러 분야가 있으면 primary와 secondary로 보존한다.
+
+5. 위험 분야·세부 신호·작업 단계 추출 방식
+- 정확한 질문 전체 문장을 비교하지 않고 분야별 기술 용어, 작업 대상, 상태 변화, 작업 단계 표현의 가중 조합을 사용한다.
+- “발파”만으로 불발을 확정하지 않고 발파+작업 전+우천·발파공 물과 발파 후+불발·잔류약을 구분한다.
+- “물”만으로 천반을 확정하지 않고 천반·천장·지보·출수 표현과 증가·변형 신호가 함께 있을 때 천반 출수 맥락으로 판단한다.
+- “가스”만으로 메탄을 확정하지 않고 환기 정지, 정전, 측정값 상승, 산소 부족, 명시된 메탄을 별도 신호로 유지한다.
+- “전기”만으로 LOTO를 확정하지 않고 정비 전, 전원 차단, 잠금·표지, 무전압 확인 조합을 사용한다.
+- 작업 전, 시작 직전, 작업 중, 이상징후 발견 직후, 작업 후, 사고 발생 직후, 점검·정비 전, 작업 재개 전, 교육·회의, 불명확을 구분한다.
+- 내부 정규화는 반복 공백과 “대처방안 수입→수립”, “광산안전전관리자→광산안전관리자”만 제한적으로 적용한다. 사용자 원문은 original_query에 그대로 보존한다.
+
+6. 요청항목과 행동 주체 추출
+- 작업자, 현장관리자, 광산안전관리자, 발파책임자, 사업주·경영책임자, 구조·응급 대응자, 불명확을 구분한다.
+- 한 질문에서 즉시 조치, 조치 순서, 점검항목, 위험 원인, 작업중지, 대피·출입통제, 재개 조건, 보호구, 보고, 기록, 공식 근거, 공식 사례, 유사 사례, TBM, 관리자 대응, 작업 가능 판단, 예방대책을 중복 제거 후 모두 보존한다.
+- “무엇부터”, “계속해도 돼”, “왜 위험해”, “무엇을 남겨”, “근거”, “실제 사고”, “작업자에게 지시” 같은 현장 표현을 요청 유형으로 일반화했다.
+
+7. 모호성 처리
+- low, medium, high를 사용한다.
+- 물 발생 위치, 가스 종류, 설비 이상 대상, 보호구 종류, 구조 장소의 2차 위험처럼 조치가 달라지는 핵심 정보가 없으면 보수적 공통 조치를 먼저 제시하고 확인 질문 하나만 만든다.
+- “물이 새는데 어디서 새는지 모르고 계속 많아진다”는 질문은 범위 밖이나 천반·발파공 중 하나로 확정하지 않는다. 작업중지·접근통제를 먼저 안내하고 발생 위치를 한 번 확인하며 확인 전 작업 재개를 확정하지 않는다.
+- 명확한 천반 출수+지보 변형, 환기 정지+가스 상승, 우천+발파공 침수 질문에는 불필요한 확인 질문을 만들지 않는다.
+
+8. 검색 계획과 재정렬
+- 원문을 반드시 포함하고 위험 분야·세부 신호·작업 단계용 질의, 조치·근거 목적 질의, 사례 요청 질의를 분리한다.
+- 중복 제거 후 최대 4개로 제한한다.
+- app.py는 여러 질의를 한 embedding batch와 한 Chroma query 호출로 처리하고, 결과를 chunk_id 기준으로 병합·중복 제거한다.
+- 기존 Vector distance는 원시값 그대로 유지한다. 퍼센트나 정확도 점수로 변환하지 않는다.
+- 세부 신호 포함, 작업 단계, 요청 관련성, source·chunk_id 완전성을 제한적인 보너스로 사용하며 기존 distance와 vector rank를 함께 유지한다.
+
+9. 새 AnswerContract 구조
+- 파일: answer_contract.py
+- 표준 라이브러리 중심의 순수 Python dataclass로 구현했다.
+- AnswerContract 필드: required_sections, required_concept_groups, required_sequence, requested_case_mode, evidence_required, restart_required, reporting_required, prohibited_claim_types, allowed_retry_count.
+- AnswerValidation 필드: status, missing_sections, missing_concepts, sequence_errors, unrelated_topic_warnings, unsupported_number_warnings, unsupported_legal_reference_warnings, incomplete_response, incomplete_reason, retry_recommended, fallback_required.
+- 긴급 조치와 순서 요청에는 작업중지→대피→통제→보고→점검→개선→재개 확인→기록 골격을 사용하되 분야에 맞게 조정한다.
+- 우천 발파 전은 기상·낙뢰→발파공·배수→화약류 습윤→연기·중지→책임자·기록, 전기 정비는 차단→잠금·표지→잔류에너지→무전압→재투입 방지, 컨베이어는 정지→접근통제→에너지차단→재가동 방지→제거→확인·기록 순서로 조정한다.
+- 단순 교육 질문에는 공통 8단계를 강제하지 않는다.
+
+10. 공식 근거·수치·법령 방지
+- 근거 요청 시 실제 evidence result의 source와 chunk_id가 함께 있는지 검사한다.
+- 검색되지 않은 법령 조항 번호를 답변에서 발견하면 경고한다.
+- 질문 또는 검색 근거에 없는 %, ppm, 시간, 거리, 횟수, 금액·형량 단위의 중요 수치를 발견하면 보완 또는 fallback 대상으로 처리한다. 목록 번호는 검사 대상이 아니다.
+- 법령 위반·처벌을 확정하는 문장은 생성 계약에서 금지한다.
+- 근거가 없으면 “공식 근거 보완 필요”와 담당 안전관리자·관계기관·전문가 확인을 안내한다.
+
+11. 공식 사고사례 처리
+- 사용자의 공식·실제·유사 사고사례 요청을 별도 case_search_query와 requested_case_mode로 보존한다.
+- app.py는 사례 요청 시 분석된 사례 검색 질의를 기존 검증 사례 검색 함수에 전달한다.
+- 직접 관련 검증 사례가 없으면 “현재 품질검사를 통과한 직접 관련 공식 사례는 확인되지 않았습니다. 무관한 사례는 표시하지 않습니다.”를 완결된 상태 문구로 제공한다.
+- 유사 사례만 있으면 “유사 위험 사례”로 구분한다. 뉴스는 공식 사고사례나 법령 근거로 사용하지 않는다.
+
+12. 보완 생성·fallback과 핵심판단
+- 기존 Gemini finish_reason·MAX_TOKENS·프롬프트 조각·미완성 문장 검사를 유지했다.
+- 기존 완결성 검사와 새 AnswerContract 검사를 같은 생성 경로에 연결했다.
+- 첫 답변이 미완성 또는 계약 누락이면 누락 항목을 포함한 짧은 구조화 프롬프트로 최대 한 번만 재생성한다.
+- 두 번째 답변도 실패하거나 API 호출이 실패하면 분야별 규칙 기반 안정형 답변으로 전환한다.
+- 핵심판단은 긴 LLM 답변을 글자 수로 자르지 않고 분석 결과의 완결된 1~2문장 또는 안정형 핵심조치에서 만든다.
+- 실패한 부분 응답은 최종 화면에 표시하지 않는다.
+
+13. app.py 통합
+- 기존 화면·답변 모드·RAG DB·사고사례 DB·OCR·대화 저장 형식은 변경하지 않았다.
+- extract_query_context_signals의 기존 detail_signal 호환성을 유지하면서 범용 분석 필드를 추가했다.
+- search_vector_db에 최대 4개 검색 계획의 batch 검색, chunk_id 중복 제거, 제한적 재정렬을 연결했다.
+- build_prompt, build_hybrid_prompt, completion retry prompt에 질문별 답변 계약을 추가했다.
+- run_rag_flow의 범위 밖 조기 반환을 유지하고, 모든 답변 모드가 동일한 공식 근거 판정을 정확히 한 번 공유하도록 유지했다.
+- 관리자 expander에 primary, secondary, signals, stage, requested outputs, ambiguity, 검색 질의 수, 답변 계약 상태, fallback 여부를 추가했다.
+
+14. 개발·보류 질문 세트
+- 개발 질문: 72개
+- 보류 확인 질문: 24개
+- 총 질문: 96개
+- 최소 12개 위험 분야를 포함한다.
+- 개발 질문 SHA-256: C7EBF7D857E128787D0034D1EE171EE5C8FA1734AA7868479E0E102CCDBB165F
+- 보류 질문 SHA-256: 52F1C4D2A4D662EC4CFF28976220F9580752B113C467E9D2EEC968EB4B85B9F2
+- 위 질문과 Gold는 구현 전에 고정했으며 구현 후 변경하지 않았다.
+
+15. 질문 이해 평가 지표
+[개발 72문항]
+- primary domain 정확도: 1.0000
+- secondary domain 보존율: 0.7826
+- 세부 위험 신호 coverage: 0.9930
+- 작업 단계 정확도: 0.9722
+- 요청항목 detection recall: 0.9939
+- 모호성 처리 정확도: 0.9583
+- 평균 검색 질의 수: 3.1528
+- 최대 검색 질의 수: 4
+- 중대한 안전 오분류: 0건
+
+[보류 24문항]
+- primary domain 정확도: 1.0000
+- secondary domain 보존율: 0.7000
+- 세부 위험 신호 coverage: 0.9825
+- 작업 단계 정확도: 1.0000
+- 요청항목 detection recall: 0.9815
+- 모호성 처리 정확도: 0.9583
+- 평균 검색 질의 수: 3.0417
+- 최대 검색 질의 수: 4
+- 중대한 안전 오분류: 0건
+
+- 범위 밖 질문 차단 정확도: 1.0000
+- 범위 밖 차단 실패: 0건
+- 정확한 전체 질문 문장 하드코딩 발견: 0건
+- 중대한 오분류 목록: 없음
+
+16. 기존 30문항 검색 회귀 결과
+- 기존 Gold·질문 변경: 없음
+- 검색 실행 실패: 0건
+- Document Hit@1: 0.4000
+- Document Hit@3: 0.5333 (최소 0.5333 유지)
+- Document Hit@5: 0.5667 (최소 0.5667 유지)
+- MRR: 0.4639 (최소 0.4639 유지)
+- Element Coverage@1: 0.1170
+- Element Coverage@3: 0.2817
+- Element Coverage@5: 0.3602
+- Metadata 완전성: 0.7500 (최소 0.7500 유지)
+- 수동 검토 필요: 25문항
+- 동일 30문항을 재사용한 회귀평가이며 최종 잠금 평가·독립 평가·일반화 성능 확정이 아니다.
+
+17. 원본 Vector DB 보호와 무결성
+- 평가 전 Git 상태: data_level0.bin, length.bin, chroma.sqlite3가 기존부터 modified 상태였다.
+- 원본 DB는 Chroma client로 열지 않았다. Windows TEMP 아래 전체 복사본만 평가에 사용했다.
+- 임시 복사본 collection count: 평가 전후 820
+- 임시 복사본 ID SHA-256: 평가 전후 동일
+- 원본 DB의 파일 수·총 크기·각 파일 크기·mtime·가능한 SHA를 평가 전후 비교했고 동일했다.
+- data_level0.bin: 167,600 bytes, UTC mtime 2026-07-16T13:52:41.8881519Z, 실행 중 프로세스 잠금으로 직접 SHA 계산 불가
+- length.bin: 400 bytes, UTC mtime 2026-07-16T13:52:41.8881519Z, 실행 중 프로세스 잠금으로 직접 SHA 계산 불가
+- chroma.sqlite3: 22,437,888 bytes, UTC mtime 2026-07-16T13:52:41.0772344Z, SHA-256 A07011D0973C4770CB44A96294FCF71B87B9FA7CCAEA18CFC73048CD43A260B5
+- 위 세 파일의 크기와 mtime은 작업 전 기록과 작업 후 기록이 동일하다.
+- 원본 Vector DB 추가 변화: 0
+
+18. 기존 평가 파일 보호
+- 26_rag_retrieval_evaluation 변경: 없음
+- 27_rag_retrieval_evaluation_postfix 변경: 없음
+- 기존 xlsx·tsv·csv·png 변경: 없음
+- 기존 26·27 manifest는 역사적 app SHA를 계속 검증한다.
+- 새 28 manifest만 현재 app.py SHA와 연결한다.
+
+19. 신규 테스트와 결과
+- test_general_query_understanding.py: 복합 분야, 단계, 주체, 복수 요청, 오타, 모호성, 범위 밖, 검색 수, 전체 문장 하드코딩 검사
+- test_answer_contract_guardrail.py: 분야별 순서, 교육 예외, 재개, 사례, 근거, 수치, 무관 주제, 1회 재생성, 미완성, 무한 재시도, fallback 검사
+- test_query_paraphrase_matrix.py: 96문항 무결성, 12분야, 성능 목표, 중대 오분류, 범위 밖, 하드코딩, 검색 질의 수 검사
+- test_app_query_understanding_integration.py: 기존 호환, 유사 표현, 공식 근거, Gemini fallback, 범위 밖 조기 반환, 사례 없음, 세 답변 모드 검사
+- 신규 테스트 묶음: 40 passed
+- 평가 버전 관리 강화 테스트: 54 passed
+- 전체 테스트: 311 passed, 실패 0, 오류 0, skip 0
+
+20. 문법검사
+- python -m py_compile app.py: 통과
+- python -m py_compile query_understanding.py: 통과
+- python -m py_compile answer_contract.py: 통과
+- pycache는 C:\Users\USER\AppData\Local\Temp\MineSafe_General_Query_Pycache_Final로 분리했다.
+
+21. 수동 질문 5개 확인
+1) 비 온 뒤 발파공 물+장약 가능 질문
+- primary 발파·불발·화약류, signals 우천·발파공 침수·화약류 습윤, 작업 시작 직전, 점검·순서·사례·가능 여부를 보존했다.
+- 불발이 중심이 되지 않았고 안정형 답변 계약 검사를 통과했다.
+
+2) 천반 물 증가+지보 변형 질문
+- primary 낙반·붕괴·천반·지보, signals 천반·출수 증가·지보 변형, 이상징후 직후로 판단했다.
+- 작업중지·대피·통제·천반/지보/출수/배수 점검·개선·재개·기록을 포함하고 계약 검사를 통과했다.
+
+3) 정전+환기팬 정지+가스 상승 질문
+- primary 환기·메탄·유해가스·산소부족, secondary 전기·감전·LOTO와 사고보고·기록을 보존했다.
+- 대피, 환기 복구, 가스·산소 재측정, 재개 판단, 기록을 포함하고 계약 검사를 통과했다.
+
+4) 운전 중 컨베이어 끼임 제거+사례 질문
+- primary 컨베이어·끼임·파쇄, signals 운전 중 제거·끼임, 작업 중으로 판단했다.
+- 설비 정지, 접근통제, 에너지 차단, 재가동 방지, 안전한 제거, 책임자 확인·기록을 포함했다.
+- 직접 검증 사례가 없으면 무관한 사례 미표시 안내를 제공하며 계약 검사를 통과했다.
+
+5) 발생 위치를 모르는 물 증가 질문
+- 범위 밖으로 차단하거나 천반·발파공·배관 중 하나로 확정하지 않았다.
+- primary 위험성평가·작업중지·작업재개, ambiguity high, 이상징후 발견 직후로 판단했다.
+- 공통 작업중지·접근통제를 먼저 안내하고 물 발생 위치를 묻는 확인 질문 하나를 제공하며 계약 검사를 통과했다.
+
+22. app.py 수정 후 SHA-256
+- 수정 전: 3D798DA421F8BBE08B16135C85E084ACB85D0ACD16AC8939A647A184A27E4680
+- 수정 후: E4E7101668F82F0BE7815AC32CD250FB4F11A1942E3F12CB50F99E2F45597FAE
+
+23. 수정한 기존 파일
+- app.py
+- test_rag_retrieval_evaluation_versioning.py
+- 18_legal_evidence_features/test_rag_retrieval_quality_evaluation.py
+
+24. 생성한 파일
+- query_understanding.py
+- answer_contract.py
+- test_general_query_understanding.py
+- test_answer_contract_guardrail.py
+- test_query_paraphrase_matrix.py
+- test_app_query_understanding_integration.py
+- general_query_understanding_and_answer_contract_report.txt
+- app_backup_before_general_query_understanding_20260717_024718.py
+- 28_general_query_understanding_evaluation/development_question_matrix.jsonl
+- 28_general_query_understanding_evaluation/holdout_question_matrix.jsonl
+- 28_general_query_understanding_evaluation/development_question_results.tsv
+- 28_general_query_understanding_evaluation/holdout_question_results.tsv
+- 28_general_query_understanding_evaluation/general_query_understanding_summary.json
+- 28_general_query_understanding_evaluation/rag_retrieval_regression_results_30.tsv
+- 28_general_query_understanding_evaluation/general_query_understanding_quality_report.txt
+- 28_general_query_understanding_evaluation/evaluation_manifest.json
+- 28_general_query_understanding_evaluation/run_general_query_understanding_evaluation.py
+
+25. 남은 한계
+- 질문 이해는 결정론적 규칙이므로 현장 신조어·매우 드문 오타·전혀 새로운 표현은 medium/high 모호성으로 보수 처리되거나 추가 확인이 필요할 수 있다.
+- secondary domain 보존율은 개발 0.7826, 보류 0.7000으로 primary보다 낮다. 보조 분야가 답변 중심을 빼앗지 않게 보수적으로 제한한 결과이며 후속 독립 평가에서 확인할 항목이다.
+- 96문항은 개발·보류 확인 세트이지 외부 독립 블라인드 세트가 아니다.
+- 기존 30문항 검색 회귀는 같은 Gold를 재사용했으므로 새로운 질문의 최종 검색 일반화 성능을 확정하지 않는다.
+- 실제 Streamlit 브라우저 화면의 클릭·레이아웃은 자동으로 조작하지 않았다. 함수 단위와 AST 통합 경로로 확인했으며 화면 수동 확인 항목은 별도 완료 보고에 남긴다.
+- 공식 사고사례의 실제 표시 수는 검증 collection에 품질검사를 통과한 직접 관련 사례가 있는지에 따라 달라진다.
+
+26. 보호 조건 확인
+- .env, API Key, Client Secret의 값에 접근하지 않았다.
+- 외부 API·인터넷 호출: 0
+- 새 패키지 설치·업데이트·삭제: 없음
+- 08_chunks, OCR, 원본 PDF, 기존 Vector DB 내용, 공식 사고사례 DB, 기존 평가 산출물을 수정하지 않았다.
+- 기존 관련 없는 변경 파일 52개와 untracked 백업 디렉터리를 수정·복구·삭제하지 않았다.
+- 교수님 최종 5문항을 입력받거나 사용하지 않았다.
+- stage: 미수행
+- commit: 미수행
+- push: 미수행
+
+27. 최종 Git 상태 요약
+- 브랜치: main
+- HEAD: 8bb9828eb9fc65230c531925faf2499d34ce325b
+- staged 파일 수: 0
+- 기존 관련 없는 변경 파일은 기존 상태 그대로 유지했다.

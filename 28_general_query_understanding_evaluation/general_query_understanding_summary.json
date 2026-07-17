@@ -1,0 +1,149 @@
+{
+  "evaluation_name": "범용 질문 이해 및 답변 계약 개발·보류 확인",
+  "created_at": "2026-07-17T03:03:33+09:00",
+  "development_metrics": {
+    "question_count": 72,
+    "primary_domain_accuracy": 1.0,
+    "secondary_domain_recall": 0.782608695652174,
+    "hazard_signal_coverage": 0.993006993006993,
+    "work_stage_accuracy": 0.9722222222222222,
+    "requested_output_detection_recall": 0.9939024390243902,
+    "ambiguity_handling_accuracy": 0.9583333333333334,
+    "major_safety_misclassification_count": 0,
+    "major_safety_misclassification_ids": [],
+    "average_search_query_count": 3.1527777777777777,
+    "maximum_search_query_count": 4
+  },
+  "holdout_metrics": {
+    "question_count": 24,
+    "primary_domain_accuracy": 1.0,
+    "secondary_domain_recall": 0.7,
+    "hazard_signal_coverage": 0.9824561403508771,
+    "work_stage_accuracy": 1.0,
+    "requested_output_detection_recall": 0.9814814814814815,
+    "ambiguity_handling_accuracy": 0.9583333333333334,
+    "major_safety_misclassification_count": 0,
+    "major_safety_misclassification_ids": [],
+    "average_search_query_count": 3.0416666666666665,
+    "maximum_search_query_count": 4
+  },
+  "scope_block_accuracy": 1.0,
+  "scope_block_failures": [],
+  "exact_full_sentence_hardcoding_count": 0,
+  "retrieval_regression_metrics": {
+    "document_hit_at_1": 0.4,
+    "document_hit_at_3": 0.5333333333333333,
+    "document_hit_at_5": 0.5666666666666667,
+    "mrr": 0.46388888888888885,
+    "element_coverage_at_1": 0.11697089947089948,
+    "element_coverage_at_3": 0.2816798941798942,
+    "element_coverage_at_5": 0.36018518518518516,
+    "metadata_completeness": 0.75,
+    "manual_review_count": 25,
+    "search_failure_count": 0
+  },
+  "retrieval_minimums": {
+    "document_hit_at_3": 0.5333,
+    "document_hit_at_5": 0.5667,
+    "mrr": 0.4639,
+    "metadata_completeness": 0.75
+  },
+  "temporary_vector_db_used": true,
+  "original_vector_db_unchanged": true,
+  "original_vector_db_before": {
+    "file_count": 5,
+    "total_bytes": 22605988,
+    "metadata_sha256": "47ECDADF0394F0E71C4B1D332EE321910A1909C425A69C9D19DFA4929772F634",
+    "protected_files": [
+      {
+        "path": "3ef90fe0-9dd5-431d-a965-7454cc6406c0/data_level0.bin",
+        "size": 167600,
+        "mtime_ns": 1784209961888151900,
+        "sha256": "CD5C1DF87420BB6A63EFE0BE170D74CECA071688D0BFB0563C8197B90ACD5AF2",
+        "sha256_error": ""
+      },
+      {
+        "path": "3ef90fe0-9dd5-431d-a965-7454cc6406c0/length.bin",
+        "size": 400,
+        "mtime_ns": 1784209961888151900,
+        "sha256": "86921D4491D64B7F24F43A77B5BD3EFEC931D4893DA18D5CB662EDBDFA103A55",
+        "sha256_error": ""
+      },
+      {
+        "path": "chroma.sqlite3",
+        "size": 22437888,
+        "mtime_ns": 1784209961077234400,
+        "sha256": "A07011D0973C4770CB44A96294FCF71B87B9FA7CCAEA18CFC73048CD43A260B5",
+        "sha256_error": ""
+      }
+    ]
+  },
+  "original_vector_db_after": {
+    "file_count": 5,
+    "total_bytes": 22605988,
+    "metadata_sha256": "47ECDADF0394F0E71C4B1D332EE321910A1909C425A69C9D19DFA4929772F634",
+    "protected_files": [
+      {
+        "path": "3ef90fe0-9dd5-431d-a965-7454cc6406c0/data_level0.bin",
+        "size": 167600,
+        "mtime_ns": 1784209961888151900,
+        "sha256": "CD5C1DF87420BB6A63EFE0BE170D74CECA071688D0BFB0563C8197B90ACD5AF2",
+        "sha256_error": ""
+      },
+      {
+        "path": "3ef90fe0-9dd5-431d-a965-7454cc6406c0/length.bin",
+        "size": 400,
+        "mtime_ns": 1784209961888151900,
+        "sha256": "86921D4491D64B7F24F43A77B5BD3EFEC931D4893DA18D5CB662EDBDFA103A55",
+        "sha256_error": ""
+      },
+      {
+        "path": "chroma.sqlite3",
+        "size": 22437888,
+        "mtime_ns": 1784209961077234400,
+        "sha256": "A07011D0973C4770CB44A96294FCF71B87B9FA7CCAEA18CFC73048CD43A260B5",
+        "sha256_error": ""
+      }
+    ]
+  },
+  "temporary_vector_db_logical_snapshot": {
+    "before": {
+      "count": 820,
+      "id_count": 820,
+      "ids_sha256": "53180E445B05917FC93D7E6616D251F46A27741399092013073E0CB0C812E39D",
+      "metadata_fields": [
+        "added_stage",
+        "category",
+        "char_count",
+        "chunk_id",
+        "chunk_index",
+        "doc_name",
+        "file_name",
+        "raw_file_name",
+        "source",
+        "source_file",
+        "source_path"
+      ]
+    },
+    "after": {
+      "count": 820,
+      "id_count": 820,
+      "ids_sha256": "53180E445B05917FC93D7E6616D251F46A27741399092013073E0CB0C812E39D",
+      "metadata_fields": [
+        "added_stage",
+        "category",
+        "char_count",
+        "chunk_id",
+        "chunk_index",
+        "doc_name",
+        "file_name",
+        "raw_file_name",
+        "source",
+        "source_file",
+        "source_path"
+      ]
+    },
+    "search_failure_ids": []
+  },
+  "not_final_lock_notice": "개발·보류 확인 및 기존 30문항 재사용 회귀평가이며 교수님 최종 5문항을 사용한 최종 잠금 평가가 아니다. 이 결과만으로 일반화 성능·답변 정확성·법적 정확도를 확정하지 않는다."
+}

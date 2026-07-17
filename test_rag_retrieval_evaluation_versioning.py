@@ -11,6 +11,8 @@ ROOT = Path(__file__).resolve().parent
 BASELINE_DIR = ROOT / "26_rag_retrieval_evaluation"
 POSTFIX_DIR = ROOT / "27_rag_retrieval_evaluation_postfix"
 MANIFEST_PATH = POSTFIX_DIR / "evaluation_manifest.json"
+GENERAL_QUERY_DIR = ROOT / "28_general_query_understanding_evaluation"
+GENERAL_QUERY_MANIFEST_PATH = GENERAL_QUERY_DIR / "evaluation_manifest.json"
 APP_PATH = ROOT / "app.py"
 SOURCE_PATH = ROOT / "02_질문시나리오" / "question_scenarios_110.tsv"
 GOLD_PATH = BASELINE_DIR / "rag_retrieval_eval_questions_30.tsv"
@@ -18,6 +20,7 @@ RESULT_PATH = POSTFIX_DIR / "rag_retrieval_postfix_results_30.tsv"
 
 EXPECTED_BASELINE_APP_SHA256 = "983B80A2C390829BA7750830696BC333E8AEABC1A7A4F7407237995AB4AC2FF2"
 EXPECTED_POSTFIX_APP_SHA256 = "3D798DA421F8BBE08B16135C85E084ACB85D0ACD16AC8939A647A184A27E4680"
+EXPECTED_GENERAL_QUERY_APP_SHA256 = "E4E7101668F82F0BE7815AC32CD250FB4F11A1942E3F12CB50F99E2F45597FAE"
 EXPECTED_SOURCE_SHA256 = "544888A7717DD31CB0AF5099128D8493DE7AD50EB38F9ACE90FEFA2AFD72277A"
 EXPECTED_GOLD_SHA256 = "F950A1505743A4B3607F0EC3BC60D8ED477FB6C3627F14FCD156BF7C81B7D076"
 
@@ -40,6 +43,16 @@ REQUIRED_POSTFIX_FILES = {
     "rag_retrieval_baseline_vs_postfix.xlsx",
     "rag_retrieval_baseline_vs_postfix.png",
     "rag_retrieval_postfix_quality_report.txt",
+}
+REQUIRED_GENERAL_QUERY_FILES = {
+    "development_question_matrix.jsonl",
+    "holdout_question_matrix.jsonl",
+    "development_question_results.tsv",
+    "holdout_question_results.tsv",
+    "general_query_understanding_summary.json",
+    "rag_retrieval_regression_results_30.tsv",
+    "general_query_understanding_quality_report.txt",
+    "run_general_query_understanding_evaluation.py",
 }
 REQUIRED_SCORE_FIELDS = [
     "document_hit_at_1",
@@ -66,6 +79,9 @@ class RagRetrievalEvaluationVersioningTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        cls.general_query_manifest = json.loads(
+            GENERAL_QUERY_MANIFEST_PATH.read_text(encoding="utf-8")
+        )
         cls.gold_rows = read_tsv(GOLD_PATH)
         cls.result_rows = read_tsv(RESULT_PATH)
 
@@ -85,9 +101,17 @@ class RagRetrievalEvaluationVersioningTests(unittest.TestCase):
             EXPECTED_BASELINE_APP_SHA256,
         )
 
-    def test_04_current_app_matches_postfix_manifest(self) -> None:
+    def test_04_postfix_manifest_remains_historical_and_current_app_matches_28(self) -> None:
         self.assertEqual(self.manifest["postfix_app_sha256"], EXPECTED_POSTFIX_APP_SHA256)
-        self.assertEqual(sha256(APP_PATH), self.manifest["postfix_app_sha256"])
+        self.assertEqual(
+            self.general_query_manifest["previous_app_sha256"],
+            self.manifest["postfix_app_sha256"],
+        )
+        self.assertEqual(
+            self.general_query_manifest["current_app_sha256"],
+            EXPECTED_GENERAL_QUERY_APP_SHA256,
+        )
+        self.assertEqual(sha256(APP_PATH), self.general_query_manifest["current_app_sha256"])
 
     def test_05_original_question_set_sha_is_unchanged(self) -> None:
         self.assertEqual(self.manifest["original_question_set_sha256"], EXPECTED_SOURCE_SHA256)
@@ -172,6 +196,43 @@ class RagRetrievalEvaluationVersioningTests(unittest.TestCase):
         self.assertIn("아니다", notice)
         self.assertNotIn("최종 성능", notice)
         self.assertIn("법적 정확도", self.manifest["legal_accuracy_notice"])
+
+    def test_16_general_query_evaluation_files_match_manifest_hashes(self) -> None:
+        recorded = self.general_query_manifest["result_files_sha256"]
+        self.assertTrue(set(recorded).issubset(REQUIRED_GENERAL_QUERY_FILES))
+        for name, expected in recorded.items():
+            self.assertEqual(sha256(GENERAL_QUERY_DIR / name), expected, name)
+        self.assertEqual(
+            sha256(GENERAL_QUERY_DIR / "run_general_query_understanding_evaluation.py"),
+            self.general_query_manifest["evaluation_script_sha256"],
+        )
+
+    def test_17_general_query_counts_and_safety_targets_are_versioned(self) -> None:
+        self.assertEqual(self.general_query_manifest["development_question_count"], 72)
+        self.assertEqual(self.general_query_manifest["holdout_question_count"], 24)
+        for split in ("development_metrics", "holdout_metrics"):
+            metrics = self.general_query_manifest[split]
+            self.assertEqual(metrics["major_safety_misclassification_count"], 0)
+            self.assertGreaterEqual(metrics["primary_domain_accuracy"], 0.93)
+            self.assertGreaterEqual(metrics["work_stage_accuracy"], 0.90)
+            self.assertGreaterEqual(metrics["requested_output_detection_recall"], 0.95)
+            self.assertLessEqual(metrics["maximum_search_query_count"], 4)
+
+    def test_18_general_query_retrieval_regression_meets_minimums(self) -> None:
+        metrics = self.general_query_manifest["retrieval_regression_metrics_30"]
+        self.assertEqual(metrics["search_failure_count"], 0)
+        self.assertGreaterEqual(round(metrics["document_hit_at_3"], 4), 0.5333)
+        self.assertGreaterEqual(round(metrics["document_hit_at_5"], 4), 0.5667)
+        self.assertGreaterEqual(round(metrics["mrr"], 4), 0.4639)
+        self.assertGreaterEqual(round(metrics["metadata_completeness"], 4), 0.7500)
+
+    def test_19_general_query_evaluation_is_not_final_lock(self) -> None:
+        notice = self.general_query_manifest["not_final_lock_notice"]
+        self.assertIn("최종 잠금 평가", notice)
+        self.assertIn("아니다", notice)
+        self.assertIn("교수님 최종 5문항", notice)
+        self.assertFalse(self.general_query_manifest["external_api_or_internet_used"])
+        self.assertTrue(self.general_query_manifest["original_vector_db_unchanged"])
 
 
 if __name__ == "__main__":

@@ -34,6 +34,20 @@ from google.genai import types
 from sentence_transformers import SentenceTransformer
 
 import verified_case_review as verified_review
+from answer_contract import (
+    build_answer_contract,
+    build_complete_core_judgment,
+    build_rule_based_fallback,
+    format_answer_contract_prompt,
+    official_case_status_message,
+    validate_answer,
+)
+from query_understanding import (
+    OUT_OF_SCOPE_DOMAIN,
+    QueryUnderstanding,
+    analyze_query,
+    rerank_results_by_understanding,
+)
 
 
 VERIFIED_REVIEW_REQUIRED_ATTRIBUTES = (
@@ -2285,6 +2299,12 @@ def extract_query_context_signals(question: str) -> dict[str, Any]:
     original_question = str(question or "")
     normalized_question = clean_text(normalize_query_question(original_question))
     text = normalized_question.lower()
+    general_understanding = None
+    try:
+        general_understanding = analyze_query(original_question)
+    except Exception:
+        # 단독 함수 테스트와 이전 환경에서도 기존 질문 문맥 안전장치를 유지합니다.
+        general_understanding = None
 
     has_blasting = contains_any_keyword(text, BLASTING_CONTEXT_KEYWORDS)
     has_rain = contains_any_keyword(text, RAIN_CONTEXT_KEYWORDS)
@@ -2350,6 +2370,45 @@ def extract_query_context_signals(question: str) -> dict[str, Any]:
         requested_answer_form = "불발 의심 대응조치"
         display_label = "발파/불발 · 발파 후 불발 의심"
 
+    if general_understanding is not None:
+        normalized_question = general_understanding.normalized_query
+        general_signals = set(general_understanding.hazard_signals)
+        if not detail_signal and general_understanding.primary_domain == "발파·불발·화약류":
+            if {"우천", "발파공 침수"}.issubset(general_signals) and "불발" not in general_signals:
+                detail_signal = "rainy_pre_blasting"
+                major_risk_type = "발파"
+                detail_risk_signals = list(general_understanding.hazard_signals)
+                work_stage = general_understanding.work_stage
+                requested_answer_form = ", ".join(general_understanding.requested_outputs)
+                display_label = "발파/불발 · 우천 작업 전 점검"
+                search_context_terms = list(RAINY_PRE_BLASTING_SEARCH_TERMS)
+                rerank_keywords = ["우천", "강우", "낙뢰", "침수", "공내수", "습윤", "배수", "발파 전"]
+            elif "불발" in general_signals and general_understanding.work_stage == "작업 후":
+                detail_signal = "post_blasting_misfire"
+                major_risk_type = "발파"
+                detail_risk_signals = list(general_understanding.hazard_signals)
+                work_stage = "발파 작업 후"
+                requested_answer_form = ", ".join(general_understanding.requested_outputs)
+                display_label = "발파/불발 · 발파 후 불발 의심"
+        if not detail_signal and general_understanding.primary_domain == "낙반·붕괴·천반·지보":
+            if {"천반", "출수 증가"}.issubset(general_signals):
+                detail_signal = "roof_water_increase"
+                major_risk_type = "낙반/붕락/지보"
+                detail_risk_signals = list(general_understanding.hazard_signals)
+                work_stage = general_understanding.work_stage
+                requested_answer_form = ", ".join(general_understanding.requested_outputs)
+                display_label = "낙반/붕락/지보 · 천반 유출수 증가"
+                search_context_terms = list(ROOF_WATER_INCREASE_SEARCH_TERMS)
+                rerank_keywords = ["천반", "유출수", "출수", "누수", "지하수", "균열", "박리", "지보", "배수"]
+        if not detail_signal and general_understanding.in_scope:
+            major_risk_type = general_understanding.primary_domain
+            detail_risk_signals = list(general_understanding.hazard_signals)
+            work_stage = general_understanding.work_stage
+            requested_answer_form = ", ".join(
+                general_understanding.requested_outputs
+            ) or "안전조치 안내"
+            display_label = general_understanding.display_label
+
     return {
         "original_question": original_question,
         "normalized_question": normalized_question,
@@ -2361,6 +2420,80 @@ def extract_query_context_signals(question: str) -> dict[str, Any]:
         "display_label": display_label,
         "search_context_terms": search_context_terms,
         "rerank_keywords": rerank_keywords,
+        "primary_domain": (
+            general_understanding.primary_domain
+            if general_understanding is not None
+            else major_risk_type
+        ),
+        "secondary_domains": (
+            list(general_understanding.secondary_domains)
+            if general_understanding is not None
+            else []
+        ),
+        "hazard_signals": (
+            list(general_understanding.hazard_signals)
+            if general_understanding is not None
+            else list(detail_risk_signals)
+        ),
+        "actor": (
+            general_understanding.actor
+            if general_understanding is not None
+            else "불명확"
+        ),
+        "requested_outputs": (
+            list(general_understanding.requested_outputs)
+            if general_understanding is not None
+            else [requested_answer_form]
+        ),
+        "urgency": (
+            general_understanding.urgency
+            if general_understanding is not None
+            else "normal"
+        ),
+        "ambiguity_level": (
+            general_understanding.ambiguity_level
+            if general_understanding is not None
+            else "low"
+        ),
+        "clarification_question": (
+            general_understanding.clarification_question
+            if general_understanding is not None
+            else ""
+        ),
+        "search_queries": (
+            list(general_understanding.search_queries)
+            if general_understanding is not None
+            else [normalized_question]
+        ),
+        "case_search_query": (
+            general_understanding.case_search_query
+            if general_understanding is not None
+            else ""
+        ),
+        "required_concepts": (
+            list(general_understanding.required_concepts)
+            if general_understanding is not None
+            else []
+        ),
+        "forbidden_dominant_topics": (
+            list(general_understanding.forbidden_dominant_topics)
+            if general_understanding is not None
+            else []
+        ),
+        "official_case_requested": bool(
+            general_understanding is not None
+            and general_understanding.official_case_requested
+        ),
+        "core_judgment": (
+            build_complete_core_judgment(general_understanding)
+            if general_understanding is not None and general_understanding.in_scope
+            else ""
+        ),
+        "in_scope": (
+            general_understanding.in_scope
+            if general_understanding is not None
+            else True
+        ),
     }
 
 
@@ -2372,7 +2505,15 @@ def format_query_context_for_prompt(question_context: dict[str, Any]) -> str:
             f"- 큰 위험 유형: {question_context.get('major_risk_type', '일반 광산 안전')}",
             f"- 세부 위험 신호: {detail_text}",
             f"- 작업 단계: {question_context.get('work_stage', '질문에서 확인 필요')}",
+            f"- 행동 주체: {question_context.get('actor', '불명확')}",
             f"- 요구 답변 형태: {question_context.get('requested_answer_form', '안전조치 안내')}",
+            f"- 복수 요청 항목: {', '.join(question_context.get('requested_outputs', [])) or '안전조치 안내'}",
+            f"- 긴급도·모호성: {question_context.get('urgency', 'normal')} / {question_context.get('ambiguity_level', 'low')}",
+            (
+                f"- 필요한 확인 질문: {question_context.get('clarification_question')}"
+                if question_context.get("clarification_question")
+                else "- 필요한 확인 질문: 없음"
+            ),
         ]
     )
 
@@ -2781,6 +2922,8 @@ GENERAL_EXPLANATION_INTENTS = {
 
 def detect_question_intent(question: str) -> str:
     question_context = extract_query_context_signals(question)
+    if question_context.get("in_scope") is False:
+        return OUT_OF_SCOPE_INTENT
     if question_context["detail_signal"] in {
         "rainy_pre_blasting",
         "post_blasting_misfire",
@@ -2834,6 +2977,26 @@ def detect_question_intent(question: str) -> str:
     for intent in ordered_intents:
         if any(keyword in text for keyword in QUESTION_INTENT_KEYWORDS[intent]):
             return intent
+
+    domain_intent_map = {
+        "발파·불발·화약류": BLASTING_MISFIRE_INTENT,
+        "환기·메탄·유해가스·산소부족": VENTILATION_GAS_INTENT,
+        "낙반·붕괴·천반·지보": ROOF_FALL_INTENT,
+        "전기·감전·LOTO": ELECTRICAL_SAFETY_INTENT,
+        "컨베이어·끼임·파쇄": CONVEYOR_ROTATING_INTENT,
+        "차량·장비·후진·충돌": EQUIPMENT_TRANSPORT_INTENT,
+        "분진·집진·살수·호흡보호": DUST_RESPIRATORY_INTENT,
+        "보호구 지급·파손·미착용": PPE_GENERAL_INTENT,
+        "위험성평가·작업중지·작업재개": KRAS_INTENT,
+        "응급조치·의식상실·구조": ACCIDENT_EMERGENCY_INTENT,
+        "TBM·굴진·천공": PREWORK_TBM_INTENT,
+        "사고보고·기록·중대재해 대응": ACCIDENT_EMERGENCY_INTENT,
+    }
+    mapped_intent = domain_intent_map.get(
+        str(question_context.get("primary_domain", ""))
+    )
+    if mapped_intent:
+        return mapped_intent
 
     if any(keyword in text for keyword in MINING_SAFETY_CONTEXT_KEYWORDS):
         return GENERAL_MINE_SAFETY_INTENT
@@ -3570,12 +3733,21 @@ def search_vector_db(question: str, top_k: int = 5):
     question_context = extract_query_context_signals(question)
     intent = detect_question_intent(question_context["normalized_question"])
     expanded_question = expand_search_query(question, intent)
+    understanding = analyze_query(question)
+    planned_queries = list(understanding.search_queries)
+    search_queries = list(
+        dict.fromkeys(
+            query.strip()
+            for query in [expanded_question, *planned_queries]
+            if query and query.strip()
+        )
+    )[:4]
     if intent != OUT_OF_SCOPE_INTENT:
         top_k = max(top_k, 5)
 
     model = load_embedding_model()
     query_embedding = model.encode(
-        [expanded_question],
+        search_queries,
         normalize_embeddings=True,
         show_progress_bar=False,
     ).tolist()
@@ -3607,22 +3779,42 @@ def search_vector_db(question: str, top_k: int = 5):
     except Exception as e:
         return [], str(e)
 
-    docs = results.get("documents", [[]])[0]
-    metas = results.get("metadatas", [[]])[0]
-    distances = results.get("distances", [[]])[0]
+    documents_by_query = results.get("documents", [[]])
+    metadatas_by_query = results.get("metadatas", [[]])
+    distances_by_query = results.get("distances", [[]])
 
-    search_candidates = []
-    for i, doc in enumerate(docs):
-        meta = metas[i] if i < len(metas) and isinstance(metas[i], dict) else {}
-        distance = distances[i] if i < len(distances) else None
-        search_candidates.append(
-            make_search_result(
+    search_candidates: list[dict[str, Any]] = []
+    candidate_by_key: dict[str, dict[str, Any]] = {}
+    for query_index, search_query in enumerate(search_queries):
+        docs = documents_by_query[query_index] if query_index < len(documents_by_query) else []
+        metas = metadatas_by_query[query_index] if query_index < len(metadatas_by_query) else []
+        distances = distances_by_query[query_index] if query_index < len(distances_by_query) else []
+        for result_index, doc in enumerate(docs):
+            meta = (
+                metas[result_index]
+                if result_index < len(metas) and isinstance(metas[result_index], dict)
+                else {}
+            )
+            distance = distances[result_index] if result_index < len(distances) else None
+            candidate = make_search_result(
                 doc or "",
                 meta,
                 distance,
-                vector_rank=i + 1,
+                vector_rank=(query_index * internal_count) + result_index + 1,
             )
-        )
+            chunk_id = str(candidate.get("chunk_id", "")).strip()
+            key = chunk_id or "|".join(
+                [candidate.get("source", ""), candidate.get("text", "")[:160]]
+            )
+            if key in candidate_by_key:
+                matched_queries = candidate_by_key[key].setdefault("matched_search_queries", [])
+                if search_query not in matched_queries:
+                    matched_queries.append(search_query)
+                continue
+            candidate["matched_search_queries"] = [search_query]
+            candidate["search_query_index"] = query_index
+            candidate_by_key[key] = candidate
+            search_candidates.append(candidate)
 
     if rerank_config:
         search_candidates = add_type_source_candidates(
@@ -3632,14 +3824,21 @@ def search_vector_db(question: str, top_k: int = 5):
             rerank_config["preferred_files"],
         )
 
-    selected = rerank_search_results(
+    candidate_pool = rerank_search_results(
         expanded_question,
         search_candidates,
+        max(top_k, min(20, len(search_candidates))),
+    )
+    selected = rerank_results_by_understanding(
+        understanding,
+        candidate_pool,
         top_k,
     )
     for result in selected:
         result["question_intent"] = intent
         result["expanded_search_query"] = expanded_question
+        result["search_queries"] = search_queries
+        result["search_query_count"] = len(search_queries)
     return selected, None
 
 
@@ -4094,6 +4293,9 @@ def build_prompt(
     official_case_context = format_official_cases_for_prompt(official_cases or [])
     evidence_guardrail = build_evidence_guardrail_prompt_guidance(evidence_assessment)
     easy_evidence_guidance = build_worker_easy_evidence_guidance(evidence_assessment)
+    answer_contract_guidance = format_answer_contract_prompt(
+        build_answer_contract(analyze_query(question))
+    )
     easy_terms = "\n".join(f"- {item}" for item in WORKER_EASY_TERM_EXPLANATIONS)
     return f"""
 당신은 신규 광산 근로자와 비전문 작업자에게 설명하는 성인 안전교육 보조자입니다.
@@ -4110,6 +4312,9 @@ def build_prompt(
 [질문 세부 상황]
 {prompt_question_context}
 - 답변에서 세부 위험 신호와 작업 단계를 일반적인 유형 문구로 대체하거나 생략하지 마세요.
+
+[질문별 답변 계약]
+{answer_contract_guidance}
 
 {evidence_guardrail}
 
@@ -4199,6 +4404,9 @@ def build_hybrid_prompt(
     live_news_context = format_live_news_cases_for_prompt(live_news_cases or [])
     official_case_context = format_official_cases_for_prompt(official_cases or [])
     evidence_guardrail = build_evidence_guardrail_prompt_guidance(evidence_assessment)
+    answer_contract_guidance = format_answer_contract_prompt(
+        build_answer_contract(analyze_query(question))
+    )
     return f"""
 당신은 광산 안전관리자를 돕는 MineSafe AI의 하이브리드 답변 보완 역할입니다.
 
@@ -4212,6 +4420,9 @@ def build_hybrid_prompt(
 [질문 세부 상황]
 {prompt_question_context}
 - 안정형 초안의 세부 위험 신호와 조치 순서를 빠뜨리거나 일반 문장으로 바꾸지 마세요.
+
+[질문별 답변 계약]
+{answer_contract_guidance}
 
 {evidence_guardrail}
 
@@ -4689,6 +4900,9 @@ def build_contextual_priority_summary(
         return "기상·낙뢰와 발파공 침수·화약류 습윤을 점검하고 위험하면 작업 연기·중지"
     if detail_signal == "roof_water_increase":
         return "작업중지 · 대피 · 출입통제 · 보고 후 천반·지보·출수·배수 점검"
+    core_judgment = str(question_context.get("core_judgment", "")).strip()
+    if core_judgment:
+        return core_judgment
     return get_priority_action(situation_type)
 
 
@@ -6289,6 +6503,12 @@ def build_completion_retry_prompt(
     question_context = extract_query_context_signals(question)
     context_guidance = format_query_context_for_prompt(question_context)
     evidence_context = build_context(results)
+    try:
+        answer_contract_guidance = format_answer_contract_prompt(
+            build_answer_contract(analyze_query(question))
+        )
+    except Exception:
+        answer_contract_guidance = "질문의 세부 위험 신호와 요청 항목을 빠뜨리지 마세요."
     stable_core = stable_draft.split("### KRAS식 위험성평가 기록 초안", 1)[0].strip()
     if prompt_kind == "hybrid":
         structure = """## 핵심 판단
@@ -6318,6 +6538,9 @@ MineSafe AI 안전 답변을 짧고 완결된 한국어로 다시 작성하세�
 
 [질문 세부 상황]
 {context_guidance}
+
+[누락 보완 계약]
+{answer_contract_guidance}
 
 [안정형 핵심조치]
 {stable_core or build_query_context_supplement(question)}
@@ -6462,6 +6685,7 @@ def execute_gemini_with_completion_guardrail(
     retry_prompt: str,
     model_name: str,
     required_headings: list[str] | None = None,
+    answer_validator: Any = None,
 ) -> dict[str, Any]:
     """미완성 생성에 대해서만 짧은 프롬프트로 최대 한 번 재생성합니다."""
     first_result = execute_gemini_request(primary_prompt, model_name)
@@ -6475,6 +6699,14 @@ def execute_gemini_with_completion_guardrail(
         str(first_result.get("finish_reason", "")),
         required_headings,
     )
+    if not first_reason and callable(answer_validator):
+        first_reason = str(
+            answer_validator(
+                str(first_result.get("answer", "")),
+                str(first_result.get("finish_reason", "")),
+            )
+            or ""
+        )
     if not first_reason:
         return first_result
 
@@ -6492,6 +6724,14 @@ def execute_gemini_with_completion_guardrail(
             str(retry_result.get("finish_reason", "")),
             required_headings,
         )
+        if not retry_reason and callable(answer_validator):
+            retry_reason = str(
+                answer_validator(
+                    str(retry_result.get("answer", "")),
+                    str(retry_result.get("finish_reason", "")),
+                )
+                or ""
+            )
         if not retry_reason:
             return retry_result
     else:
@@ -6554,6 +6794,36 @@ def generate_gemini_answer(
     official_cases: list[dict[str, Any]] | None = None,
 ):
     intent = detect_question_intent(question)
+    answer_understanding = None
+    answer_contract = None
+    try:
+        answer_understanding = analyze_query(question)
+        answer_contract = build_answer_contract(answer_understanding)
+    except Exception:
+        answer_understanding = None
+        answer_contract = None
+
+    def contract_validator(candidate_answer: str, finish_reason: str = "") -> str:
+        if answer_understanding is None or answer_contract is None:
+            return ""
+        validation = validate_answer(
+            candidate_answer,
+            answer_contract,
+            answer_understanding,
+            evidence_results=results,
+            official_cases=official_cases or [],
+            finish_reason=finish_reason,
+        )
+        if not validation.retry_recommended:
+            return ""
+        reasons = [
+            *validation.missing_sections,
+            *validation.missing_concepts,
+            *validation.sequence_errors,
+            *validation.unsupported_number_warnings,
+            *validation.unsupported_legal_reference_warnings,
+        ]
+        return "답변 계약 보완 필요: " + ", ".join(reasons[:8])
     if prompt_kind == "hybrid":
         prompt = build_hybrid_prompt(
             question,
@@ -6587,6 +6857,7 @@ def generate_gemini_answer(
         retry_prompt,
         model_name,
         required_headings_for_prompt_kind(prompt_kind),
+        contract_validator,
     )
 
     if result.get("success"):
@@ -6608,6 +6879,17 @@ def generate_gemini_answer(
         status["query_core_coverage"] = core_coverage
         status["query_core_status"] = core_coverage["status"]
         status["query_core_label"] = core_coverage["label"]
+        if answer_understanding is not None and answer_contract is not None:
+            contract_validation = validate_answer(
+                answer,
+                answer_contract,
+                answer_understanding,
+                evidence_results=results,
+                official_cases=official_cases or [],
+            )
+            status["answer_contract"] = answer_contract.to_dict()
+            status["answer_contract_validation"] = contract_validation.to_dict()
+            status["answer_contract_status"] = contract_validation.status
         return answer, status
 
     fallback_answer = generate_local_fallback_answer(
@@ -6621,11 +6903,38 @@ def generate_gemini_answer(
         question,
         fallback_answer,
     )
+    contract_validation = None
+    if answer_understanding is not None and answer_contract is not None:
+        contract_validation = validate_answer(
+            fallback_answer,
+            answer_contract,
+            answer_understanding,
+            evidence_results=results,
+            official_cases=official_cases or [],
+        )
+        if contract_validation.retry_recommended:
+            fallback_answer = build_rule_based_fallback(
+                answer_understanding,
+                answer_contract,
+                evidence_results=results,
+                official_cases=official_cases or [],
+            )
+            contract_validation = validate_answer(
+                fallback_answer,
+                answer_contract,
+                answer_understanding,
+                evidence_results=results,
+                official_cases=official_cases or [],
+            )
     status = build_legacy_gemini_status(result, fallback_used=True)
     status["prompt_kind"] = prompt_kind
     status["query_core_coverage"] = core_coverage
     status["query_core_status"] = core_coverage["status"]
     status["query_core_label"] = core_coverage["label"]
+    if answer_contract is not None and contract_validation is not None:
+        status["answer_contract"] = answer_contract.to_dict()
+        status["answer_contract_validation"] = contract_validation.to_dict()
+        status["answer_contract_status"] = contract_validation.status
     return fallback_answer, status
 
 # ==============================
@@ -8915,6 +9224,7 @@ def run_rag_flow(
     answer_mode: str,
     selected_model: str = GEMINI_MODEL_NAME,
 ):
+    understanding = analyze_query(question_text)
     question_context = extract_query_context_signals(question_text)
     intent = detect_question_intent(question_context["normalized_question"])
     if intent == OUT_OF_SCOPE_INTENT:
@@ -8952,6 +9262,7 @@ def run_rag_flow(
             "official_case_diagnostic": {"status": "skipped_out_of_scope", "result_count": 0},
             "reference_cases": [],
             "live_news_cases": [],
+            "query_understanding": understanding.to_dict(),
         }
         return [], stable_answer, out_status, None
 
@@ -8972,6 +9283,56 @@ def run_rag_flow(
         intent,
         evidence_assessment=evidence_assessment,
     )
+    stable_answer, query_core_coverage = ensure_query_core_elements(
+        question_text,
+        stable_answer,
+    )
+    reference_cases = match_reference_cases(question_text, intent, max_cases=2)
+    live_news_cases = get_live_reference_cases(question_text, intent, max_cases=3)
+    official_case_diagnostic: dict[str, Any] = {}
+    official_case_question = (
+        understanding.case_search_query
+        if understanding.official_case_requested and understanding.case_search_query
+        else question_text
+    )
+    official_cases = search_official_siren_cases(
+        official_case_question,
+        intent,
+        top_k=OFFICIAL_CASE_TOP_K,
+        diagnostic=official_case_diagnostic,
+    )
+    answer_contract = build_answer_contract(understanding)
+    contract_fallback_used = False
+    contract_validation = validate_answer(
+        stable_answer,
+        answer_contract,
+        understanding,
+        evidence_results=rag_results,
+        official_cases=official_cases,
+    )
+    if contract_validation.retry_recommended:
+        contract_fallback_used = True
+        stable_answer = build_rule_based_fallback(
+            understanding,
+            answer_contract,
+            evidence_results=rag_results,
+            official_cases=official_cases,
+        )
+        if "KRAS식 위험성평가 기록 초안" not in stable_answer:
+            stable_answer = "\n\n".join(
+                [
+                    stable_answer,
+                    build_kras_risk_assessment_section(
+                        question_text,
+                        rag_results,
+                        map_intent_to_situation_type(intent, question_text),
+                    ),
+                ]
+            )
+        stable_answer, query_core_coverage = ensure_query_core_elements(
+            question_text,
+            stable_answer,
+        )
     stable_answer = enforce_rag_evidence_answer_guardrail(
         stable_answer,
         evidence_assessment,
@@ -8980,14 +9341,12 @@ def run_rag_flow(
         question_text,
         stable_answer,
     )
-    reference_cases = match_reference_cases(question_text, intent, max_cases=2)
-    live_news_cases = get_live_reference_cases(question_text, intent, max_cases=3)
-    official_case_diagnostic: dict[str, Any] = {}
-    official_cases = search_official_siren_cases(
-        question_text,
-        intent,
-        top_k=OFFICIAL_CASE_TOP_K,
-        diagnostic=official_case_diagnostic,
+    contract_validation = validate_answer(
+        stable_answer,
+        answer_contract,
+        understanding,
+        evidence_results=rag_results,
+        official_cases=official_cases,
     )
 
     base_status = {
@@ -9012,6 +9371,13 @@ def run_rag_flow(
         "query_core_coverage": query_core_coverage,
         "query_core_status": query_core_coverage["status"],
         "query_core_label": query_core_coverage["label"],
+        "query_understanding": understanding.to_dict(),
+        "search_queries": list(understanding.search_queries),
+        "search_query_count": len(understanding.search_queries),
+        "answer_contract": answer_contract.to_dict(),
+        "answer_contract_validation": contract_validation.to_dict(),
+        "answer_contract_status": contract_validation.status,
+        "answer_contract_fallback_used": contract_fallback_used,
     }
 
     if answer_mode == STABLE_MODE:
@@ -9063,6 +9429,13 @@ def run_rag_flow(
         else:
             final_answer = stable_answer
             actual_execution = "Gemini API 호출 실패 → 안정형 fallback"
+        mode_contract_validation = validate_answer(
+            final_answer,
+            answer_contract,
+            understanding,
+            evidence_results=rag_results,
+            official_cases=official_cases,
+        )
 
         gemini_status.update(
             {
@@ -9076,6 +9449,9 @@ def run_rag_flow(
                 "used_fallback": not success,
                 "actual_execution": actual_execution,
                 "mode_output_title": "하이브리드 답변" if success else "안정성 모드",
+                "answer_contract_validation": mode_contract_validation.to_dict(),
+                "answer_contract_status": mode_contract_validation.status,
+                "answer_contract_fallback_used": not success,
             }
         )
         return rag_results, final_answer, gemini_status, None
@@ -9105,6 +9481,13 @@ def run_rag_flow(
         if success
         else stable_answer
     )
+    mode_contract_validation = validate_answer(
+        final_answer,
+        answer_contract,
+        understanding,
+        evidence_results=rag_results,
+        official_cases=official_cases,
+    )
     rag_status.update(
         {
             **base_status,
@@ -9121,6 +9504,9 @@ def run_rag_flow(
                 if success
                 else "쉬운 설명을 생성하지 못해 공식 문서 기반 핵심조치로 대신 안내합니다."
             ),
+            "answer_contract_validation": mode_contract_validation.to_dict(),
+            "answer_contract_status": mode_contract_validation.status,
+            "answer_contract_fallback_used": not success,
         }
     )
 
@@ -9497,6 +9883,9 @@ def render_gemini_runtime_status(
     actual_execution = str(answer_status.get("actual_execution", "실행 정보 없음"))
     chunk_count = int(answer_status.get("retrieved_chunk_count", 0) or 0)
     public_mode = public_answer_mode_label(answer_status, mode_name)
+    query_understanding = answer_status.get("query_understanding", {})
+    if not isinstance(query_understanding, dict):
+        query_understanding = {}
 
     st.markdown(
         (
@@ -9537,6 +9926,15 @@ def render_gemini_runtime_status(
             ("사용 모델명", selected_model),
             ("질문 유형", str(answer_status.get("question_intent", ""))),
             ("확장 검색어", str(answer_status.get("expanded_search_query", ""))),
+            ("큰 위험 분야", str(query_understanding.get("primary_domain", ""))),
+            ("보조 위험 분야", ", ".join(query_understanding.get("secondary_domains", []))),
+            ("세부 위험 신호", ", ".join(query_understanding.get("hazard_signals", []))),
+            ("작업 단계", str(query_understanding.get("work_stage", ""))),
+            ("요청 답변 항목", ", ".join(query_understanding.get("requested_outputs", []))),
+            ("질문 모호성", str(query_understanding.get("ambiguity_level", ""))),
+            ("검색 질의 수", str(answer_status.get("search_query_count", 0))),
+            ("답변 계약 상태", str(answer_status.get("answer_contract_status", ""))),
+            ("답변 계약 fallback", "예" if answer_status.get("answer_contract_fallback_used") else "아니오"),
         ]
         detail_html = "".join(
             "<tr><th>{}</th><td>{}</td></tr>".format(escape(label), escape(value))

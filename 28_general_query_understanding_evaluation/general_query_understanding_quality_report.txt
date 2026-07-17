@@ -1,0 +1,63 @@
+MineSafe AI 범용 질문 이해 및 답변 계약 품질 보고
+
+생성시각: 2026-07-17T03:03:33+09:00
+개발·보류 확인 및 기존 30문항 재사용 회귀평가이며 교수님 최종 5문항을 사용한 최종 잠금 평가가 아니다. 이 결과만으로 일반화 성능·답변 정확성·법적 정확도를 확정하지 않는다.
+
+[개발 질문]
+{
+  "question_count": 72,
+  "primary_domain_accuracy": 1.0,
+  "secondary_domain_recall": 0.782608695652174,
+  "hazard_signal_coverage": 0.993006993006993,
+  "work_stage_accuracy": 0.9722222222222222,
+  "requested_output_detection_recall": 0.9939024390243902,
+  "ambiguity_handling_accuracy": 0.9583333333333334,
+  "major_safety_misclassification_count": 0,
+  "major_safety_misclassification_ids": [],
+  "average_search_query_count": 3.1527777777777777,
+  "maximum_search_query_count": 4
+}
+
+[보류 확인 질문]
+{
+  "question_count": 24,
+  "primary_domain_accuracy": 1.0,
+  "secondary_domain_recall": 0.7,
+  "hazard_signal_coverage": 0.9824561403508771,
+  "work_stage_accuracy": 1.0,
+  "requested_output_detection_recall": 0.9814814814814815,
+  "ambiguity_handling_accuracy": 0.9583333333333334,
+  "major_safety_misclassification_count": 0,
+  "major_safety_misclassification_ids": [],
+  "average_search_query_count": 3.0416666666666665,
+  "maximum_search_query_count": 4
+}
+
+[범위 밖 질문 차단]
+정확도: 1.0000
+실패: []
+
+[전체 문장 하드코딩 검사]
+발견 수: 0
+
+[기존 30문항 검색 회귀]
+{
+  "document_hit_at_1": 0.4,
+  "document_hit_at_3": 0.5333333333333333,
+  "document_hit_at_5": 0.5666666666666667,
+  "mrr": 0.46388888888888885,
+  "element_coverage_at_1": 0.11697089947089948,
+  "element_coverage_at_3": 0.2816798941798942,
+  "element_coverage_at_5": 0.36018518518518516,
+  "metadata_completeness": 0.75,
+  "manual_review_count": 25,
+  "search_failure_count": 0
+}
+
+[Vector DB 보호]
+원본 DB는 ChromaDB client로 열지 않았고 Windows 임시 폴더의 전체 복사본만 평가에 사용했다.
+원본 물리 상태 전후 동일: True
+임시 DB 논리 스냅샷 전후 동일: True
+
+외부 API·인터넷 호출: 0
+교수님 최종 5문항 사용: 0

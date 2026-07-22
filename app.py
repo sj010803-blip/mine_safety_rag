@@ -1041,6 +1041,22 @@ def inject_dashboard_css() -> None:
             fill: #c8d5e7 !important;
         }
 
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] .react-aria-ComboBox [role="group"] {
+            background-color: var(--portal-sidebar-soft) !important;
+            border-color: #365072 !important;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] input[role="combobox"],
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] button[aria-label="Open"] {
+            background-color: transparent !important;
+            border-color: #365072 !important;
+            color: #f8fafc !important;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] input[role="combobox"]::placeholder {
+            color: #9fb2ca !important;
+        }
+
         [data-testid="stSidebar"] .stButton {
             position: relative;
             z-index: 2;
@@ -1048,13 +1064,17 @@ def inject_dashboard_css() -> None:
         }
 
         [data-baseweb="popover"] [role="listbox"],
-        [data-baseweb="popover"] [role="option"] {
+        [data-baseweb="popover"] [role="option"],
+        div[role="listbox"],
+        div[role="option"] {
             background-color: var(--portal-sidebar-soft) !important;
             color: #f8fafc !important;
         }
 
         [data-baseweb="popover"] [role="option"]:hover,
-        [data-baseweb="popover"] [role="option"][aria-selected="true"] {
+        [data-baseweb="popover"] [role="option"][aria-selected="true"],
+        div[role="option"]:hover,
+        div[role="option"][aria-selected="true"] {
             background-color: #264b78 !important;
         }
 

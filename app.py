@@ -150,11 +150,11 @@ TEXT_SAFE_OFFICIAL_CASE_COLLECTION_NAME = "mine_text_safe_official_accident_case
 OFFICIAL_CASE_TOP_K = 3
 OFFICIAL_CASE_INTERNAL_SEARCH_COUNT = 75
 EMBEDDING_MODEL_NAME = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-GEMINI_MODEL_NAME = "gemini-2.5-flash-lite"
+GEMINI_MODEL_NAME = "gemini-3.5-flash-lite"
 GEMINI_MODEL_OPTIONS = [
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-2.5-pro",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-3.6-flash",
 ]
 
 MAJOR_ACCIDENT_DOC_TOTAL_CHUNKS = 820
@@ -6562,7 +6562,6 @@ def call_gemini_with_timeout(
     max_output_tokens: int = GEMINI_MAX_OUTPUT_TOKENS,
 ) -> str:
     config = types.GenerateContentConfig(
-        temperature=0.2,
         max_output_tokens=max_output_tokens,
     )
 
@@ -9070,7 +9069,7 @@ if is_admin_mode:
     with st.sidebar.expander("시연 권장 설정"):
         st.markdown(
             "- **답변 모드:** 하이브리드 모드 권장\n"
-            "- **Gemini 모델:** `gemini-2.5-flash-lite` 권장\n"
+            "- **Gemini 모델:** `gemini-3.5-flash-lite` 권장\n"
             "- **이유:** 안정형 답변을 먼저 제공하고 Gemini 응답을 보조적으로 확인\n"
             "- Gemini가 실패해도 검색 근거 기반 답변은 계속 제공됩니다."
         )

@@ -171,6 +171,7 @@ GEMINI_HTTP_TIMEOUT_MS = 60_000
 GEMINI_RESPONSE_TIMEOUT_SECONDS = 60
 GEMINI_MAX_ATTEMPTS = 3
 GEMINI_RETRY_SLEEP_SECONDS = 2.0
+GEMINI_CONNECTION_TEST_TIMEOUT_SECONDS = 20
 GEMINI_MAX_OUTPUT_TOKENS = 800
 GEMINI_CONTEXT_TOP_K = 3
 CONTEXT_CHUNK_CHAR_LIMIT = 800
@@ -1016,9 +1017,45 @@ def inject_dashboard_css() -> None:
 
         [data-testid="stSidebar"] [data-baseweb="select"] > div,
         [data-testid="stSidebar"] [data-testid="stTextInput"] input {
-            background: var(--portal-sidebar-soft);
-            border-color: #365072;
-            color: #f8fafc;
+            background: var(--portal-sidebar-soft) !important;
+            border-color: #365072 !important;
+            color: #f8fafc !important;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] {
+            position: relative;
+            z-index: 1;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"],
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] div[role="combobox"] {
+            background-color: var(--portal-sidebar-soft) !important;
+            border-color: #365072 !important;
+            color: #f8fafc !important;
+        }
+
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] div[role="combobox"] *,
+        [data-testid="stSidebar"] [data-testid="stSelectbox"] svg {
+            color: #f8fafc !important;
+            fill: #c8d5e7 !important;
+        }
+
+        [data-testid="stSidebar"] .stButton {
+            position: relative;
+            z-index: 2;
+            clear: both;
+        }
+
+        [data-baseweb="popover"] [role="listbox"],
+        [data-baseweb="popover"] [role="option"] {
+            background-color: var(--portal-sidebar-soft) !important;
+            color: #f8fafc !important;
+        }
+
+        [data-baseweb="popover"] [role="option"]:hover,
+        [data-baseweb="popover"] [role="option"][aria-selected="true"] {
+            background-color: #264b78 !important;
         }
 
         [data-testid="stSidebar"] [data-testid="stAlert"],
@@ -6601,6 +6638,8 @@ def execute_gemini_request(
     model_name: str,
     *,
     max_output_tokens: int = GEMINI_MAX_OUTPUT_TOKENS,
+    timeout_seconds: int = GEMINI_RESPONSE_TIMEOUT_SECONDS,
+    max_attempts: int = GEMINI_MAX_ATTEMPTS,
 ) -> dict[str, Any]:
     client, error = load_gemini_client()
     if error:
@@ -6626,14 +6665,14 @@ def execute_gemini_request(
     last_status = "error"
     attempts_used = 0
 
-    for attempt in range(1, GEMINI_MAX_ATTEMPTS + 1):
+    for attempt in range(1, max_attempts + 1):
         attempts_used = attempt
         try:
             answer = call_gemini_with_timeout(
                 client,
                 prompt,
                 model_name,
-                timeout_seconds=GEMINI_RESPONSE_TIMEOUT_SECONDS,
+                timeout_seconds=timeout_seconds,
                 max_output_tokens=max_output_tokens,
             )
             if not answer or not answer.strip():
@@ -6659,7 +6698,7 @@ def execute_gemini_request(
                 last_status in {"503", "429", "timeout"}
                 or is_temporary_gemini_error(last_error)
             )
-            if attempt < GEMINI_MAX_ATTEMPTS and should_retry:
+            if attempt < max_attempts and should_retry:
                 time.sleep(GEMINI_RETRY_SLEEP_SECONDS)
                 continue
             break
@@ -6758,6 +6797,8 @@ def test_gemini_connection(model_name: str) -> dict[str, Any]:
         "테스트입니다. 한 문장으로 응답해 주세요.",
         model_name,
         max_output_tokens=80,
+        timeout_seconds=GEMINI_CONNECTION_TEST_TIMEOUT_SECONDS,
+        max_attempts=1,
     )
 
 
@@ -9017,29 +9058,47 @@ if is_admin_mode:
         st.sidebar.caption(f"선택 모델: {selected_gemini_model}")
         st.sidebar.write(f"호출 제한: 시도당 약 {GEMINI_RESPONSE_TIMEOUT_SECONDS}초")
         st.sidebar.write(f"최대 시도: {GEMINI_MAX_ATTEMPTS}회")
+        st.sidebar.caption(
+            f"연결 테스트는 최대 {GEMINI_CONNECTION_TEST_TIMEOUT_SECONDS}초 · 1회만 실행합니다."
+        )
 
-    if st.sidebar.button("Gemini 연결 테스트", use_container_width=True):
+    if st.sidebar.button(
+        "Gemini 연결 테스트",
+        key="gemini_connection_test_button",
+        use_container_width=True,
+    ):
         with st.sidebar:
             with st.spinner("선택한 모델로 연결을 확인하는 중입니다..."):
                 test_result = test_gemini_connection(
                     selected_gemini_model
                 )
-        test_state = classify_gemini_status(test_result)
-        if test_result.get("success"):
+        st.session_state["gemini_connection_test_result"] = test_result
+
+    stored_test_result = st.session_state.get("gemini_connection_test_result")
+    if (
+        isinstance(stored_test_result, dict)
+        and stored_test_result.get("model") == selected_gemini_model
+    ):
+        test_state = classify_gemini_status(stored_test_result)
+        if stored_test_result.get("success"):
             st.sidebar.success(
-                f"연결 테스트 성공 · {test_result.get('model')} · "
-                f"{test_result.get('elapsed', 0.0):.1f}초"
+                f"연결 테스트 성공 · {stored_test_result.get('model')} · "
+                f"{stored_test_result.get('elapsed', 0.0):.1f}초"
             )
-            st.sidebar.caption(f"Gemini 응답: {test_result.get('answer', '')}")
+            st.sidebar.caption(
+                f"Gemini 응답: {stored_test_result.get('answer', '')}"
+            )
         else:
             st.sidebar.warning(
-                f"연결 테스트 실패 · {test_result.get('model')} · "
+                f"연결 테스트 실패 · {stored_test_result.get('model')} · "
                 f"{format_gemini_status(test_state)}"
             )
-            st.sidebar.caption(test_result.get("message", "Gemini 연결 테스트 실패"))
+            st.sidebar.caption(
+                stored_test_result.get("message", "Gemini 연결 테스트 실패")
+            )
             with st.sidebar.expander("오류 상세"):
-                st.write(test_result.get("error") or "오류 메시지 없음")
-                st.write(f"시도 횟수: {test_result.get('attempts', 0)}")
+                st.write(stored_test_result.get("error") or "오류 메시지 없음")
+                st.write(f"시도 횟수: {stored_test_result.get('attempts', 0)}")
 
     st.sidebar.divider()
 

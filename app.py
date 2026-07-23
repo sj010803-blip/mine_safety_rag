@@ -7,6 +7,7 @@ import gc
 import importlib
 from io import BytesIO
 import json
+import logging
 import uuid
 from datetime import date, datetime
 from html import escape
@@ -235,6 +236,8 @@ FEATURE_REPORT_PATH = FEATURE_OUTPUT_DIR / "legal_evidence_history_feature_repor
 LATEST_REFERENCE_CASES_PATH = FEATURE_OUTPUT_DIR / "latest_reference_cases.json"
 NAVER_NEWS_API_URL = "https://openapi.naver.com/v1/search/news.json"
 LIVE_CASE_SEARCH_TTL_SECONDS = 1800
+LIVE_CASE_EMPTY_CACHE_SECONDS = 60
+NEWS_LOGGER = logging.getLogger("minesafe.news")
 
 BLASTING_QUESTION_TYPE = "발파/불발"
 BLASTING_KEYWORDS = [
@@ -5408,6 +5411,35 @@ def public_answer_mode_label(answer_status: dict[str, Any], mode_name: str) -> s
     return normalize_answer_mode_label(mode_name)
 
 
+@st.fragment
+def render_presentation_simplified_view_toggle() -> None:
+    simplified_view = st.toggle(
+        "시연 화면 간소화",
+        value=False,
+        key="presentation_simplified_view",
+        help=(
+            "큰 안정형 전환 안내 배너만 숨깁니다. 실제 제공 모드, 답변 내용, "
+            "개발자 정보와 fallback 기록은 유지됩니다."
+        ),
+    )
+    fallback_notice_display = "none" if simplified_view else "block"
+    st.markdown(
+        f"""
+        <style>
+        .minesafe-fallback-notice {{
+            display: {fallback_notice_display};
+            margin: 0.75rem 0;
+            padding: 0.9rem 1rem;
+            border: 1px solid rgba(255, 196, 0, 0.35);
+            border-radius: 0.5rem;
+            background: rgba(255, 196, 0, 0.15);
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def classify_gemini_status(answer_status: dict[str, Any]) -> str:
     if answer_status.get("gemini_status"):
         return str(answer_status["gemini_status"])
@@ -7987,6 +8019,47 @@ def build_live_case_search_query(question: str, intent: str) -> str:
     return clean_text(f"{question_terms} 산업재해 사고 사례")
 
 
+def build_live_case_fallback_query(question: str, intent: str) -> str:
+    fallback_query_map = {
+        PPE_GENERAL_INTENT: "산업현장 보호구 사고",
+        VENTILATION_GAS_INTENT: "광산 메탄가스 사고",
+        VENTILATION_EQUIPMENT_INTENT: "광산 환기설비 사고",
+        GAS_DETECTOR_INTENT: "가스측정기 질식 사고",
+        BLASTING_MISFIRE_INTENT: "광산 발파 사고",
+        ROOF_FALL_INTENT: "광산 낙반 사고",
+        DUST_RESPIRATORY_INTENT: "광산 분진 산업재해",
+        ELECTRICAL_SAFETY_INTENT: "광산 감전 사고",
+        EQUIPMENT_TRANSPORT_INTENT: "광산 장비 충돌 사고",
+        BACKING_SIGNAL_INTENT: "건설장비 후진 협착 사고",
+        FIRE_EMERGENCY_INTENT: "광산 화재 사고",
+        HOT_WORK_INTENT: "용접 화재 산업재해",
+        CONVEYOR_ROTATING_INTENT: "컨베이어 사고 산업재해",
+        HEIGHT_WORK_INTENT: "고소작업 추락 산업재해",
+        FLOOD_DRAINAGE_INTENT: "광산 침수 사고",
+        LAW_INTENT: "중대재해처벌법 산업재해",
+        DOCUMENT_EVIDENCE_INTENT: "산업재해 안전보건관리체계",
+        KRAS_INTENT: "위험성평가 산업재해",
+    }
+    if intent in fallback_query_map:
+        return fallback_query_map[intent]
+
+    normalized_question = clean_text(question)
+    keyword_fallbacks = (
+        (("메탄", "가스", "환기"), "광산 메탄가스 사고"),
+        (("컨베이어", "끼임", "협착"), "컨베이어 사고 산업재해"),
+        (("발파", "불발", "폭약"), "광산 발파 사고"),
+        (("낙반", "붕락", "천반"), "광산 낙반 사고"),
+        (("분진", "방진"), "광산 분진 산업재해"),
+        (("감전", "전기"), "광산 감전 사고"),
+    )
+    for keywords, fallback_query in keyword_fallbacks:
+        if any(keyword in normalized_question for keyword in keywords):
+            return fallback_query
+
+    question_terms = " ".join(normalized_question.split()[:3])
+    return clean_text(f"{question_terms} 사고 산업재해")
+
+
 def live_news_relevance_label(title: str, description: str) -> str:
     include_keywords = [
         "사고", "재해", "중대재해", "산업재해", "안전", "작업장", "광산",
@@ -8017,8 +8090,18 @@ def normalize_naver_news_item(item: dict[str, Any]) -> dict[str, Any] | None:
 
 
 @st.cache_data(ttl=LIVE_CASE_SEARCH_TTL_SECONDS, show_spinner=False)
-def search_naver_news_cases(query: str, display: int = 5, sort: str = "date") -> list[dict[str, Any]]:
+def search_naver_news_cases(
+    query: str,
+    display: int = 5,
+    sort: str = "date",
+    cache_bucket: int | None = None,
+) -> list[dict[str, Any]]:
+    del cache_bucket
     if not live_case_search_configured():
+        NEWS_LOGGER.warning(
+            "Naver news API failure status_code=N/A error=search_not_configured query=%r",
+            query,
+        )
         return []
 
     client_id = os.getenv("NAVER_CLIENT_ID", "").strip()
@@ -8028,6 +8111,7 @@ def search_naver_news_cases(query: str, display: int = 5, sort: str = "date") ->
         "X-Naver-Client-Id": client_id,
         "X-Naver-Client-Secret": client_secret,
     }
+    status_code: int | str = "N/A"
     try:
         try:
             import requests
@@ -8038,6 +8122,7 @@ def search_naver_news_cases(query: str, display: int = 5, sort: str = "date") ->
                 headers=headers,
                 timeout=4,
             )
+            status_code = response.status_code
             response.raise_for_status()
             payload = response.json()
         except ImportError:
@@ -8050,11 +8135,30 @@ def search_naver_news_cases(query: str, display: int = 5, sort: str = "date") ->
                 method="GET",
             )
             with request.urlopen(req, timeout=4) as response:
+                status_code = getattr(response, "status", 200)
                 payload = json.loads(response.read().decode("utf-8"))
-    except Exception:
+    except Exception as error:
+        response_status = getattr(getattr(error, "response", None), "status_code", None)
+        error_status = getattr(error, "code", None)
+        status_code = response_status or error_status or status_code
+        error_message = clean_text(str(error))[:300] or type(error).__name__
+        NEWS_LOGGER.warning(
+            "Naver news API failure status_code=%s error=%s query=%r",
+            status_code,
+            error_message,
+            query,
+        )
         return []
 
     items = payload.get("items", []) if isinstance(payload, dict) else []
+    if not items:
+        NEWS_LOGGER.warning(
+            "Naver news API empty result status_code=%s error=no_items query=%r",
+            status_code,
+            query,
+        )
+        return []
+
     cases = []
     for item in items:
         if not isinstance(item, dict):
@@ -8062,15 +8166,61 @@ def search_naver_news_cases(query: str, display: int = 5, sort: str = "date") ->
         normalized = normalize_naver_news_item(item)
         if normalized:
             cases.append(normalized)
+    if not cases:
+        NEWS_LOGGER.warning(
+            "Naver news API empty result status_code=%s error=no_usable_items query=%r",
+            status_code,
+            query,
+        )
+        return []
+
     cases.sort(key=lambda case: case.get("reliability_label") != "뉴스검색 참고")
+    if not any(case.get("reliability_label") == "뉴스검색 참고" for case in cases):
+        cases = [dict(cases[0])]
+        cases[0]["reliability_label"] = "기본 검색 참고"
     return cases[: int(display)]
 
 
 def get_live_reference_cases(question: str, intent: str, max_cases: int = 3) -> list[dict[str, Any]]:
-    if intent == OUT_OF_SCOPE_INTENT or not live_case_search_configured():
+    if intent == OUT_OF_SCOPE_INTENT:
         return []
-    query = build_live_case_search_query(question, intent)
-    return search_naver_news_cases(query, display=max(max_cases, 5), sort="date")[:max_cases]
+    display_count = max(max_cases, 5)
+    cache_bucket = int(time.time() // LIVE_CASE_EMPTY_CACHE_SECONDS)
+    primary_query = build_live_case_search_query(question, intent)
+    primary_cases = search_naver_news_cases(
+        primary_query,
+        display=display_count,
+        sort="date",
+        cache_bucket=cache_bucket,
+    )
+    if primary_cases:
+        return [
+            {
+                **case,
+                "search_query": primary_query,
+                "fallback_search_used": False,
+            }
+            for case in primary_cases[:max_cases]
+        ]
+
+    fallback_query = build_live_case_fallback_query(question, intent)
+    if fallback_query == primary_query:
+        fallback_query = clean_text(f"{fallback_query} 산업재해")
+    fallback_cases = search_naver_news_cases(
+        fallback_query,
+        display=display_count,
+        sort="date",
+        cache_bucket=cache_bucket,
+    )
+    return [
+        {
+            **case,
+            "search_query": fallback_query,
+            "original_search_query": primary_query,
+            "fallback_search_used": True,
+        }
+        for case in fallback_cases[:max_cases]
+    ]
 
 
 def format_live_news_cases_for_prompt(live_news_cases: list[dict[str, Any]]) -> str:
@@ -8094,8 +8244,10 @@ def format_live_news_cases_for_prompt(live_news_cases: list[dict[str, Any]]) -> 
 
 def render_live_news_reference_cases(live_news_cases: list[dict[str, Any]]) -> None:
     if not live_news_cases:
-        st.info("현재 표시할 최근 뉴스 검색 결과가 없습니다.")
+        st.info("관련 뉴스가 없어 기본 검색 결과를 표시합니다")
         return
+    if any(case.get("fallback_search_used") for case in live_news_cases):
+        st.info("관련 뉴스가 없어 기본 검색 결과를 표시합니다")
     st.caption("네이버 뉴스 검색 기반 참고자료이며, 공식 법령 판단 근거가 아닙니다.")
     for case in live_news_cases[:3]:
         title = escape(str(case.get("title", "제목 없음")))
@@ -9145,6 +9297,9 @@ if is_admin_mode:
             "- Gemini 실패 시에도 1차 답변 유지"
         )
 
+    with st.sidebar:
+        render_presentation_simplified_view_toggle()
+
     with st.sidebar.expander("시연 권장 설정"):
         st.markdown(
             "- **답변 모드:** 하이브리드 모드 권장\n"
@@ -9981,13 +10136,76 @@ def render_gemini_runtime_status(
     )
 
     if fallback_used:
-        fallback_notice = str(
-            answer_status.get(
-                "fallback_notice",
-                "외부 LLM 호출이 원활하지 않아 안정형 답변으로 전환되었습니다.",
+        status = str(answer_status.get("status", "")).strip().lower()
+        reason_text = " ".join(
+            str(answer_status.get(key, ""))
+            for key in (
+                "reason",
+                "error",
+                "message",
+                "incomplete_reason",
+                "first_incomplete_reason",
             )
-        ).strip()
-        st.warning(fallback_notice)
+        ).lower()
+        incomplete_markers = (
+            "incomplete",
+            "미완성",
+            "안전검사",
+            "안전 검사",
+            "답변 계약",
+            "contract",
+            "max_tokens",
+            "length",
+            "safety",
+            "recitation",
+            "malformed",
+            "필수 제목",
+            "빈 응답",
+            "지나치게 짧은",
+            "프롬프트 조각",
+            "갑작스러운 종료",
+        )
+        external_error_markers = (
+            "api",
+            "503",
+            "504",
+            "429",
+            "timeout",
+            "timed out",
+            "unavailable",
+            "high demand",
+            "network",
+            "connection",
+            "resource exhausted",
+            "rate limit",
+            "호출",
+            "서버",
+            "네트워크",
+        )
+        if status == "incomplete" or any(
+            marker in reason_text for marker in incomplete_markers
+        ):
+            fallback_notice = (
+                "생성형 답변이 안전검사를 통과하지 못해 안정형 대체 답변을 제공했습니다."
+            )
+        elif status in {"503", "504", "429", "timeout", "error"} or any(
+            marker in reason_text for marker in external_error_markers
+        ):
+            fallback_notice = (
+                "외부 LLM 응답을 사용할 수 없어 안정형 대체 답변을 제공했습니다."
+            )
+        else:
+            fallback_notice = (
+                "답변 안전장치가 적용되어 안정형 대체 답변을 제공했습니다."
+            )
+        st.markdown(
+            (
+                '<div class="minesafe-fallback-notice" role="alert">'
+                f"{escape(fallback_notice)}"
+                "</div>"
+            ),
+            unsafe_allow_html=True,
+        )
 
     if not is_admin_mode:
         return

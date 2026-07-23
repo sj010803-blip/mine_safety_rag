@@ -1,0 +1,85 @@
+{
+  "run_id": "general-query-alignment-20260724-053340",
+  "case": "CASE B",
+  "executed_at": "2026-07-24T05:33:40+09:00",
+  "evaluation_name": "범용 질문 이해 및 답변 계약 개발·보류·검색 회귀평가 정합성 재실행",
+  "evaluation_script": "28_general_query_understanding_evaluation/run_general_query_understanding_evaluation.py",
+  "git_head": "5e9f95bfac5358083d8e4d65cb45ba3c0736231c",
+  "current_app_sha256": "EA648E523D419145B47575D7B7334FCE4963E857914B7FF411E87190452107DA",
+  "previous_manifest_app_sha256": "27731AC7E9B0871D2EF08050B67332643A54D8AAFE32A7EB5F07415698FFE5B7",
+  "evaluation_script_sha256": "6DB9693ECC4DFEFB6593CF0E91E7D8A5ECC6D95FE35DB6A3E2C4A9E025751765",
+  "query_understanding_module_sha256": "1993B0967375D8AD99C59597629DF25B4B0200FDC5C854544CFA4821482C7C1F",
+  "answer_contract_module_sha256": "1B7CD77655355BD5330CF78620D223314ED9E543A45713890CC63612302FA2DB",
+  "development_question_sha256": "C7EBF7D857E128787D0034D1EE171EE5C8FA1734AA7868479E0E102CCDBB165F",
+  "holdout_question_sha256": "52F1C4D2A4D662EC4CFF28976220F9580752B113C467E9D2EEC968EB4B85B9F2",
+  "existing_30_gold_sha256": "F950A1505743A4B3607F0EC3BC60D8ED477FB6C3627F14FCD156BF7C81B7D076",
+  "output_policy": "프로젝트의 기존 평가 결과는 덮어쓰지 않고 시스템 임시 폴더에서 재실행했다.",
+  "temporary_output_dir": "C:\\Users\\USER\\AppData\\Local\\Temp\\MineSafe_Eval_News_Fallback_20260724_053324",
+  "development_metrics": {
+    "question_count": 72,
+    "primary_domain_accuracy": 1.0,
+    "secondary_domain_recall": 0.782608695652174,
+    "hazard_signal_coverage": 0.993006993006993,
+    "work_stage_accuracy": 0.9722222222222222,
+    "requested_output_detection_recall": 0.9939024390243902,
+    "ambiguity_handling_accuracy": 0.9583333333333334,
+    "major_safety_misclassification_count": 0,
+    "major_safety_misclassification_ids": [],
+    "average_search_query_count": 3.1527777777777777,
+    "maximum_search_query_count": 4
+  },
+  "holdout_metrics": {
+    "question_count": 24,
+    "primary_domain_accuracy": 1.0,
+    "secondary_domain_recall": 0.7,
+    "hazard_signal_coverage": 0.9824561403508771,
+    "work_stage_accuracy": 1.0,
+    "requested_output_detection_recall": 0.9814814814814815,
+    "ambiguity_handling_accuracy": 0.9583333333333334,
+    "major_safety_misclassification_count": 0,
+    "major_safety_misclassification_ids": [],
+    "average_search_query_count": 3.0416666666666665,
+    "maximum_search_query_count": 4
+  },
+  "retrieval_regression_metrics_30": {
+    "document_hit_at_1": 0.4,
+    "document_hit_at_3": 0.5333333333333333,
+    "document_hit_at_5": 0.5666666666666667,
+    "mrr": 0.46388888888888885,
+    "element_coverage_at_1": 0.11697089947089948,
+    "element_coverage_at_3": 0.2816798941798942,
+    "element_coverage_at_5": 0.36018518518518516,
+    "metadata_completeness": 0.75,
+    "manual_review_count": 25,
+    "search_failure_count": 0
+  },
+  "temporary_result_files_sha256": {
+    "development_question_results.tsv": "D4BDAD319D996AA63C47CCD0901483E61B39164D9BBF8EFF9EABD52BF4870968",
+    "holdout_question_results.tsv": "E28C7A7A80F19371404CBC3F8E41B63F9C186387B502C91ADCFA598185EA675D",
+    "general_query_understanding_summary.json": "E632AFB0DD3BDE4302C7B8CA1572B0A844F66C727E9395F2F6B702416808B5F2",
+    "rag_retrieval_regression_results_30.tsv": "215465976AF3FE7D5C40DF9B0B73EC7E8E541D0F5C0ED44C096C12F2DB00F851",
+    "general_query_understanding_quality_report.txt": "456D12450F2C7B6AA660D37B83909C500DDC038F019F58BBE019D75BDA4B2D2E"
+  },
+  "existing_result_files_sha256": {
+    "development_question_results.tsv": "D4BDAD319D996AA63C47CCD0901483E61B39164D9BBF8EFF9EABD52BF4870968",
+    "holdout_question_results.tsv": "E28C7A7A80F19371404CBC3F8E41B63F9C186387B502C91ADCFA598185EA675D",
+    "general_query_understanding_summary.json": "5C95AA0822100842C381ACD72E642804074E4465BF0FFDA83B0D257B26021535",
+    "rag_retrieval_regression_results_30.tsv": "AFCFF2E2FCB4BEC81922E01B2846AF489A713502CB4E2CBFFC8539BAE842614B",
+    "general_query_understanding_quality_report.txt": "0155C4B6A697A3A4C82D06820DC6DB41E73CAC1AE5B608F328D4619A71127313"
+  },
+  "byte_identical_result_files": [
+    "development_question_results.tsv",
+    "holdout_question_results.tsv"
+  ],
+  "metadata_only_or_snapshot_difference_files": {
+    "general_query_understanding_summary.json": "재실행 시각과 작업 전부터 달라져 있던 원본 Vector DB 물리 스냅샷 메타데이터가 다르며 평가 지표는 동일하다.",
+    "rag_retrieval_regression_results_30.tsv": "R002 rank1_distance만 0.6846511363983154에서 0.6846510361542496으로 약 1e-7 달라졌으며 문서 순위와 모든 평가 지표는 동일하다.",
+    "general_query_understanding_quality_report.txt": "재실행 시각만 다르며 평가 지표는 동일하다."
+  },
+  "evaluation_metrics_match_existing_manifest": true,
+  "external_api_or_internet_used": false,
+  "original_vector_db_unchanged_during_run": true,
+  "existing_project_result_files_modified": false,
+  "evaluation_scores_modified": false,
+  "notes": "현재 app.py에서 실제 재실행한 결과를 보존한 정합성 기록이다. 기존 결과 파일의 역사적 생성시각과 당시 Vector DB 스냅샷은 그대로 유지한다."
+}
